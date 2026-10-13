@@ -1,0 +1,40 @@
+{
+  "name": "axdoro-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AXDORO Backend API & Migration Service",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run --fileParallelism=false",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "tsx src/db/migration-runner.ts migrate",
+    "db:status": "tsx src/db/migration-runner.ts status",
+    "db:seed": "tsx src/db/seed.ts",
+    "admin:provision": "tsx src/scripts/provision-admin.ts",
+    "admin:reset-password": "tsx src/scripts/reset-admin-password.ts"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "pg": "^8.13.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.1",
+    "@types/pg": "^8.11.11",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.3"
+  }
+}

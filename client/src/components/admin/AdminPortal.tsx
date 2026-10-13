@@ -1,0 +1,829 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  AdminUser,
+  AdminMetrics,
+  AdminProduct,
+  AdminAuditLog,
+  AdminOrder,
+  AdminEnquiry,
+  adminLogin,
+  adminLogout,
+  adminGetMe,
+  adminGetMetrics,
+  adminGetProducts,
+  adminArchiveProduct,
+  adminAdjustStock,
+  adminGetAuditLogs,
+  adminGetOrders,
+  adminUpdateOrderStatus,
+  adminGetEnquiries,
+  adminGetDriveSyncStatus,
+  adminTriggerDriveSync,
+} from '../../api/admin.ts';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
+  Download,
+  Cloud,
+} from 'lucide-react';
+import { AdminSidebar, AdminTab } from './AdminSidebar.tsx';
+import { AdminHeader } from './AdminHeader.tsx';
+import { AdminLoginView } from './AdminLoginView.tsx';
+import { StockAdjustmentDialog } from './StockAdjustmentDialog.tsx';
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from '../ui/card.tsx';
+import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '../ui/table.tsx';
+import { Badge } from '../ui/badge.tsx';
+import { Button } from '../ui/button.tsx';
+
+interface AdminPortalProps {
+  onNavigateHome?: () => void;
+  onCatalogueMutated?: () => void;
+}
+
+function getTabFromPath(pathname: string): AdminTab {
+  const normalized = pathname.replace(/\/+$/, '');
+  if (normalized.endsWith('/products')) return 'products';
+  if (normalized.endsWith('/stock')) return 'stock';
+  if (normalized.endsWith('/orders')) return 'orders';
+  if (normalized.endsWith('/enquiries')) return 'enquiries';
+  if (normalized.endsWith('/audit')) return 'audit';
+  return 'metrics';
+}
+
+export const AdminPortal: React.FC<AdminPortalProps> = ({
+  onNavigateHome,
+  onCatalogueMutated,
+}) => {
+  const [currentUser, setCurrentUser] = useState<AdminUser | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => getTabFromPath(window.location.pathname));
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Login form state
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Administrative data states
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [enquiries, setEnquiries] = useState<AdminEnquiry[]>([]);
+  const [driveSyncStatus, setDriveSyncStatus] = useState<{
+    totalEnquiries: number;
+    syncedCount: number;
+    pendingCount: number;
+    failedCount: number;
+    isConfigured: boolean;
+  } | null>(null);
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Stock adjustment popup state
+  const [adjustingVariant, setAdjustingVariant] = useState<{
+    variantId: string;
+    productName: string;
+    size: string;
+    color: string;
+    sku: string;
+    currentStock: number;
+  } | null>(null);
+
+  // Sync tab with browser URL history (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      setActiveTab(getTabFromPath(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleSelectTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    const targetUrl = tab === 'metrics' ? '/admin/metrics' : `/admin/${tab}`;
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState(null, '', targetUrl);
+    }
+  };
+
+  // Check existing session on mount
+  useEffect(() => {
+    let isMounted = true;
+    adminGetMe()
+      .then((user) => {
+        if (isMounted) {
+          setCurrentUser(user);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsCheckingAuth(false);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const loadTabData = useCallback(async () => {
+    setIsLoadingData(true);
+    try {
+      if (activeTab === 'metrics' || activeTab === 'stock') {
+        const m = await adminGetMetrics();
+        setMetrics(m);
+      }
+      if (activeTab === 'products') {
+        const p = await adminGetProducts();
+        setProducts(p);
+      }
+      if (activeTab === 'audit') {
+        const a = await adminGetAuditLogs();
+        setAuditLogs(a);
+      }
+      if (activeTab === 'orders') {
+        const o = await adminGetOrders();
+        setOrders(o);
+      }
+      if (activeTab === 'enquiries') {
+        const [enq, sync] = await Promise.all([
+          adminGetEnquiries(),
+          adminGetDriveSyncStatus().catch(() => null),
+        ]);
+        setEnquiries(enq);
+        setDriveSyncStatus(sync);
+      }
+    } catch {
+      // Handled silently or state resets
+    } finally {
+      setIsLoadingData(false);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (currentUser) {
+      loadTabData();
+    }
+  }, [currentUser, loadTabData]);
+
+  const handleLogin = async (email: string, pass: string) => {
+    setLoginError(null);
+    setIsLoggingIn(true);
+    try {
+      const res = await adminLogin(email, pass);
+      setCurrentUser(res.admin);
+      // Ensure clean admin URL
+      if (!window.location.pathname.startsWith('/admin')) {
+        window.history.pushState(null, '', '/admin/metrics');
+      }
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Invalid administrator credentials');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await adminLogout();
+    setCurrentUser(null);
+    setMetrics(null);
+    setProducts([]);
+    setAuditLogs([]);
+    setOrders([]);
+    setEnquiries([]);
+  };
+
+  const handleArchive = async (productId: string) => {
+    if (
+      !window.confirm(
+        'Are you sure you want to archive this product? It will no longer be visible in the public storefront.'
+      )
+    ) {
+      return;
+    }
+    try {
+      await adminArchiveProduct(productId);
+      setActionSuccess('Product archived successfully.');
+      setTimeout(() => setActionSuccess(null), 3000);
+      loadTabData();
+      onCatalogueMutated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to archive');
+    }
+  };
+
+  const handleSaveStock = async (quantity: number, reason: string) => {
+    if (!adjustingVariant) return;
+    try {
+      await adminAdjustStock(adjustingVariant.variantId, quantity, reason);
+      setAdjustingVariant(null);
+      setActionSuccess('Inventory stock updated and audit log recorded.');
+      setTimeout(() => setActionSuccess(null), 3500);
+      loadTabData();
+      onCatalogueMutated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update stock');
+    }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+    setUpdatingOrderId(orderId);
+    try {
+      await adminUpdateOrderStatus(orderId, newStatus);
+      setActionSuccess(`Order updated to ${newStatus}. Inventory adjusted if applicable.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      const o = await adminGetOrders();
+      setOrders(o);
+      onCatalogueMutated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update order status');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const handleTriggerDriveSync = async () => {
+    setIsSyncingDrive(true);
+    try {
+      const res = await adminTriggerDriveSync();
+      setActionSuccess(`Drive sync processed: ${res.synced} synced, ${res.failed} failed.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      const [enq, sync] = await Promise.all([
+        adminGetEnquiries(),
+        adminGetDriveSyncStatus().catch(() => null),
+      ]);
+      setEnquiries(enq);
+      setDriveSyncStatus(sync);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Drive sync failed');
+    } finally {
+      setIsSyncingDrive(false);
+    }
+  };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-axdoro-bg flex flex-col items-center justify-center p-4">
+        <RefreshCw className="w-8 h-8 animate-spin text-axdoro-accent mb-4" />
+        <span className="text-xs font-mono text-axdoro-text-muted">Verifying administrator session...</span>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <AdminLoginView
+        onLogin={handleLogin}
+        onNavigateHome={onNavigateHome}
+        isLoading={isLoggingIn}
+        error={loginError}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-axdoro-bg text-axdoro-text flex">
+      {/* Desktop / Mobile Navigation Sidebar */}
+      <AdminSidebar
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onNavigateHome={onNavigateHome}
+        isMobileOpen={isMobileOpen}
+        onCloseMobile={() => setIsMobileOpen(false)}
+      />
+
+      {/* Main Administrative Dashboard Canvas */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <AdminHeader
+          activeTab={activeTab}
+          currentUser={currentUser}
+          onOpenMobileNav={() => setIsMobileOpen(true)}
+          onLogout={handleLogout}
+          onNavigateHome={onNavigateHome}
+        />
+
+        {/* Action feedback alert banner */}
+        {actionSuccess && (
+          <div className="bg-emerald-50 border-b border-emerald-200 px-6 py-3 text-xs text-emerald-900 flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="font-semibold">{actionSuccess}</span>
+            </div>
+            <button
+              onClick={() => setActionSuccess(null)}
+              className="text-emerald-700 hover:text-emerald-950 text-xs font-semibold underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Tab content scrollable container */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl w-full mx-auto space-y-6">
+          {isLoadingData ? (
+            <div className="py-24 text-center text-axdoro-text-muted text-xs flex flex-col items-center justify-center gap-3">
+              <RefreshCw className="w-7 h-7 animate-spin text-axdoro-accent" />
+              <span className="font-mono">Loading administrative records from PostgreSQL...</span>
+            </div>
+          ) : activeTab === 'metrics' && metrics ? (
+            /* 1. Metrics Tab */
+            <div className="space-y-6">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
+                      Published Products
+                    </CardDescription>
+                    <CardTitle className="text-3xl font-black text-axdoro-charcoal tracking-tight">
+                      {metrics.products.published}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <span className="text-[11px] text-axdoro-text-muted">
+                      Total in catalog: <strong className="text-axdoro-charcoal">{metrics.products.total}</strong>
+                    </span>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
+                      Active Categories
+                    </CardDescription>
+                    <CardTitle className="text-3xl font-black text-axdoro-charcoal tracking-tight">
+                      {metrics.categories.active}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <span className="text-[11px] text-axdoro-text-muted">
+                      Confirmed: <span className="text-axdoro-accent font-semibold">T-Shirts, Shirts</span>
+                    </span>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
+                      Total Stock Units
+                    </CardDescription>
+                    <CardTitle className="text-3xl font-black text-axdoro-accent tracking-tight">
+                      {metrics.variants.totalStockUnits}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <span className="text-[11px] text-axdoro-text-muted">
+                      Across <strong className="text-axdoro-charcoal">{metrics.variants.total}</strong> active variants
+                    </span>
+                  </CardContent>
+                </Card>
+
+                <Card className={metrics.inventoryAlerts.lowStockCount > 0 ? 'border-amber-300 bg-amber-50/60 shadow-sm' : 'border-axdoro-border bg-axdoro-surface shadow-sm'}>
+                  <CardHeader className="pb-2">
+                    <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
+                      Low Stock Alerts
+                    </CardDescription>
+                    <CardTitle className={`text-3xl font-black tracking-tight ${metrics.inventoryAlerts.lowStockCount > 0 ? 'text-amber-800' : 'text-axdoro-charcoal'}`}>
+                      {metrics.inventoryAlerts.lowStockCount}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <span className="text-[11px] text-axdoro-text-muted">
+                      Threshold: &lt; 10 units in stock
+                    </span>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Critical Low Stock Warning Panel */}
+              {metrics.inventoryAlerts.criticalVariants.length > 0 && (
+                <Card className="border-amber-300 bg-amber-50/70 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700" />
+                      <CardTitle className="text-sm font-bold text-amber-950">
+                        Critical Low Stock Items ({metrics.inventoryAlerts.lowStockCount})
+                      </CardTitle>
+                    </div>
+                    <CardDescription className="text-amber-800/80 text-xs">
+                      Variants requiring physical warehouse review and inventory replenishment.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="divide-y divide-amber-200/60">
+                      {metrics.inventoryAlerts.criticalVariants.map((crit) => (
+                        <div
+                          key={crit.variantId}
+                          className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div>
+                            <span className="font-bold text-axdoro-charcoal text-xs">{crit.productName}</span>
+                            <span className="text-axdoro-text-muted text-xs ml-2 font-mono">
+                              Size: {crit.size} &bull; Color: {crit.color} &bull; SKU: {crit.sku}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Badge variant="warning">
+                              {crit.stockQuantity} units left
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                setAdjustingVariant({
+                                  variantId: crit.variantId,
+                                  productName: crit.productName,
+                                  size: crit.size,
+                                  color: crit.color,
+                                  sku: crit.sku,
+                                  currentStock: crit.stockQuantity,
+                                })
+                              }
+                            >
+                              Adjust Stock
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Verified Architecture Notice */}
+              <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs uppercase font-mono tracking-wider text-axdoro-text-muted font-bold">
+                    Database Telemetry &amp; Isolation
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-axdoro-text-muted space-y-1.5 leading-relaxed">
+                  <p>
+                    All dashboard metrics, products, and variant figures represent live data queried from the local PostgreSQL instance (<code className="font-mono text-axdoro-charcoal font-semibold bg-axdoro-surface-muted px-1.5 py-0.5 rounded border border-axdoro-border">axdoro_dev</code>).
+                  </p>
+                  <p>
+                    Orders and enquiries feature transactional synchronization, atomic row claiming, and tamper-evident audit logging.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          ) : activeTab === 'products' ? (
+            /* 2. Products Tab */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-axdoro-charcoal">Storefront Product Catalogue</h2>
+                  <p className="text-xs text-axdoro-text-muted">Manage published products and visibility states ({products.length} registered)</p>
+                </div>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product Name</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Variants</TableHead>
+                    <TableHead>Min Price</TableHead>
+                    <TableHead>Stock Units</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-bold text-axdoro-charcoal">{p.name}</TableCell>
+                      <TableCell className="text-axdoro-text-muted">{p.categoryName}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            p.status === 'published'
+                              ? 'success'
+                              : p.status === 'draft'
+                              ? 'secondary'
+                              : 'destructive'
+                          }
+                        >
+                          {p.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono">{p.variantCount}</TableCell>
+                      <TableCell className="font-bold font-mono text-axdoro-charcoal">
+                        &#8377;{Math.round(p.minPricePaise / 100)}
+                      </TableCell>
+                      <TableCell className="font-mono">{p.totalStock}</TableCell>
+                      <TableCell className="text-right">
+                        {p.status !== 'archived' && (
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => handleArchive(p.id)}
+                            title="Archive product from storefront"
+                          >
+                            Archive
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : activeTab === 'stock' ? (
+            /* 3. Stock Adjustment Tab */
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-axdoro-charcoal">Variant Stock Inventory Overview</h2>
+                <p className="text-xs text-axdoro-text-muted">
+                  Select a variant to execute an atomic inventory adjustment. Every adjustment records actor and rationale in the audit log.
+                </p>
+              </div>
+
+              {metrics && metrics.inventoryAlerts.criticalVariants.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {metrics.inventoryAlerts.criticalVariants.map((item) => (
+                    <Card key={item.variantId} className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <CardTitle className="text-sm font-bold text-axdoro-charcoal">{item.productName}</CardTitle>
+                            <CardDescription className="font-mono text-[11px] text-axdoro-text-muted mt-1">
+                              Size: {item.size} &bull; Color: {item.color} &bull; SKU: {item.sku}
+                            </CardDescription>
+                          </div>
+                          <Badge variant="warning">{item.stockQuantity} in stock</Badge>
+                        </div>
+                      </CardHeader>
+                      <CardFooter className="pt-2 flex justify-end">
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            setAdjustingVariant({
+                              variantId: item.variantId,
+                              productName: item.productName,
+                              size: item.size,
+                              color: item.color,
+                              sku: item.sku,
+                              currentStock: item.stockQuantity,
+                            })
+                          }
+                        >
+                          Adjust Units
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <Card className="border-axdoro-border bg-axdoro-surface">
+                  <CardContent className="py-8 text-center text-xs text-axdoro-text-muted">
+                    No critical low stock alerts active. All variant stock counts are above the minimum threshold.
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ) : activeTab === 'orders' ? (
+            /* 4. Orders Tab */
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-axdoro-charcoal">Customer Orders ({orders.length})</h2>
+                <p className="text-xs text-axdoro-text-muted">Cash on Delivery checkout &amp; order fulfillment lifecycle</p>
+              </div>
+
+              {orders.length === 0 ? (
+                <Card className="border-axdoro-border bg-axdoro-surface">
+                  <CardContent className="py-12 text-center text-axdoro-text-muted text-xs">
+                    No customer orders have been placed yet.
+                  </CardContent>
+                </Card>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Total</TableHead>
+                      <TableHead>Payment</TableHead>
+                      <TableHead>Fulfillment Status</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orders.map((order) => (
+                      <TableRow key={order.id}>
+                        <TableCell className="font-mono font-bold text-axdoro-charcoal">
+                          {order.orderNumber}
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-semibold text-axdoro-charcoal">{order.customerName}</div>
+                          <div className="text-[11px] text-axdoro-text-muted font-mono">
+                            {order.customerPhone} &bull; {order.customerEmail}
+                          </div>
+                        </TableCell>
+                        <TableCell className="font-mono font-bold text-axdoro-accent">
+                          ₹{(order.totalPaise / 100).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={order.paymentStatus === 'PAID' ? 'success' : 'warning'}
+                          >
+                            {order.paymentMethod} &bull; {order.paymentStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <select
+                            disabled={updatingOrderId === order.id}
+                            value={order.orderStatus}
+                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                            className="bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs rounded-lg px-2.5 py-1 font-semibold focus:outline-none focus:ring-1 focus:ring-axdoro-accent disabled:opacity-50 cursor-pointer shadow-sm"
+                          >
+                            <option value="PENDING">PENDING</option>
+                            <option value="CONFIRMED">CONFIRMED</option>
+                            <option value="PROCESSING">PROCESSING</option>
+                            <option value="SHIPPED">SHIPPED</option>
+                            <option value="DELIVERED">DELIVERED</option>
+                            <option value="CANCELLED">CANCELLED</option>
+                          </select>
+                        </TableCell>
+                        <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
+                          {new Date(order.createdAt).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          ) : activeTab === 'enquiries' ? (
+            /* 5. Enquiries Tab */
+            <div className="space-y-4">
+              {/* Sync Status Banner & Action Buttons */}
+              <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
+                <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-sky-50 border border-sky-200 flex items-center justify-center text-sky-700 flex-shrink-0">
+                      <Cloud className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold text-axdoro-charcoal">Google Drive / Sheets Synchronization</CardTitle>
+                      <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
+                        {driveSyncStatus?.isConfigured
+                          ? `Status: Configured • Synced: ${driveSyncStatus.syncedCount} • Pending: ${driveSyncStatus.pendingCount} • Failed: ${driveSyncStatus.failedCount}`
+                          : 'Sync outbox queue active. Pending records will sync when credentials are provisioned.'}
+                      </CardDescription>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleTriggerDriveSync}
+                      disabled={isSyncingDrive}
+                      className="gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isSyncingDrive ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingDrive ? 'Syncing...' : 'Run Sync'}</span>
+                    </Button>
+                    <a
+                      href="/api/admin/enquiries/export.csv"
+                      download
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-axdoro-charcoal text-white text-xs font-semibold hover:bg-black transition-colors shadow-sm"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
+                    </a>
+                  </div>
+                </CardHeader>
+              </Card>
+
+              {enquiries.length === 0 ? (
+                <Card className="border-axdoro-border bg-axdoro-surface">
+                  <CardContent className="py-12 text-center text-axdoro-text-muted text-xs">
+                    No customer enquiries found in database.
+                  </CardContent>
+                </Card>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Message</TableHead>
+                      <TableHead>Drive Sync</TableHead>
+                      <TableHead>Date</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {enquiries.map((enq) => (
+                      <TableRow key={enq.id}>
+                        <TableCell>
+                          <div className="font-semibold text-axdoro-charcoal">{enq.name}</div>
+                          <div className="text-[11px] text-axdoro-text-muted font-mono">
+                            {enq.email} {enq.phone ? `• ${enq.phone}` : ''}
+                          </div>
+                          {enq.productName && (
+                            <div className="text-[10px] text-axdoro-text-muted">Product: {enq.productName}</div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{enq.enquiryType}</Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          <div className="line-clamp-2 text-axdoro-text text-xs">{enq.message}</div>
+                          {enq.quantity && (
+                            <div className="text-[10px] text-axdoro-accent font-semibold mt-0.5 font-mono">
+                              Est. Qty: {enq.quantity}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              enq.driveSyncStatus === 'SYNCED'
+                                ? 'success'
+                                : enq.driveSyncStatus === 'FAILED'
+                                ? 'destructive'
+                                : 'warning'
+                            }
+                          >
+                            {enq.driveSyncStatus}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
+                          {new Date(enq.createdAt).toLocaleDateString()}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          ) : (
+            /* 6. Audit Logs Tab */
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-axdoro-charcoal">Security &amp; Mutation Audit Trail ({auditLogs.length})</h2>
+                <p className="text-xs text-axdoro-text-muted">Tamper-evident logs of administrative actions and inventory changes</p>
+              </div>
+
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Timestamp</TableHead>
+                    <TableHead>Actor</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Entity</TableHead>
+                    <TableHead>Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {auditLogs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-[11px] font-mono text-axdoro-text-muted whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleTimeString()} {new Date(log.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="font-semibold text-axdoro-charcoal">{log.adminEmail}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{log.action}</Badge>
+                      </TableCell>
+                      <TableCell className="text-axdoro-text-muted font-mono text-xs">{log.entityType}</TableCell>
+                      <TableCell className="text-[11px] font-mono text-axdoro-text-muted max-w-xs truncate">
+                        {JSON.stringify(log.details)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Stock Adjustment Popup */}
+      {adjustingVariant && (
+        <StockAdjustmentDialog
+          variantId={adjustingVariant.variantId}
+          productName={adjustingVariant.productName}
+          size={adjustingVariant.size}
+          color={adjustingVariant.color}
+          sku={adjustingVariant.sku}
+          currentStock={adjustingVariant.currentStock}
+          onSave={handleSaveStock}
+          onClose={() => setAdjustingVariant(null)}
+        />
+      )}
+    </div>
+  );
+};

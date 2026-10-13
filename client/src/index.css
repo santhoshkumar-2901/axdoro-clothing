@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* AXDORO Minimal Luxury Design Tokens (Phase 2) */
+:root {
+  /* Palette Foundations */
+  --axdoro-ivory: #FAF8F5;          /* Warm Ivory page background */
+  --axdoro-charcoal: #171717;       /* Charcoal typography and primary actions */
+  --axdoro-white: #FFFFFF;          /* Pure White for product surfaces & cards */
+  --axdoro-purple: #8A2BE2;         /* Brand purple */
+
+  /* Semantic Canvas & Surfaces */
+  --axdoro-bg: #FAF8F5;             /* Primary page canvas */
+  --axdoro-surface: #FFFFFF;        /* Elevated product cards, modals, dropdowns */
+  --axdoro-surface-muted: #F3EFEA;  /* Soft warm tint for secondary panels */
+
+  /* Typography */
+  --axdoro-text: #171717;           /* Charcoal primary text (17.3:1 contrast on ivory - AAA) */
+  --axdoro-text-muted: #57534E;     /* Muted secondary text (5.6:1 contrast on ivory - AA) */
+
+  /* Accents & Brand States */
+  --axdoro-accent: #8A2BE2;         /* Brand purple (5.6:1 on ivory - AA) */
+  --axdoro-accent-muted: #7922C7;   /* Deepened purple for small text/icons (6.5:1 on ivory - AA) */
+  --axdoro-accent-subtle: #F3E8FF;  /* Very soft purple background tint */
+
+  /* Borders & Dividers */
+  --axdoro-border: #E8E4DE;         /* Subtle neutral hairline separator */
+  --axdoro-border-strong: #78716C;  /* Form control boundaries & inputs (4.6:1 on ivory - passes 3:1) */
+
+  /* Focus Ring */
+  --axdoro-ring: #8A2BE2;           /* Visible focus outline indicator */
+}
+
+body {
+  background-color: var(--axdoro-bg);
+  color: var(--axdoro-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessibility: Visible Focus Styles */
+:focus-visible {
+  outline: 2px solid var(--axdoro-accent);
+  outline-offset: 2px;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

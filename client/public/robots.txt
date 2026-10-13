@@ -1,0 +1,5 @@
+# AXDORO Storefront Robots Directives
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/

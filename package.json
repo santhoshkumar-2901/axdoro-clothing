@@ -1,0 +1,27 @@
+{
+  "name": "axdoro-clothing",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AXDORO Premium Clothing E-commerce MVP",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"magenta,blue\" \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "check:diff": "git diff --check",
+    "db:migrate:local": "npm run db:migrate --workspace=server",
+    "db:status": "npm run db:status --workspace=server",
+    "db:seed:local": "npm run db:seed --workspace=server",
+    "admin:provision:local": "npm run admin:provision --workspace=server",
+    "admin:reset-password:local": "npm run admin:reset-password --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
