@@ -24,14 +24,22 @@ export function setupSecurityMiddleware(app: Express): void {
   );
 
   // 2. Restrictive CORS Allowlist
-  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim());
+  const allowedOrigins = env.CORS_ORIGIN.split(',').map((o) => o.trim().toLowerCase());
   app.use(
     cors({
       origin: (origin, callback) => {
         // Allow requests with no origin (like mobile apps, curl, server-to-server)
         if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) {
+        const originNormalized = origin.toLowerCase();
+        if (allowedOrigins.includes(originNormalized)) {
           return callback(null, true);
+        }
+        // Specific Vercel Preview deployment origin (only in preview environment, strictly scoped to this deployment host)
+        if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL) {
+          const vercelPreviewOrigin = `https://${process.env.VERCEL_URL}`.toLowerCase();
+          if (originNormalized === vercelPreviewOrigin) {
+            return callback(null, true);
+          }
         }
         return callback(new Error(`CORS policy violation: origin ${origin} is not allowed.`));
       },

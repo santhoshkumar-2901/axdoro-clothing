@@ -1,24 +1,70 @@
-import { env, isRemoteDatabase } from '../config/env.js';
+import { env, isRemoteDatabase, isPooledNeonUrl, assertSecureTlsParameters } from '../config/env.js';
 
 /**
- * AXDORO Local Development Catalogue Seeder
- * STRICT LOCAL ONLY: Cannot and will not execute against remote databases.
+ * Validates seed target connection URL based on environment, remote opt-in, and endpoint type.
+ * Throws a safe, actionable error preventing unintentional data mutation in production or test.
+ */
+export function validateSeedTarget(
+  targetUrl: string,
+  nodeEnv: string = env.NODE_ENV,
+  allowRemoteDev: boolean = env.ALLOW_REMOTE_DEV_DB
+): void {
+  if (!targetUrl) {
+    throw new Error('SEED TARGET ERROR: No database connection URL provided.');
+  }
+
+  // Validate TLS parameters and reject insecure or malformed connection strings
+  assertSecureTlsParameters(targetUrl);
+
+  // 1. Strictly forbid seeding in production
+  if (nodeEnv === 'production') {
+    throw new Error(
+      'PRODUCTION SAFETY GUARD: Seed script cannot and will not be executed in production environment.'
+    );
+  }
+
+  // 2. Forbid seeding in test environment (tests seed their own data via test harness)
+  if (nodeEnv === 'test') {
+    throw new Error(
+      'TEST ISOLATION GUARD: Seed script cannot be executed in test mode. Tests use dedicated test harness.'
+    );
+  }
+
+  const isRemote = isRemoteDatabase(targetUrl);
+
+  // 3. Forbid seeding remote database without explicit opt-in
+  if (isRemote && !allowRemoteDev) {
+    throw new Error(
+      'STRICT LOCAL ISOLATION ABORT: Seed script targeting a remote database requires explicit ALLOW_REMOTE_DEV_DB=true in development.'
+    );
+  }
+
+  // 4. Reject pooled endpoints
+  if (isPooledNeonUrl(targetUrl)) {
+    throw new Error(
+      'UNSUPPORTED POOLED ENDPOINT: Seed operations cannot be executed against pooled connection endpoints (-pooler). ' +
+        'Please configure MIGRATION_DATABASE_URL to use the Direct (non-pooled) Neon connection endpoint.'
+    );
+  }
+}
+
+/**
+ * AXDORO Development Catalogue Seeder
+ * Executes strictly against local development or explicitly authorized remote development databases.
  */
 export async function seedLocalCatalogue(): Promise<void> {
   const targetUrl = env.MIGRATION_DATABASE_URL || env.DATABASE_URL;
 
-  if (isRemoteDatabase(targetUrl)) {
-    throw new Error(
-      'STRICT LOCAL ISOLATION ABORT: Seed script is strictly forbidden from running against remote databases.'
-    );
-  }
+  validateSeedTarget(targetUrl, env.NODE_ENV, env.ALLOW_REMOTE_DEV_DB);
 
-  console.log('[Seed] Seeding local development database catalogue...');
+  console.log('[Seed] Seeding development database catalogue...');
 
+  const isRemote = isRemoteDatabase(targetUrl);
   const { Pool } = await import('pg');
   const seedPool = new Pool({
     connectionString: targetUrl,
-    ssl: false,
+    ssl: isRemote ? { rejectUnauthorized: true } : false,
+    connectionTimeoutMillis: 10000,
   });
 
   const client = await seedPool.connect();

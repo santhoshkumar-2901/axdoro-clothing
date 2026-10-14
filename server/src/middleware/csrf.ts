@@ -39,6 +39,12 @@ export function verifyCsrfToken(sessionToken: string, candidateToken: string): b
 
 /**
  * Validates that an Origin header matches explicitly allowed origins.
+ *
+ * Supported trusted sources:
+ * 1. Explicitly configured origins in CORS_ORIGIN (e.g. production domain, local dev).
+ * 2. The exact Vercel Preview deployment origin for this specific deployment (via VERCEL_URL when VERCEL_ENV === 'preview').
+ *
+ * Generic wildcards (* or *.vercel.app) and client-controlled Host headers are strictly rejected.
  */
 export function isAllowedOrigin(originHeader: string | undefined): boolean {
   if (!originHeader) return true;
@@ -46,7 +52,21 @@ export function isAllowedOrigin(originHeader: string | undefined): boolean {
   try {
     const parsed = new URL(originHeader);
     const originNormalized = `${parsed.protocol}//${parsed.host}`.toLowerCase();
-    return allowedOrigins.includes(originNormalized);
+
+    // 1. Explicitly configured allowlist
+    if (allowedOrigins.includes(originNormalized)) {
+      return true;
+    }
+
+    // 2. Specific Vercel Preview deployment origin (only in preview environment, strictly scoped to this deployment host)
+    if (process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL) {
+      const vercelPreviewOrigin = `https://${process.env.VERCEL_URL}`.toLowerCase();
+      if (originNormalized === vercelPreviewOrigin) {
+        return true;
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -98,16 +118,31 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     }
   }
 
-  // 2. Check if request is authenticated via cookie
+  // 2. Narrowly scoped exemption for admin login:
+  // The login endpoint authenticates credentials to establish a new session; it does not mutate state
+  // within an existing session. Any stale or prior session cookie present in the browser must not trigger
+  // a synchronizer token check for an unauthenticated or re-authenticating user.
+  // Origin and Referer checks (Step 1 above), rate limiting, and SameSite=Strict cookies protect against Login CSRF.
+  const rawOriginalPath = (req.originalUrl ? req.originalUrl.split('?')[0] : '').replace(/\/+$/, '');
+  const rawMountedPath = `${req.baseUrl || ''}${req.path || ''}`.replace(/\/+$/, '');
+  const isLoginPost =
+    req.method === 'POST' &&
+    (rawOriginalPath === '/api/admin/auth/login' || rawMountedPath === '/api/admin/auth/login');
+
+  if (isLoginPost) {
+    return next();
+  }
+
+  // 3. Check if request is authenticated via cookie
   const sessionCookie = extractCookie(req, 'axdoro_admin_session');
 
   // If no session cookie is present, ambient cookie CSRF does not apply
-  // (e.g., login request before session exists, or programmatic Bearer token client)
+  // (e.g., programmatic Bearer token client)
   if (!sessionCookie) {
     return next();
   }
 
-  // 3. For cookie-authenticated requests, enforce synchronizer token verification
+  // 4. For cookie-authenticated requests, enforce synchronizer token verification
   const csrfHeader = (req.headers['x-csrf-token'] || req.headers['X-CSRF-Token']) as string | undefined;
   const csrfCookie = extractCookie(req, 'axdoro_csrf_token');
 

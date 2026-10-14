@@ -20,6 +20,18 @@
   </head>
   <body class="bg-axdoro-bg text-axdoro-text antialiased min-h-screen">
     <div id="root"></div>
+    <script>
+      (function() {
+        try {
+          if (!window.location.pathname.startsWith('/admin')) {
+            var validThemes = ['deep-purple', 'midnight-neon', 'ice-white'];
+            var stored = localStorage.getItem('axdoro_theme_preview');
+            var theme = validThemes.indexOf(stored) !== -1 ? stored : 'deep-purple';
+            document.documentElement.setAttribute('data-theme', theme);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

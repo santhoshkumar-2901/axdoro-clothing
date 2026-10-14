@@ -376,24 +376,184 @@ describe('Admin Authentication & Authorization Integration Tests (axdoro_test)',
       expect(() => validateAndNormalizeEmail('user@missing-tld')).toThrow(/invalid email/i);
     });
 
-    it('rejects remote databases and enforces strictly local provisioning target', () => {
-      // Remote cloud DB
-      expect(() =>
-        validateProvisioningTarget('postgresql://user:pass@ep-cool-fog-123.us-east-2.aws.neon.tech/neondb')
-      ).toThrow(/forbidden from running against remote databases/i);
+    describe('validateProvisioningTarget safeguards (Phase 4C-1)', () => {
+      const localDevUrl = 'postgresql://axdoro_migrator:pass@localhost:5432/axdoro_dev';
+      const remoteDirectUrl =
+        'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+      const remotePooledUrl =
+        'postgresql://user:pass@ep-cool-dev-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
 
-      // Remote with sslmode=require
-      expect(() =>
-        validateProvisioningTarget('postgresql://user:pass@localhost:5432/axdoro_test?sslmode=require')
-      ).toThrow(/forbidden from running against remote databases/i);
+      it('1. permits valid local development target across opt-in states', () => {
+        expect(() => validateProvisioningTarget(localDevUrl, 'development', false)).not.toThrow();
+        expect(() => validateProvisioningTarget(localDevUrl, 'development', true)).not.toThrow();
+      });
 
-      // Empty URL
-      expect(() => validateProvisioningTarget('')).toThrow(/No database connection URL/i);
+      it('2. permits remote development target with explicit opt-in and valid direct TLS endpoint', () => {
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'development', true)).not.toThrow();
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=verify-full',
+            'development',
+            true
+          )
+        ).not.toThrow();
+      });
 
-      // Local connection URL accepted
-      expect(() =>
-        validateProvisioningTarget('postgresql://axdoro_migrator:pass@localhost:5432/axdoro_test')
-      ).not.toThrow();
+      it('3. rejects remote target without opt-in', () => {
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'development', false)).toThrow(
+          /STRICT LOCAL ISOLATION ABORT: Admin provisioning script targeting a remote database requires explicit ALLOW_REMOTE_DEV_DB=true/i
+        );
+      });
+
+      it('4. rejects remote target when explicit opt-in is false', () => {
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'development', false)).toThrow(
+          /STRICT LOCAL ISOLATION ABORT/i
+        );
+      });
+
+      it('5. strictly rejects production mode with local target', () => {
+        expect(() => validateProvisioningTarget(localDevUrl, 'production', false)).toThrow(
+          /PRODUCTION SAFETY GUARD: Administrator provisioning script cannot and will not be executed in production environment/i
+        );
+        expect(() => validateProvisioningTarget(localDevUrl, 'production', true)).toThrow(
+          /PRODUCTION SAFETY GUARD/i
+        );
+      });
+
+      it('6. strictly rejects production mode with remote target', () => {
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'production', true)).toThrow(
+          /PRODUCTION SAFETY GUARD: Administrator provisioning script cannot and will not be executed in production environment/i
+        );
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'production', false)).toThrow(
+          /PRODUCTION SAFETY GUARD/i
+        );
+      });
+
+      it('7. strictly rejects test mode with local target', () => {
+        expect(() => validateProvisioningTarget(localDevUrl, 'test', false)).toThrow(
+          /TEST ISOLATION GUARD: Administrator provisioning script cannot be executed in test mode/i
+        );
+        expect(() => validateProvisioningTarget(localDevUrl, 'test', true)).toThrow(
+          /TEST ISOLATION GUARD/i
+        );
+      });
+
+      it('8. strictly rejects test mode with remote target', () => {
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'test', true)).toThrow(
+          /TEST ISOLATION GUARD: Administrator provisioning script cannot be executed in test mode/i
+        );
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'test', false)).toThrow(
+          /TEST ISOLATION GUARD/i
+        );
+      });
+
+      it('9. strictly rejects pooled Neon endpoints even when opt-in is true', () => {
+        expect(() => validateProvisioningTarget(remotePooledUrl, 'development', true)).toThrow(
+          /UNSUPPORTED POOLED ENDPOINT: Admin provisioning operations cannot be executed against pooled connection endpoints \(-pooler\)/i
+        );
+      });
+
+      it('10. strictly rejects missing and malformed URLs without leaking secrets', () => {
+        expect(() => validateProvisioningTarget('', 'development', true)).toThrow(
+          /No database connection URL provided/i
+        );
+        expect(() => validateProvisioningTarget('   ', 'development', true)).toThrow(
+          /No database connection URL provided/i
+        );
+        expect(() => validateProvisioningTarget('not-a-valid-url', 'development', true)).toThrow(
+          /DATABASE CONFIGURATION ERROR: Malformed database connection URL/i
+        );
+        expect(() => validateProvisioningTarget('http://localhost:5432/db', 'development', true)).toThrow(
+          /Unsupported database protocol 'http:'/i
+        );
+
+        try {
+          validateProvisioningTarget(
+            'postgresql://migrator:SUPER_SECRET_TOKEN@invalid-host:not-a-port/axdoro',
+            'development',
+            true
+          );
+          expect.unreachable('Should have thrown on malformed URL');
+        } catch (err: unknown) {
+          const error = err as Error;
+          expect(error.message).toContain('DATABASE CONFIGURATION ERROR: Malformed database connection URL');
+          expect(error.message).not.toContain('SUPER_SECRET_TOKEN');
+        }
+      });
+
+      it('11. strictly rejects invalid or insecure remote TLS configurations', () => {
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=disable',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: 'sslmode=disable' is forbidden on remote database connections/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=allow',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: 'sslmode=allow' is forbidden on remote database connections/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=no-verify',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: Insecure sslmode 'no-verify' is forbidden/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=prefer',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: Insecure sslmode 'prefer' is forbidden/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?ssl=false',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: Insecure ssl parameter 'false' is forbidden/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&uselibpqcompat=true',
+            'development',
+            true
+          )
+        ).toThrow(/INSECURE TLS CONFIGURATION REJECTED: uselibpqcompat parameter is forbidden/i);
+
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@ep-cool-dev.ap-southeast-1.aws.neon.tech/neondb',
+            'development',
+            true
+          )
+        ).toThrow(/Remote database connection must explicitly enforce verified TLS/i);
+      });
+
+      it('12. enforces regression coverage for existing runtime-target safeguards', () => {
+        expect(() =>
+          validateProvisioningTarget(
+            'postgresql://user:pass@localhost:5432/axdoro_test?sslmode=require',
+            'development',
+            false
+          )
+        ).toThrow(
+          /STRICT LOCAL ISOLATION ABORT: Admin provisioning script targeting a remote database requires explicit ALLOW_REMOTE_DEV_DB=true/i
+        );
+
+        expect(() => validateProvisioningTarget(remoteDirectUrl, 'staging', true)).toThrow(
+          /STRICT LOCAL DATABASE ISOLATION ERROR: Remote database detected in non-production environment 'staging'/i
+        );
+      });
     });
   });
 
@@ -436,6 +596,131 @@ describe('Admin Authentication & Authorization Integration Tests (axdoro_test)',
       // Verify the returned token matches the CSRF cookie value
       const match = csrfCookie!.match(/axdoro_csrf_token=([^;]+)/);
       expect(match![1]).toBe(res.body.data.csrfToken);
+    });
+
+    it('allows login when a stale or expired session cookie is present without requiring X-CSRF-Token', async () => {
+      await provisionAdmin({
+        email: 'stale-cookie-admin@axdoro.test',
+        password: 'AdminPassword123!',
+        fullName: 'Stale Cookie Admin',
+      });
+
+      // Browser sends stale axdoro_admin_session cookie from a previous session and no X-CSRF-Token
+      const res = await request(app)
+        .post('/api/admin/auth/login')
+        .set('Cookie', ['axdoro_admin_session=stale_expired_session_token_12345'])
+        .send({ email: 'stale-cookie-admin@axdoro.test', password: 'AdminPassword123!' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe('stale-cookie-admin@axdoro.test');
+      expect(res.body.data.csrfToken).toBeDefined();
+
+      const setCookies = res.headers['set-cookie'] as string[];
+      expect(setCookies).toBeDefined();
+      const sessionCookie = setCookies.find((c) => c.startsWith('axdoro_admin_session='));
+      expect(sessionCookie).toBeDefined();
+      expect(sessionCookie).not.toContain('stale_expired_session_token_12345');
+    });
+
+    it('allows login with trailing slash and query parameters when stale session cookie is present', async () => {
+      await provisionAdmin({
+        email: 'trailing-slash-admin@axdoro.test',
+        password: 'AdminPassword123!',
+        fullName: 'Trailing Slash Admin',
+      });
+
+      const res = await request(app)
+        .post('/api/admin/auth/login/?source=admin-portal&ref=direct')
+        .set('Cookie', ['axdoro_admin_session=stale_expired_token_99999'])
+        .send({ email: 'trailing-slash-admin@axdoro.test', password: 'AdminPassword123!' });
+
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe('trailing-slash-admin@axdoro.test');
+      expect(res.body.data.csrfToken).toBeDefined();
+    });
+
+    it('ensures unrelated paths like /api/admin/login do not inherit the login CSRF exemption when session cookie is present', async () => {
+      // A request to /api/admin/login with a session cookie but no CSRF token must NOT be exempted
+      const res = await request(app)
+        .post('/api/admin/login')
+        .set('Cookie', ['axdoro_admin_session=active_or_stale_session_12345'])
+        .send({ email: 'any@axdoro.test', password: 'AnyPassword123!' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toMatch(/CSRF token missing in request header/i);
+    });
+
+    it('still enforces Origin verification on login endpoint, rejecting untrusted origins with 403', async () => {
+      await provisionAdmin({
+        email: 'origin-login-admin@axdoro.test',
+        password: 'AdminPassword123!',
+        fullName: 'Origin Login Admin',
+      });
+
+      const res = await request(app)
+        .post('/api/admin/auth/login')
+        .set('Origin', 'http://malicious-attacker-site.com')
+        .send({ email: 'origin-login-admin@axdoro.test', password: 'AdminPassword123!' });
+
+      // Must be rejected by CORS or CSRF Origin verification
+      expect([403, 500]).toContain(res.status);
+      expect(res.body.status).toBe('error');
+    });
+
+    it('still enforces Referer verification on login endpoint when Origin header is omitted', async () => {
+      await provisionAdmin({
+        email: 'referer-login-admin@axdoro.test',
+        password: 'AdminPassword123!',
+        fullName: 'Referer Login Admin',
+      });
+
+      const res = await request(app)
+        .post('/api/admin/auth/login')
+        .set('Referer', 'http://malicious-attacker-site.com/exploit')
+        .send({ email: 'referer-login-admin@axdoro.test', password: 'AdminPassword123!' });
+
+      expect(res.status).toBe(403);
+      expect(res.body.error).toMatch(/untrusted Referer/i);
+    });
+
+    it('rejects state-changing requests when a CSRF token from a different session is supplied', async () => {
+      const admin1 = await provisionAdmin({
+        email: 'admin-one@axdoro.test',
+        password: 'AdminPassword123!',
+        fullName: 'Admin One',
+      });
+      const admin2 = await provisionAdmin({
+        email: 'admin-two@axdoro.test',
+        password: 'AdminPassword456!',
+        fullName: 'Admin Two',
+      });
+
+      const loginRes1 = await request(app)
+        .post('/api/admin/auth/login')
+        .send({ email: 'admin-one@axdoro.test', password: 'AdminPassword123!' });
+      const cookies1 = loginRes1.headers['set-cookie'] as string[];
+
+      const loginRes2 = await request(app)
+        .post('/api/admin/auth/login')
+        .send({ email: 'admin-two@axdoro.test', password: 'AdminPassword456!' });
+      const csrfToken2 = loginRes2.body.data.csrfToken;
+
+      // Attempt state change using Admin 1 session cookie with Admin 2 CSRF token
+      const sessionCookie1 = cookies1.find((c) => c.startsWith('axdoro_admin_session='));
+      const crossSessionCookies = [sessionCookie1!, `axdoro_csrf_token=${csrfToken2}`];
+
+      const createRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Cookie', crossSessionCookies)
+        .set('X-CSRF-Token', csrfToken2)
+        .send({ name: 'Cross Session Category', slug: 'cross-session-category' });
+
+      expect(createRes.status).toBe(403);
+      expect(createRes.body.error).toMatch(/Invalid or forged CSRF token/i);
+
+      // Verify database state: no category was inserted
+      const dbCheck = await testPool.query('SELECT * FROM categories WHERE slug = $1;', ['cross-session-category']);
+      expect(dbCheck.rows).toHaveLength(0);
     });
 
     it('allows read-only endpoints with valid session cookie without requiring CSRF header', async () => {

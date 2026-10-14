@@ -3,9 +3,61 @@ import path from 'path';
 import crypto from 'crypto';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
-import { env, isRemoteDatabase } from '../config/env.js';
+import { env, isRemoteDatabase, isPooledNeonUrl, assertSecureTlsParameters } from '../config/env.js';
 
 const { Pool } = pg;
+
+/**
+ * Validates migration target connection URL based on environment, remote opt-in, and endpoint type.
+ * Throws a safe, actionable error preventing unsafe or unsupported migration execution.
+ */
+export function validateMigrationTarget(
+  targetUrl: string,
+  nodeEnv: string = env.NODE_ENV,
+  allowRemoteDev: boolean = env.ALLOW_REMOTE_DEV_DB
+): void {
+  if (!targetUrl) {
+    throw new Error('MIGRATION TARGET ERROR: No database connection URL provided.');
+  }
+
+  // Validate TLS parameters and reject insecure or malformed connection strings
+  assertSecureTlsParameters(targetUrl);
+
+  const isRemote = isRemoteDatabase(targetUrl);
+
+  // 1. Unconditionally reject remote database in test mode
+  if (nodeEnv === 'test' && isRemote) {
+    throw new Error(
+      'STRICT LOCAL ISOLATION ABORT: Target database appears to be a remote or cloud instance. ' +
+        'Migration tooling in test mode is strictly forbidden from connecting to remote databases.'
+    );
+  }
+
+  // 2. Reject remote database in development without explicit opt-in
+  if (nodeEnv === 'development' && isRemote && !allowRemoteDev) {
+    throw new Error(
+      'STRICT LOCAL ISOLATION ABORT: Target database appears to be a remote or cloud instance without explicit opt-in. ' +
+        'To permit migrations against a remote development database, set ALLOW_REMOTE_DEV_DB=true in your environment.'
+    );
+  }
+
+  // 3. Reject non-production environments other than development/test
+  if (nodeEnv !== 'production' && nodeEnv !== 'development' && nodeEnv !== 'test' && isRemote) {
+    throw new Error(
+      `STRICT LOCAL ISOLATION ABORT: Remote database migration rejected in non-production environment '${nodeEnv}'.`
+    );
+  }
+
+  // 4. Reject pooled Neon endpoints (PgBouncer) because session-level advisory locks fail on transaction poolers
+  if (isPooledNeonUrl(targetUrl)) {
+    throw new Error(
+      'UNSUPPORTED POOLED ENDPOINT: Migrations cannot be executed against Neon pooled connection endpoints (-pooler). ' +
+        'Neon transaction pooling does not support session-level PostgreSQL advisory locks (pg_advisory_lock). ' +
+        'Please configure MIGRATION_DATABASE_URL to use the Direct (non-pooled) Neon connection endpoint.'
+    );
+  }
+}
+
 
 // Unique 64-bit integer advisory lock key for AXDORO migrations
 const ADVISORY_LOCK_KEY = 19842026;
@@ -73,7 +125,37 @@ export async function ensureMigrationTable(client: pg.PoolClient): Promise<void>
 }
 
 /**
- * Retrieves applied migrations from database
+ * Checks whether schema_migrations tracking table exists using a strictly read-only catalog query.
+ * Executes zero DDL and acquires no locks.
+ */
+export async function checkMigrationTableExists(client: pg.PoolClient): Promise<boolean> {
+  const res = await client.query<{ exists: boolean }>(
+    `SELECT to_regclass('public.schema_migrations') IS NOT NULL AS exists`
+  );
+  return Boolean(res.rows[0]?.exists);
+}
+
+/**
+ * Retrieves applied migrations from database strictly in read-only mode without executing DDL.
+ * If the tracking table does not exist, returns an empty array and hasMigrationTable=false.
+ */
+export async function getAppliedMigrationsReadOnly(client: pg.PoolClient): Promise<{
+  applied: AppliedMigration[];
+  hasMigrationTable: boolean;
+}> {
+  const hasMigrationTable = await checkMigrationTableExists(client);
+  if (!hasMigrationTable) {
+    return { applied: [], hasMigrationTable: false };
+  }
+  const res = await client.query<AppliedMigration>(
+    'SELECT id, filename, checksum, applied_at FROM schema_migrations ORDER BY id ASC'
+  );
+  return { applied: res.rows, hasMigrationTable: true };
+}
+
+/**
+ * Retrieves applied migrations from database (ensuring tracking table exists).
+ * Used exclusively by migration application runner.
  */
 export async function getAppliedMigrations(client: pg.PoolClient): Promise<AppliedMigration[]> {
   await ensureMigrationTable(client);
@@ -95,13 +177,8 @@ export async function runMigrations(options: {
     env.MIGRATION_DATABASE_URL ||
     env.DATABASE_URL;
 
-  // Strict local database isolation: reject any remote target unconditionally
-  if (isRemoteDatabase(targetUrl)) {
-    throw new Error(
-      'STRICT LOCAL ISOLATION ABORT: Target database appears to be a remote or cloud instance. ' +
-        'Local migration tooling is strictly forbidden from connecting to or executing against remote databases.'
-    );
-  }
+  // Enforce migration target safeguards
+  validateMigrationTarget(targetUrl, env.NODE_ENV, env.ALLOW_REMOTE_DEV_DB);
 
   const defaultMigrationsDir = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -109,9 +186,10 @@ export async function runMigrations(options: {
   );
   const migrationsDir = options.migrationsDir || defaultMigrationsDir;
 
+  const isRemote = isRemoteDatabase(targetUrl);
   const pool = new Pool({
     connectionString: targetUrl,
-    ssl: false,
+    ssl: isRemote ? { rejectUnauthorized: true } : false,
     connectionTimeoutMillis: 10000,
   });
 
@@ -203,19 +281,15 @@ export async function getMigrationStatus(options?: {
 }): Promise<{
   applied: AppliedMigration[];
   pending: MigrationFile[];
+  hasMigrationTable: boolean;
 }> {
   const targetUrl =
     options?.connectionString ||
     env.MIGRATION_DATABASE_URL ||
     env.DATABASE_URL;
 
-  // Strict local database isolation: reject remote target unconditionally before connecting
-  if (isRemoteDatabase(targetUrl)) {
-    throw new Error(
-      'STRICT LOCAL ISOLATION ABORT: Target database appears to be a remote or cloud instance. ' +
-        'Migration status inspection is strictly forbidden from connecting to remote databases.'
-    );
-  }
+  // Enforce migration target safeguards before connecting
+  validateMigrationTarget(targetUrl, env.NODE_ENV, env.ALLOW_REMOTE_DEV_DB);
 
   const defaultMigrationsDir = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -223,20 +297,21 @@ export async function getMigrationStatus(options?: {
   );
   const migrationsDir = options?.migrationsDir || defaultMigrationsDir;
 
+  const isRemote = isRemoteDatabase(targetUrl);
   const pool = new Pool({
     connectionString: targetUrl,
-    ssl: false,
+    ssl: isRemote ? { rejectUnauthorized: true } : false,
     connectionTimeoutMillis: 5000,
   });
 
   const client = await pool.connect();
   try {
-    const applied = await getAppliedMigrations(client);
+    const { applied, hasMigrationTable } = await getAppliedMigrationsReadOnly(client);
     const availableFiles = getMigrationFiles(migrationsDir);
     const appliedFilenames = new Set(applied.map((a) => a.filename));
     const pending = availableFiles.filter((f) => !appliedFilenames.has(f.filename));
 
-    return { applied, pending };
+    return { applied, pending, hasMigrationTable };
   } finally {
     client.release();
     await pool.end();
@@ -265,6 +340,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     getMigrationStatus()
       .then((status) => {
         console.log('\n--- AXDORO MIGRATION STATUS ---');
+        if (!status.hasMigrationTable) {
+          console.log('[Notice] Migration tracking table (schema_migrations) does not exist in database.');
+        }
         console.log(`Applied migrations (${status.applied.length}):`);
         status.applied.forEach((m) => {
           console.log(`  ✓ ${m.filename} (checksum: ${m.checksum.substring(0, 10)}..., applied: ${m.applied_at.toISOString()})`);

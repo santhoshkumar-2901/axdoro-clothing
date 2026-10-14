@@ -14,11 +14,13 @@ import { CartDrawer } from './components/CartDrawer.tsx';
 import { BulkEnquiryModal } from './components/BulkEnquiryModal.tsx';
 import { CheckoutModal } from './components/CheckoutModal.tsx';
 import { AdminPortal } from './components/admin/AdminPortal.tsx';
+import { ThemeId, getStoredTheme, setStoredTheme, applyThemeToDocument } from './lib/theme.ts';
 
 export default function App(): React.JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>(() =>
     typeof window !== 'undefined' ? window.location.pathname : '/'
   );
+  const [theme, setTheme] = useState<ThemeId>(() => getStoredTheme());
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -27,6 +29,17 @@ export default function App(): React.JSX.Element {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [prefilledBulkProduct, setPrefilledBulkProduct] = useState<Product | null>(null);
   const [catalogueVersion, setCatalogueVersion] = useState(0);
+
+  const handleThemeChange = (nextTheme: ThemeId) => {
+    setTheme(nextTheme);
+    setStoredTheme(nextTheme);
+    applyThemeToDocument(nextTheme, currentPath);
+  };
+
+  // Sync document data-theme on route changes and theme updates
+  useEffect(() => {
+    applyThemeToDocument(theme, currentPath);
+  }, [currentPath, theme]);
 
   // Sync route path on browser back/forward navigation
   useEffect(() => {
@@ -144,7 +157,10 @@ export default function App(): React.JSX.Element {
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
-    <div className="min-h-screen bg-axdoro-bg text-axdoro-text flex flex-col justify-between selection:bg-axdoro-accent selection:text-white">
+    <div
+      data-theme={theme}
+      className="storefront-root min-h-screen bg-axdoro-bg text-axdoro-text flex flex-col justify-between selection:bg-axdoro-accent selection:text-white"
+    >
       {/* 1. Promotional Header Banner */}
       <PromoBanner onOpenBulk={handleOpenGeneralBulk} />
 
@@ -156,6 +172,8 @@ export default function App(): React.JSX.Element {
         onOpenBulk={handleOpenGeneralBulk}
         onScrollToShop={handleScrollToShop}
         onScrollToAbout={handleScrollToAbout}
+        currentTheme={theme}
+        onSelectTheme={handleThemeChange}
       />
 
       {/* 3. Hero Campaign Section */}
@@ -194,6 +212,7 @@ export default function App(): React.JSX.Element {
         onOpenBulk={handleOpenGeneralBulk}
         onScrollToShop={handleScrollToShop}
         onScrollToAbout={handleScrollToAbout}
+        currentTheme={theme}
       />
 
       {/* Interactive Modals & Drawers */}

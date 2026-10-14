@@ -20,6 +20,9 @@ import { csrfProtection } from './middleware/csrf.js';
 export function createApp(): Express {
   const app = express();
 
+  // 0. Trust first reverse proxy hop (Vercel edge proxy)
+  app.set('trust proxy', 1);
+
   // 1. Security Headers, CORS, and Payload Limits
   setupSecurityMiddleware(app);
 

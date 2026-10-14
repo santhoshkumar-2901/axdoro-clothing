@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { env, isRemoteDatabase } from './env.js';
+import { env, isRemoteDatabase, assertSecureTlsParameters } from './env.js';
 
 const { Pool } = pg;
 
@@ -11,26 +11,51 @@ const connectionString =
 const isRemote = isRemoteDatabase(connectionString);
 
 /**
- * Validates that non-production environments connect strictly to local PostgreSQL instances.
+ * Validates database connection target based on environment and remote development opt-in.
  * Throws a safe, actionable error without exposing sensitive credentials.
  */
-export function validateRuntimeDbTarget(targetUrl: string, nodeEnv: string): void {
-  if (nodeEnv !== 'production' && isRemoteDatabase(targetUrl)) {
+export function validateRuntimeDbTarget(
+  targetUrl: string,
+  nodeEnv: string = env.NODE_ENV,
+  allowRemoteDev: boolean = env.ALLOW_REMOTE_DEV_DB
+): void {
+  // Validate TLS parameters and reject insecure or malformed connection strings
+  assertSecureTlsParameters(targetUrl);
+
+  const isRemote = isRemoteDatabase(targetUrl);
+
+  // 1. Test environment must NEVER connect to a remote database regardless of opt-in
+  if (nodeEnv === 'test' && isRemote) {
     throw new Error(
-      'STRICT LOCAL DATABASE ISOLATION ERROR: Remote database detected in non-production environment. ' +
-        'Local development and testing must connect strictly to a local PostgreSQL instance (localhost / 127.0.0.1). ' +
-        'Remote cloud databases are rejected.'
+      'STRICT LOCAL DATABASE ISOLATION ERROR: Remote database detected in test environment. ' +
+        'Automated test suites must run strictly against the dedicated local test database (axdoro_test).'
+    );
+  }
+
+  // 2. Development environment permits remote database ONLY with explicit opt-in
+  if (nodeEnv === 'development' && isRemote && !allowRemoteDev) {
+    throw new Error(
+      'STRICT LOCAL DATABASE ISOLATION ERROR: Remote database detected in development without explicit opt-in. ' +
+        'To permit an authorized remote development database, set ALLOW_REMOTE_DEV_DB=true in your environment. ' +
+        'Otherwise, connect strictly to a local PostgreSQL instance (localhost / 127.0.0.1).'
+    );
+  }
+
+  // 3. Other non-production environments reject remote databases unconditionally
+  if (nodeEnv !== 'production' && nodeEnv !== 'development' && nodeEnv !== 'test' && isRemote) {
+    throw new Error(
+      `STRICT LOCAL DATABASE ISOLATION ERROR: Remote database detected in non-production environment '${nodeEnv}'.`
     );
   }
 }
 
 // Fail closed: enforce local isolation before allocating pool resources
-validateRuntimeDbTarget(connectionString, env.NODE_ENV);
+validateRuntimeDbTarget(connectionString, env.NODE_ENV, env.ALLOW_REMOTE_DEV_DB);
 
 export const pool = new Pool({
   connectionString,
   ssl: isRemote ? { rejectUnauthorized: true } : false,
-  max: 20, // Max concurrent clients
+  max: process.env.VERCEL === '1' ? 3 : 20, // Reduced pool size in serverless to prevent connection exhaustion
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
 });

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Search, Menu, X, Layers } from 'lucide-react';
 import { ProductCategory } from '../types/product.ts';
+import { ThemeId, getStoredTheme } from '../lib/theme.ts';
+import { ThemePreviewSwitcher } from './ThemePreviewSwitcher.tsx';
 
 interface NavbarProps {
   cartCount: number;
@@ -9,6 +11,8 @@ interface NavbarProps {
   onOpenBulk: () => void;
   onScrollToShop: () => void;
   onScrollToAbout: () => void;
+  currentTheme?: ThemeId;
+  onSelectTheme?: (theme: ThemeId) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,8 +22,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenBulk,
   onScrollToShop,
   onScrollToAbout,
+  currentTheme,
+  onSelectTheme,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const effectiveTheme = currentTheme || getStoredTheme();
+  const handleThemeChange = (t: ThemeId) => {
+    if (onSelectTheme) {
+      onSelectTheme(t);
+    }
+  };
+  const isDarkTheme = effectiveTheme === 'deep-purple' || effectiveTheme === 'midnight-neon';
 
   // Close mobile drawer on Escape key
   useEffect(() => {
@@ -47,7 +60,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-label="AXDORO Home"
             >
               <img
-                src="/logo-dark.png"
+                src={isDarkTheme ? '/logo-white.png' : '/logo-dark.png'}
                 alt="AXDORO"
                 width={144}
                 height={36}
@@ -111,6 +124,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Right Action Icons */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Desktop Theme Preview Switcher */}
+            <div className="hidden sm:block">
+              <ThemePreviewSwitcher
+                currentTheme={effectiveTheme}
+                onSelectTheme={handleThemeChange}
+                variant="desktop"
+              />
+            </div>
+
             <button
               onClick={onScrollToShop}
               className="p-2.5 rounded-lg hover:bg-black/5 text-axdoro-text hover:text-black transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
@@ -153,6 +175,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           id="mobile-navigation-menu"
           className="md:hidden border-t border-axdoro-border bg-axdoro-surface px-6 py-6 space-y-4 shadow-elevated animate-in slide-in-from-top-2 duration-200"
         >
+          {/* Mobile Theme Preview Control */}
+          <div className="pb-3 border-b border-axdoro-border">
+            <ThemePreviewSwitcher
+              currentTheme={effectiveTheme}
+              onSelectTheme={(t) => {
+                handleThemeChange(t);
+                setMobileMenuOpen(false);
+              }}
+              variant="mobile"
+            />
+          </div>
           <div className="flex flex-col gap-1 font-medium text-sm">
             <button
               onClick={() => {

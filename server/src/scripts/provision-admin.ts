@@ -5,25 +5,91 @@ import {
   provisionAdmin,
   getActiveAdminCount,
 } from '../services/admin-auth.service.js';
-import { env, isLocalDatabase, isRemoteDatabase } from '../config/env.js';
+import {
+  env,
+  isLocalDatabase,
+  isRemoteDatabase,
+  isPooledNeonUrl,
+  assertSecureTlsParameters,
+} from '../config/env.js';
 import { validateRuntimeDbTarget } from '../config/db.js';
 
 /**
  * Validates the database target for administrator provisioning.
- * Strictly local-only. Rejects remote databases, cloud connections, and production environments.
+ * Permits local development databases or explicitly authorized remote development databases.
+ * Strictly rejects production mode, test mode, pooled endpoints, and unauthorized remote databases.
  */
-export function validateProvisioningTarget(targetUrl: string, nodeEnv: string = env.NODE_ENV): void {
-  if (!targetUrl) {
+export function validateProvisioningTarget(
+  targetUrl: string,
+  nodeEnv: string = env.NODE_ENV,
+  allowRemoteDev: boolean = env.ALLOW_REMOTE_DEV_DB
+): void {
+  if (!targetUrl || typeof targetUrl !== 'string' || targetUrl.trim() === '') {
     throw new Error('STRICT LOCAL ISOLATION ERROR: No database connection URL provided for provisioning.');
   }
 
-  if (!isLocalDatabase(targetUrl) || isRemoteDatabase(targetUrl)) {
+  // Validate TLS parameters and reject insecure or malformed connection strings
+  assertSecureTlsParameters(targetUrl);
+
+  // 1. Unconditionally reject production environment
+  if (nodeEnv === 'production') {
     throw new Error(
-      'STRICT LOCAL ISOLATION ABORT: Admin provisioning script is strictly forbidden from running against remote databases.'
+      'PRODUCTION SAFETY GUARD: Administrator provisioning script cannot and will not be executed in production environment.'
     );
   }
 
-  validateRuntimeDbTarget(targetUrl, nodeEnv);
+  // 2. Unconditionally reject test environment
+  if (nodeEnv === 'test') {
+    throw new Error(
+      'TEST ISOLATION GUARD: Administrator provisioning script cannot be executed in test mode.'
+    );
+  }
+
+  const isRemote = isRemoteDatabase(targetUrl);
+
+  // 3. Forbid provisioning remote database without explicit opt-in in development
+  if (isRemote && !allowRemoteDev) {
+    throw new Error(
+      'STRICT LOCAL ISOLATION ABORT: Admin provisioning script targeting a remote database requires explicit ALLOW_REMOTE_DEV_DB=true in development.'
+    );
+  }
+
+  // 4. Reject pooled endpoints (PgBouncer)
+  if (isPooledNeonUrl(targetUrl)) {
+    throw new Error(
+      'UNSUPPORTED POOLED ENDPOINT: Admin provisioning operations cannot be executed against pooled connection endpoints (-pooler). ' +
+        'Please configure MIGRATION_DATABASE_URL to use the Direct (non-pooled) Neon connection endpoint.'
+    );
+  }
+
+  // 5. Require secure TLS parameters for remote targets
+  if (isRemote) {
+    let parsed: URL;
+    try {
+      parsed = new URL(targetUrl);
+      const sslMode = parsed.searchParams.get('sslmode')?.toLowerCase();
+      const ssl = parsed.searchParams.get('ssl')?.toLowerCase();
+      const hasTls =
+        sslMode === 'require' ||
+        sslMode === 'verify-full' ||
+        sslMode === 'verify-ca' ||
+        ssl === 'true' ||
+        ssl === '1';
+      if (!hasTls) {
+        throw new Error(
+          'INSECURE TLS CONFIGURATION REJECTED: Remote database connection must explicitly enforce verified TLS (e.g. sslmode=require or sslmode=verify-full).'
+        );
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('INSECURE TLS')) {
+        throw err;
+      }
+      // Malformed URLs are already caught by assertSecureTlsParameters
+    }
+  }
+
+  // 6. Delegate to runtime target validation for consistent baseline safeguards
+  validateRuntimeDbTarget(targetUrl, nodeEnv, allowRemoteDev);
 }
 
 /**
@@ -98,7 +164,7 @@ export async function promptText(promptText: string): Promise<string> {
  */
 export async function run(): Promise<void> {
   const targetUrl = env.MIGRATION_DATABASE_URL || env.DATABASE_URL;
-  validateProvisioningTarget(targetUrl);
+  validateProvisioningTarget(targetUrl, env.NODE_ENV, env.ALLOW_REMOTE_DEV_DB);
 
   const activeCount = await getActiveAdminCount();
   if (activeCount >= 2) {

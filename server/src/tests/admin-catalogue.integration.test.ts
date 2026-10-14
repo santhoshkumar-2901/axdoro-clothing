@@ -5,10 +5,14 @@ import {
   initializeTestDatabase,
   truncateTestCatalogue,
   truncateTestAdmin,
+  truncateTestOrders,
+  truncateTestEnquiries,
   closeTestDatabase,
   testPool,
 } from './test-db.js';
 import { provisionAdmin, loginAdmin } from '../services/admin-auth.service.js';
+import { createOrder } from '../services/order.service.js';
+import { createEnquiry } from '../services/enquiry.service.js';
 
 describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
   let adminToken: string;
@@ -142,6 +146,17 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
     // 7. Archived product is immediately excluded from public catalogue
     const publicArchRes = await request(app).get('/api/catalogue/products');
     expect(publicArchRes.body.products.some((p: any) => p.id === productId)).toBe(false);
+
+    // 8. Safely unarchive product
+    const unarchiveRes = await request(app)
+      .post(`/api/admin/products/${productId}/unarchive`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(unarchiveRes.status).toBe(200);
+    expect(unarchiveRes.body.product.status).toBe('published');
+
+    // 9. Unarchived product is immediately restored to public catalogue
+    const publicRestoredRes = await request(app).get('/api/catalogue/products');
+    expect(publicRestoredRes.body.products.some((p: any) => p.id === productId)).toBe(true);
   });
 
   it('rejects duplicate SKUs and duplicate size/color variant combinations', async () => {
@@ -462,6 +477,245 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
     expect(m.enquiries.message).toMatch(/Phase 4/i);
   });
 
+  describe('Product Creation & Update: Fabric Specification Validation (Phase 7)', () => {
+    let testCatId: string;
+
+    beforeEach(async () => {
+      const catRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Luxury Fabrics', slug: `luxury-fabrics-${Date.now()}` });
+      testCatId = catRes.body.category.id;
+    });
+
+    it('1. accepts fabricSpec: null on product creation, returning 201 and persisting NULL in database', async () => {
+      const res = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Null Fabric Spec Product',
+          slug: `null-fabric-product-${Date.now()}`,
+          description: 'Testing null fabricSpec',
+          categoryId: testCatId,
+          status: 'published',
+          fabricSpec: null,
+          variants: [
+            {
+              size: 'M',
+              color: 'Black',
+              sku: `SKU-NULL-FAB-${Date.now()}`,
+              pricePaise: 99900,
+              stockQuantity: 10,
+            },
+          ],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.product.id).toBeDefined();
+
+      const prodId = res.body.product.id;
+      const getRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.product.fabric_spec).toBeNull();
+
+      const dbCheck = await testPool.query('SELECT fabric_spec FROM products WHERE id = $1;', [prodId]);
+      expect(dbCheck.rows[0].fabric_spec).toBeNull();
+    });
+
+    it('2. accepts omitted fabricSpec on product creation, returning 201 and persisting NULL in database', async () => {
+      const res = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Omitted Fabric Spec Product',
+          slug: `omitted-fabric-product-${Date.now()}`,
+          description: 'Testing omitted fabricSpec',
+          categoryId: testCatId,
+          status: 'published',
+          variants: [
+            {
+              size: 'L',
+              color: 'Navy',
+              sku: `SKU-OMIT-FAB-${Date.now()}`,
+              pricePaise: 89900,
+              stockQuantity: 15,
+            },
+          ],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.product.id).toBeDefined();
+
+      const prodId = res.body.product.id;
+      const getRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.product.fabric_spec).toBeNull();
+
+      const dbCheck = await testPool.query('SELECT fabric_spec FROM products WHERE id = $1;', [prodId]);
+      expect(dbCheck.rows[0].fabric_spec).toBeNull();
+    });
+
+    it('3. accepts valid string fabricSpec on product creation, returning 201 and persisting string', async () => {
+      const fabric = '100% Organic Pima Cotton';
+      const res = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Pima Cotton Tee',
+          slug: `pima-cotton-tee-${Date.now()}`,
+          description: 'Testing string fabricSpec',
+          categoryId: testCatId,
+          status: 'published',
+          fabricSpec: fabric,
+          variants: [
+            {
+              size: 'S',
+              color: 'White',
+              sku: `SKU-PIMA-FAB-${Date.now()}`,
+              pricePaise: 149900,
+              stockQuantity: 20,
+            },
+          ],
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.product.id).toBeDefined();
+
+      const prodId = res.body.product.id;
+      const getRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.product.fabric_spec).toBe(fabric);
+
+      const dbCheck = await testPool.query('SELECT fabric_spec FROM products WHERE id = $1;', [prodId]);
+      expect(dbCheck.rows[0].fabric_spec).toBe(fabric);
+    });
+
+    it('4. rejects fabricSpec exceeding 50 characters with HTTP 400 on product creation', async () => {
+      const tooLongFabric = 'A'.repeat(51);
+      const res = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Long Fabric Tee',
+          slug: `long-fabric-tee-${Date.now()}`,
+          description: 'Testing overly long fabricSpec',
+          categoryId: testCatId,
+          status: 'published',
+          fabricSpec: tooLongFabric,
+          variants: [
+            {
+              size: 'XL',
+              color: 'Olive',
+              sku: `SKU-LONG-FAB-${Date.now()}`,
+              pricePaise: 119900,
+              stockQuantity: 5,
+            },
+          ],
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/Invalid product data/i);
+    });
+
+    it('5. rejects invalid non-string values (number, object, boolean) with HTTP 400 on product creation', async () => {
+      const basePayload = {
+        name: 'Invalid Type Fabric Tee',
+        slug: `invalid-type-fabric-tee-${Date.now()}`,
+        description: 'Testing invalid type fabricSpec',
+        categoryId: testCatId,
+        status: 'published',
+        variants: [
+          {
+            size: 'M',
+            color: 'Black',
+            sku: `SKU-INV-FAB-${Date.now()}`,
+            pricePaise: 109900,
+            stockQuantity: 10,
+          },
+        ],
+      };
+
+      const numRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ ...basePayload, fabricSpec: 12345 });
+      expect(numRes.status).toBe(400);
+      expect(numRes.body.error).toMatch(/Invalid product data/i);
+
+      const objRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ ...basePayload, fabricSpec: { material: 'cotton' } });
+      expect(objRes.status).toBe(400);
+      expect(objRes.body.error).toMatch(/Invalid product data/i);
+
+      const boolRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ ...basePayload, fabricSpec: true });
+      expect(boolRes.status).toBe(400);
+      expect(boolRes.body.error).toMatch(/Invalid product data/i);
+    });
+
+    it('6. verifies product update behavior remains intact (updating to string, updating to null, rejecting >50 chars)', async () => {
+      // 1. Create product initially with string fabricSpec
+      const createRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Updatable Fabric Tee',
+          slug: `updatable-fabric-tee-${Date.now()}`,
+          description: 'Testing update fabricSpec',
+          categoryId: testCatId,
+          status: 'published',
+          fabricSpec: 'Initial Cotton Spec',
+          variants: [
+            {
+              size: 'M',
+              color: 'Charcoal',
+              sku: `SKU-UPD-FAB-${Date.now()}`,
+              pricePaise: 129900,
+              stockQuantity: 30,
+            },
+          ],
+        });
+      expect(createRes.status).toBe(201);
+      const prodId = createRes.body.product.id;
+
+      // 2. Update to new valid string
+      const updateRes1 = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ fabricSpec: '240 GSM Heavy Cotton' });
+      expect(updateRes1.status).toBe(200);
+      expect(updateRes1.body.product.fabric_spec).toBe('240 GSM Heavy Cotton');
+
+      // 3. Update to null (clearing the specification)
+      const updateRes2 = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ fabricSpec: null });
+      expect(updateRes2.status).toBe(200);
+      expect(updateRes2.body.product.fabric_spec).toBeNull();
+
+      const dbCheck = await testPool.query('SELECT fabric_spec FROM products WHERE id = $1;', [prodId]);
+      expect(dbCheck.rows[0].fabric_spec).toBeNull();
+
+      // 4. Reject update with > 50 characters
+      const updateRes3 = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ fabricSpec: 'B'.repeat(51) });
+      expect(updateRes3.status).toBe(400);
+    });
+  });
+
   describe('Variant IDOR Authorization Protection (PUT /api/admin/products/:id/variants/:variantId)', () => {
     let testCategoryId: string;
 
@@ -650,6 +904,149 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
         .set('Authorization', `Bearer ${adminToken}`)
         .send({ pricePaise: 60000 });
       expect(res4.status).toBe(404);
+    });
+
+    it('persists stockQuantity update, updates product_variants row, and records STOCK_ADJUSTMENT audit log', async () => {
+      // 1. Create product with a variant having stock 10
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Stock Update Test Product',
+          slug: 'stock-update-test-product',
+          description: 'Testing variant stock persistence',
+          categoryId: testCategoryId,
+          status: 'draft',
+          isFeatured: false,
+          isNewArrival: false,
+          images: [],
+          variants: [
+            {
+              size: 'M',
+              color: 'Olive',
+              sku: 'STOCK-TEST-M',
+              pricePaise: 149900,
+              stockQuantity: 10,
+            },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const varId = prodRes.body.product.variants[0].id;
+
+      // 2. Update stockQuantity via PUT /api/admin/products/:id/variants/:variantId
+      const updateRes = await request(app)
+        .put(`/api/admin/products/${prodId}/variants/${varId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          stockQuantity: 45,
+        });
+      expect(updateRes.status).toBe(200);
+
+      // 3. Verify variant stock in DB
+      const checkRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      const updatedVariant = checkRes.body.product.variants.find((v: any) => v.id === varId);
+      expect(updatedVariant.stockQuantity).toBe(45);
+
+      // 4. Verify STOCK_ADJUSTMENT audit log was created
+      const auditRes = await testPool.query(
+        `SELECT * FROM admin_audit_logs WHERE action = 'STOCK_ADJUSTMENT' AND entity_id = $1 ORDER BY created_at DESC LIMIT 1;`,
+        [varId]
+      );
+      expect(auditRes.rows.length).toBe(1);
+      expect(auditRes.rows[0].details.previousQuantity).toBe(10);
+      expect(auditRes.rows[0].details.newQuantity).toBe(45);
+      expect(auditRes.rows[0].details.delta).toBe(35);
+    });
+
+    it('rejects negative stockQuantity with 400 and does not mutate stock', async () => {
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Negative Stock Test Product',
+          slug: 'negative-stock-test-product',
+          description: 'Testing negative stock rejection',
+          categoryId: testCategoryId,
+          status: 'draft',
+          isFeatured: false,
+          isNewArrival: false,
+          images: [],
+          variants: [
+            {
+              size: 'L',
+              color: 'Navy',
+              sku: 'NEG-STOCK-TEST-L',
+              pricePaise: 120000,
+              stockQuantity: 15,
+            },
+          ],
+        });
+      const prodId = prodRes.body.product.id;
+      const varId = prodRes.body.product.variants[0].id;
+
+      const updateRes = await request(app)
+        .put(`/api/admin/products/${prodId}/variants/${varId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          stockQuantity: -10,
+        });
+      expect(updateRes.status).toBe(400);
+
+      // Verify stock in DB remains 15
+      const checkRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      const variant = checkRes.body.product.variants.find((v: any) => v.id === varId);
+      expect(variant.stockQuantity).toBe(15);
+    });
+
+    it('persists simultaneous price, comparison price, and stock updates', async () => {
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Multi Update Test Product',
+          slug: 'multi-update-test-product',
+          description: 'Testing multiple fields updated together',
+          categoryId: testCategoryId,
+          status: 'draft',
+          isFeatured: false,
+          isNewArrival: false,
+          images: [],
+          variants: [
+            {
+              size: 'S',
+              color: 'Charcoal',
+              sku: 'MULTI-UPDATE-S',
+              pricePaise: 100000,
+              comparisonPricePaise: 150000,
+              stockQuantity: 20,
+            },
+          ],
+        });
+      const prodId = prodRes.body.product.id;
+      const varId = prodRes.body.product.variants[0].id;
+
+      const updateRes = await request(app)
+        .put(`/api/admin/products/${prodId}/variants/${varId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          pricePaise: 110000,
+          comparisonPricePaise: 160000,
+          stockQuantity: 30,
+        });
+      expect(updateRes.status).toBe(200);
+
+      const checkRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      const variant = checkRes.body.product.variants.find((v: any) => v.id === varId);
+      expect(variant.pricePaise).toBe(110000);
+      expect(variant.comparisonPricePaise).toBe(160000);
+      expect(variant.stockQuantity).toBe(30);
     });
   });
 
@@ -861,6 +1258,37 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
       expect(dbRes.rows[0].color).toBe('Green');
     });
 
+    it('rolls back product deletion when audit-log insertion fails', async () => {
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Product Delete Rollback Test',
+          slug: 'product-delete-rollback',
+          description: 'Testing product delete rollback on audit failure',
+          categoryId: testCatId,
+          status: 'draft',
+          variants: [{ size: 'S', color: 'Gold', sku: 'ROLLBACK-PROD-DEL-S', pricePaise: 75000, stockQuantity: 9 }],
+        });
+      const prodId = prodRes.body.product.id;
+
+      // Enable audit log failure injection
+      await testPool.query('INSERT INTO test_fail_audit_flag (active) VALUES (true);');
+
+      // Attempt product deletion
+      const delRes = await request(app)
+        .delete(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(delRes.status).toBe(500);
+
+      // Verify product and variants still exist in DB
+      const prodCheck = await testPool.query('SELECT id FROM products WHERE id = $1;', [prodId]);
+      expect(prodCheck.rows).toHaveLength(1);
+
+      const varCheck = await testPool.query('SELECT id FROM product_variants WHERE product_id = $1;', [prodId]);
+      expect(varCheck.rows).toHaveLength(1);
+    });
+
     it('commits business mutations and corresponding audit records atomically when no errors occur', async () => {
       const createRes = await request(app)
         .post('/api/admin/categories')
@@ -881,6 +1309,433 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
       expect(auditDb.rows).toHaveLength(1);
       expect(auditDb.rows[0].action).toBe('CATEGORY_CREATE');
       expect(auditDb.rows[0].entity_type).toBe('category');
+    });
+  });
+
+  describe('Product Permanent Safe Deletion (DELETE /api/admin/products/:id)', () => {
+    let testCatId: string;
+
+    beforeEach(async () => {
+      const catRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ name: 'Deletion Test Category', slug: 'deletion-test-category' });
+      testCatId = catRes.body.category.id;
+    });
+
+    it('successfully deletes an eligible unreferenced product, its variants, and images, and creates audit log', async () => {
+      // 1. Create product with variants and image
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Eligible Deletion Product',
+          slug: 'eligible-deletion-product',
+          description: 'Ready to be safely deleted',
+          categoryId: testCatId,
+          status: 'draft',
+          variants: [
+            { size: 'M', color: 'White', sku: 'DEL-WHITE-M', pricePaise: 99900, stockQuantity: 10 },
+            { size: 'L', color: 'White', sku: 'DEL-WHITE-L', pricePaise: 99900, stockQuantity: 15 },
+          ],
+          images: [
+            {
+              imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518',
+              altText: 'Test image',
+              isPrimary: true,
+              displayOrder: 0,
+            },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+
+      // 2. Perform deletion
+      const delRes = await request(app)
+        .delete(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.status).toBe('success');
+      expect(delRes.body.message).toMatch(/permanently deleted successfully/i);
+
+      // 3. Verify product is gone
+      const getRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(getRes.status).toBe(404);
+
+      // 4. Verify variants and images are deleted from DB
+      const varDb = await testPool.query('SELECT id FROM product_variants WHERE product_id = $1;', [prodId]);
+      expect(varDb.rows).toHaveLength(0);
+
+      const imgDb = await testPool.query('SELECT id FROM product_images WHERE product_id = $1;', [prodId]);
+      expect(imgDb.rows).toHaveLength(0);
+
+      // 5. Verify PRODUCT_DELETE audit log exists
+      const auditDb = await testPool.query<{ action: string; details: any }>(
+        `SELECT action, details FROM admin_audit_logs WHERE action = 'PRODUCT_DELETE' AND entity_id = $1;`,
+        [prodId]
+      );
+      expect(auditDb.rows).toHaveLength(1);
+      expect(auditDb.rows[0].details.slug).toBe('eligible-deletion-product');
+      expect(auditDb.rows[0].details.deletedVariantCount).toBe(2);
+      expect(auditDb.rows[0].details.deletedImageCount).toBe(1);
+    });
+
+    it('rejects deletion with 409 Conflict when product is referenced by historical orders, preserving order integrity', async () => {
+      // 1. Create product and variant
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Ordered Product Guard',
+          slug: 'ordered-product-guard',
+          description: 'Testing order protection constraint',
+          categoryId: testCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Black', sku: 'ORDERED-GUARD-M', pricePaise: 129900, stockQuantity: 50 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const variantId = prodRes.body.product.variants[0].id;
+
+      // 2. Insert a simulated historical customer order referencing this product and variant
+      const randSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const orderRes = await testPool.query<{ id: string }>(
+        `INSERT INTO orders (
+          order_number, customer_order_token, customer_name, customer_email, customer_phone,
+          shipping_address_line1, shipping_city, shipping_state, shipping_pincode,
+          order_status, payment_status, payment_method,
+          subtotal_paise, discount_paise, shipping_fee_paise, total_paise
+        ) VALUES (
+          $1, $2, 'John Doe', 'john@example.com', '9876543210',
+          '123 Fashion Blvd', 'Mumbai', 'Maharashtra', '400001',
+          'CONFIRMED', 'PAID', 'COD',
+          129900, 0, 0, 129900
+        ) RETURNING id;`,
+        [`AXD-ORD-${randSuffix}`, `tok_${randSuffix}`]
+      );
+      const orderId = orderRes.rows[0].id;
+
+      await testPool.query(
+        `INSERT INTO order_items (
+          order_id, product_id, variant_id, product_name, product_slug,
+          variant_sku, variant_size, variant_color, unit_price_paise, quantity, line_total_paise
+        ) VALUES (
+          $1, $2, $3, 'Ordered Product Guard', 'ordered-product-guard',
+          'ORDERED-GUARD-M', 'M', 'Black', 129900, 1, 129900
+        );`,
+        [orderId, prodId, variantId]
+      );
+
+      // 3. Attempt to delete the product
+      const delRes = await request(app)
+        .delete(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(delRes.status).toBe(409);
+      expect(delRes.body.status).toBe('error');
+      expect(delRes.body.canArchive).toBe(true);
+      expect(delRes.body.error).toMatch(/referenced by historical customer orders/i);
+
+      // 4. Verify product, variant, order, and order_items all remain completely intact in DB
+      const prodCheck = await testPool.query('SELECT id, status FROM products WHERE id = $1;', [prodId]);
+      expect(prodCheck.rows).toHaveLength(1);
+
+      const varCheck = await testPool.query('SELECT id FROM product_variants WHERE product_id = $1;', [prodId]);
+      expect(varCheck.rows).toHaveLength(1);
+
+      const itemCheck = await testPool.query('SELECT id, product_id FROM order_items WHERE order_id = $1;', [orderId]);
+      expect(itemCheck.rows).toHaveLength(1);
+      expect(itemCheck.rows[0].product_id).toBe(prodId);
+    });
+
+    it('returns 404 for nonexistent product ID or malformed UUID', async () => {
+      const nonExistentUuid = '00000000-0000-0000-0000-000000000000';
+      const res1 = await request(app)
+        .delete(`/api/admin/products/${nonExistentUuid}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res1.status).toBe(404);
+      expect(res1.body.error).toMatch(/product not found/i);
+
+      const res2 = await request(app)
+        .delete('/api/admin/products/invalid-uuid-string')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res2.status).toBe(404);
+    });
+
+    it('requires admin authentication to invoke delete endpoint', async () => {
+      const res = await request(app).delete('/api/admin/products/00000000-0000-0000-0000-000000000000');
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe('Deterministic Concurrency: Product Deletion vs Order & Enquiry Operations', () => {
+    let concCatId: string;
+
+    beforeEach(async () => {
+      await truncateTestOrders();
+      await truncateTestEnquiries();
+
+      const catRes = await testPool.query<{ id: string }>(
+        `INSERT INTO categories (name, slug, display_order, is_active)
+         VALUES ('Concurrency Category', 'concurrency-cat-${Date.now()}', 1, true)
+         RETURNING id;`
+      );
+      concCatId = catRes.rows[0].id;
+    });
+
+    it('Scenario 1A: Deletion blocks when order transaction holds variant lock, and rejects with 409 after order commits', async () => {
+      // 1. Create product and variant
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Concurrency Guard Tee A',
+          slug: `conc-guard-tee-a-${Date.now()}`,
+          description: 'Testing order vs delete concurrency',
+          categoryId: concCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Black', sku: `CONC-SKU-1A-${Date.now()}`, pricePaise: 119900, stockQuantity: 20 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const variantId = prodRes.body.product.variants[0].id;
+
+      // 2. Client 1 starts order transaction and acquires lock on variant row
+      const orderClient = await testPool.connect();
+      await orderClient.query('BEGIN;');
+      await orderClient.query('SELECT pv.* FROM product_variants pv WHERE pv.id = $1 FOR UPDATE OF pv;', [variantId]);
+
+      // 3. Client 2 attempts deletion in parallel; it must block on the variant row
+      let deleteResolved = false;
+      const deletePromise = request(app)
+        .delete(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .then((res) => {
+          deleteResolved = true;
+          return res;
+        });
+
+      // Allow 60ms to verify delete request is genuinely blocked
+      await new Promise((r) => setTimeout(r, 60));
+      expect(deleteResolved).toBe(false);
+
+      // 4. Client 1 inserts order and order_item, then commits
+      const randSuffix = `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const orderRes = await orderClient.query<{ id: string }>(
+        `INSERT INTO orders (
+          order_number, customer_order_token, customer_name, customer_email, customer_phone,
+          shipping_address_line1, shipping_city, shipping_state, shipping_pincode,
+          order_status, payment_status, payment_method, subtotal_paise, discount_paise, shipping_fee_paise, total_paise
+        ) VALUES (
+          $1, $2, 'Jane Customer', 'jane@example.com', '9876543210',
+          '456 High St', 'Bangalore', 'Karnataka', '560001',
+          'CONFIRMED', 'PAID', 'COD', 119900, 0, 0, 119900
+        ) RETURNING id;`,
+        [`AXD-ORD-${randSuffix}`, `tok_${randSuffix}`]
+      );
+      const orderId = orderRes.rows[0].id;
+
+      await orderClient.query(
+        `INSERT INTO order_items (
+          order_id, product_id, variant_id, product_name, product_slug,
+          variant_sku, variant_size, variant_color, unit_price_paise, quantity, line_total_paise
+        ) VALUES ($1, $2, $3, 'Concurrency Guard Tee A', 'conc-guard-tee-a', 'CONC-SKU-1A', 'M', 'Black', 119900, 1, 119900);`,
+        [orderId, prodId, variantId]
+      );
+
+      await orderClient.query('COMMIT;');
+      orderClient.release();
+
+      // 5. Blocked delete unblocks, detects order item, and returns 409 Conflict
+      const delRes = await deletePromise;
+      expect(delRes.status).toBe(409);
+      expect(delRes.body.error).toMatch(/referenced by historical customer orders/i);
+      expect(delRes.body.canArchive).toBe(true);
+
+      // 6. Verify data integrity: product, variant, order, and order_items all preserved
+      const prodCheck = await testPool.query('SELECT id FROM products WHERE id = $1;', [prodId]);
+      expect(prodCheck.rows).toHaveLength(1);
+      const orderCheck = await testPool.query('SELECT id FROM orders WHERE id = $1;', [orderId]);
+      expect(orderCheck.rows).toHaveLength(1);
+    });
+
+    it('Scenario 1B: Order creation blocks when deletion holds locks, and fails safely after deletion commits', async () => {
+      // 1. Create product and variant
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Concurrency Guard Tee B',
+          slug: `conc-guard-tee-b-${Date.now()}`,
+          description: 'Testing delete vs order concurrency',
+          categoryId: concCatId,
+          status: 'published',
+          variants: [
+            { size: 'L', color: 'White', sku: `CONC-SKU-1B-${Date.now()}`, pricePaise: 99900, stockQuantity: 15 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const variantId = prodRes.body.product.variants[0].id;
+
+      // 2. Client 1 begins deletion transaction holding locks on products and variants
+      const delClient = await testPool.connect();
+      await delClient.query('BEGIN;');
+      await delClient.query('SELECT id FROM products WHERE id = $1 FOR UPDATE;', [prodId]);
+      await delClient.query('SELECT id FROM product_variants WHERE product_id = $1 ORDER BY id ASC FOR UPDATE;', [prodId]);
+
+      // 3. Client 2 attempts to place an order via createOrder; it must block on the variant row lock
+      let orderResolved = false;
+      const orderPromise = createOrder({
+        customerName: 'Sam Buyer',
+        customerEmail: 'sam@example.com',
+        customerPhone: '9876543210',
+        shippingAddressLine1: '789 Market Rd',
+        shippingCity: 'Delhi',
+        shippingState: 'Delhi',
+        shippingPincode: '110001',
+        items: [{ variantId, quantity: 1 }],
+      }).then((res) => {
+        orderResolved = true;
+        return res;
+      });
+
+      // Allow 60ms to confirm order placement is blocked
+      await new Promise((r) => setTimeout(r, 60));
+      expect(orderResolved).toBe(false);
+
+      // 4. Client 1 deletes the records and commits
+      await delClient.query('DELETE FROM product_variants WHERE product_id = $1;', [prodId]);
+      await delClient.query('DELETE FROM products WHERE id = $1;', [prodId]);
+      await delClient.query('COMMIT;');
+      delClient.release();
+
+      // 5. Order unblocks, sees variant was deleted, and rejects safely
+      await expect(orderPromise).rejects.toThrow(/Variant not found or no longer available/i);
+
+      // 6. Verify zero orders or order_items were created
+      const ordersCount = await testPool.query('SELECT count(*) FROM orders WHERE customer_email = $1;', ['sam@example.com']);
+      expect(Number(ordersCount.rows[0].count)).toBe(0);
+    });
+
+    it('Scenario 2A: Deletion blocks when enquiry transaction holds foreign key share lock, and rejects with 409 after enquiry commits', async () => {
+      // 1. Create product
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Concurrency Enquiry Guard A',
+          slug: `conc-enq-guard-a-${Date.now()}`,
+          description: 'Testing enquiry vs delete concurrency',
+          categoryId: concCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Grey', sku: `CONC-ENQ-SKU-2A-${Date.now()}`, pricePaise: 79900, stockQuantity: 30 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+
+      // 2. Client 1 begins enquiry transaction inserting enquiry referencing product (holds KEY SHARE on products row)
+      const enqClient = await testPool.connect();
+      await enqClient.query('BEGIN;');
+      await enqClient.query(
+        `INSERT INTO enquiries (name, email, phone, message, product_id, quantity, enquiry_type, source, drive_sync_status)
+         VALUES ('Corporate Client', 'corp@example.com', '9876543210', 'Bulk order quotation', $1, 100, 'BULK', 'WEBSITE', 'PENDING');`,
+        [prodId]
+      );
+
+      // 3. Client 2 attempts deletion in parallel; FOR UPDATE on products row must block on KEY SHARE
+      let deleteResolved = false;
+      const deletePromise = request(app)
+        .delete(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .then((res) => {
+          deleteResolved = true;
+          return res;
+        });
+
+      // Allow 60ms to verify delete request is blocked
+      await new Promise((r) => setTimeout(r, 60));
+      expect(deleteResolved).toBe(false);
+
+      // 4. Client 1 commits enquiry transaction
+      await enqClient.query('COMMIT;');
+      enqClient.release();
+
+      // 5. Delete unblocks, detects enquiry reference, and rejects with 409 Conflict
+      const delRes = await deletePromise;
+      expect(delRes.status).toBe(409);
+      expect(delRes.body.error).toMatch(/referenced by customer enquiries/i);
+
+      // 6. Verify product and enquiry remain intact
+      const prodCheck = await testPool.query('SELECT id FROM products WHERE id = $1;', [prodId]);
+      expect(prodCheck.rows).toHaveLength(1);
+      const enqCheck = await testPool.query('SELECT id, product_id FROM enquiries WHERE product_id = $1;', [prodId]);
+      expect(enqCheck.rows).toHaveLength(1);
+      expect(enqCheck.rows[0].product_id).toBe(prodId);
+    });
+
+    it('Scenario 2B: Enquiry creation blocks when deletion holds locks, and fails safely without orphaned enquiry', async () => {
+      // 1. Create product
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Concurrency Enquiry Guard B',
+          slug: `conc-enq-guard-b-${Date.now()}`,
+          description: 'Testing delete vs enquiry concurrency',
+          categoryId: concCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Navy', sku: `CONC-ENQ-SKU-2B-${Date.now()}`, pricePaise: 89900, stockQuantity: 25 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+
+      // 2. Client 1 begins deletion transaction holding FOR UPDATE lock on product row
+      const delClient = await testPool.connect();
+      await delClient.query('BEGIN;');
+      await delClient.query('SELECT id FROM products WHERE id = $1 FOR UPDATE;', [prodId]);
+
+      // 3. Client 2 attempts to create enquiry referencing prodId via createEnquiry; it must block on foreign key check
+      let enqResolved = false;
+      const enqPromise = createEnquiry({
+        name: 'Prospective Client',
+        email: 'prospect@example.com',
+        phone: '9876543210',
+        message: 'Interested in sample units',
+        productId: prodId,
+        enquiryType: 'GENERAL',
+        source: 'WEBSITE',
+      }).then((res) => {
+        enqResolved = true;
+        return res;
+      });
+
+      // Allow 60ms to verify enquiry creation is blocked waiting for products row
+      await new Promise((r) => setTimeout(r, 60));
+      expect(enqResolved).toBe(false);
+
+      // 4. Client 1 deletes the product variants and product, then commits
+      await delClient.query('DELETE FROM product_variants WHERE product_id = $1;', [prodId]);
+      await delClient.query('DELETE FROM products WHERE id = $1;', [prodId]);
+      await delClient.query('COMMIT;');
+      delClient.release();
+
+      // 5. Enquiry creation unblocks, foreign key check on deleted product fails, and transaction rolls back
+      await expect(enqPromise).rejects.toThrow();
+
+      // 6. Verify no orphaned enquiry was created referencing prodId
+      const enqCount = await testPool.query('SELECT count(*) FROM enquiries WHERE product_id = $1;', [prodId]);
+      expect(Number(enqCount.rows[0].count)).toBe(0);
     });
   });
 });

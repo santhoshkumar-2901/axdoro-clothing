@@ -61,6 +61,7 @@ export interface AdminProduct {
   isNewArrival: boolean;
   fabricSpec?: string | null;
   minPricePaise: number;
+  minComparisonPricePaise?: number | null;
   totalStock: number;
   variantCount: number;
   createdAt: string;
@@ -170,6 +171,7 @@ export async function adminGetMe(): Promise<AdminUser | null> {
     }
     return json.data;
   } catch {
+    setCsrfToken(null);
     return null;
   }
 }
@@ -194,6 +196,152 @@ export async function adminGetProducts(status = 'all'): Promise<AdminProduct[]> 
   return json.data;
 }
 
+export interface AdminCategory {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  displayOrder: number;
+  isActive: boolean;
+  productCount: number;
+  createdAt: string;
+}
+
+export async function adminGetCategories(): Promise<AdminCategory[]> {
+  const res = await fetch('/api/admin/categories', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch categories');
+  return json.data || json.categories || [];
+}
+
+export interface CreateProductVariantPayload {
+  size: string;
+  color: string;
+  colorHex?: string;
+  sku: string;
+  pricePaise: number;
+  comparisonPricePaise?: number | null;
+  stockQuantity: number;
+  isActive: boolean;
+}
+
+export interface CreateProductImagePayload {
+  imageUrl: string;
+  altText?: string | null;
+  displayOrder: number;
+  isPrimary: boolean;
+  publicId?: string | null;
+  width?: number | null;
+  height?: number | null;
+  format?: string | null;
+  bytes?: number | null;
+}
+
+export interface CreateProductPayload {
+  name: string;
+  slug: string;
+  description: string;
+  categoryId: string;
+  status: 'draft' | 'published' | 'archived';
+  isFeatured: boolean;
+  isNewArrival: boolean;
+  fabricSpec?: string | null;
+  variants: CreateProductVariantPayload[];
+  images?: CreateProductImagePayload[];
+}
+
+export interface UpdateProductPayload {
+  name?: string;
+  slug?: string;
+  description?: string;
+  categoryId?: string;
+  status?: 'draft' | 'published' | 'archived';
+  isFeatured?: boolean;
+  isNewArrival?: boolean;
+  fabricSpec?: string | null;
+}
+
+export interface UpdateProductVariantPayload {
+  size?: string;
+  color?: string;
+  colorHex?: string;
+  sku?: string;
+  pricePaise?: number;
+  comparisonPricePaise?: number | null;
+  stockQuantity?: number;
+  isActive?: boolean;
+}
+
+export async function adminCreateProduct(
+  payload: CreateProductPayload
+): Promise<{ id: string; slug: string }> {
+  const res = await fetch('/api/admin/products', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || json.message || 'Failed to create product');
+  }
+  return json.data || json.product;
+}
+
+export async function adminUpdateProduct(
+  id: string,
+  payload: UpdateProductPayload
+): Promise<AdminProductDetail> {
+  const res = await fetch(`/api/admin/products/${id}`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || json.message || 'Failed to update product');
+  }
+  return json.data || json.product;
+}
+
+export async function adminCreateVariant(
+  productId: string,
+  payload: CreateProductVariantPayload
+): Promise<{ id: string }> {
+  const res = await fetch(`/api/admin/products/${productId}/variants`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || json.message || 'Failed to create variant');
+  }
+  return json.data || json.variant;
+}
+
+export async function adminUpdateVariant(
+  productId: string,
+  variantId: string,
+  payload: UpdateProductVariantPayload
+): Promise<void> {
+  const res = await fetch(`/api/admin/products/${productId}/variants/${variantId}`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || json.message || 'Failed to update variant');
+  }
+}
+
 export async function adminArchiveProduct(id: string): Promise<void> {
   const res = await fetch(`/api/admin/products/${id}/archive`, {
     method: 'POST',
@@ -202,6 +350,34 @@ export async function adminArchiveProduct(id: string): Promise<void> {
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to archive product');
+}
+
+export async function adminUnarchiveProduct(id: string): Promise<void> {
+  const res = await fetch(`/api/admin/products/${id}/unarchive`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to unarchive product');
+}
+
+export async function adminDeleteProduct(
+  id: string
+): Promise<{ success: boolean; deletedPublicIds?: string[] }> {
+  const res = await fetch(`/api/admin/products/${id}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const error: any = new Error(json.error || json.message || 'Failed to delete product');
+    error.status = res.status;
+    error.canArchive = Boolean(json.canArchive);
+    throw error;
+  }
+  return { success: true, ...json };
 }
 
 export async function adminAdjustStock(
@@ -318,4 +494,139 @@ export async function adminTriggerDriveSync(): Promise<{ synced: number; failed:
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to trigger drive sync');
   return json.data;
+}
+
+// -------------------------------------------------------------
+// Product Image Management Client APIs
+// -------------------------------------------------------------
+
+export interface ProductImage {
+  id: string;
+  productId: string;
+  imageUrl: string;
+  altText?: string | null;
+  displayOrder: number;
+  isPrimary: boolean;
+  publicId?: string | null;
+  width?: number | null;
+  height?: number | null;
+  format?: string | null;
+  bytes?: number | null;
+  createdAt?: string;
+}
+
+export interface AdminProductDetail extends AdminProduct {
+  images: ProductImage[];
+  variants: {
+    id: string;
+    productId: string;
+    size: string;
+    color: string;
+    colorHex?: string | null;
+    sku: string;
+    pricePaise: number;
+    comparisonPricePaise?: number | null;
+    stockQuantity: number;
+    isActive: boolean;
+  }[];
+}
+
+export interface CloudinarySignature {
+  signature: string;
+  timestamp: number;
+  apiKey: string;
+  cloudName: string;
+  folder: string;
+  publicId: string;
+  uploadUrl: string;
+}
+
+export async function adminGetProductDetails(id: string): Promise<AdminProductDetail> {
+  const res = await fetch(`/api/admin/products/${id}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to fetch product details');
+  return json.data;
+}
+
+export async function adminGetUploadSignature(productId: string): Promise<CloudinarySignature> {
+  const res = await fetch(`/api/admin/products/${productId}/images/signature`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const err = new Error(json.message || 'Failed to generate image upload signature');
+    (err as any).code = json.code;
+    throw err;
+  }
+  return json.data;
+}
+
+export async function adminAddProductImage(
+  productId: string,
+  imageData: {
+    imageUrl: string;
+    publicId?: string;
+    altText?: string;
+    displayOrder?: number;
+    isPrimary?: boolean;
+    width?: number;
+    height?: number;
+    format?: string;
+    bytes?: number;
+  }
+): Promise<ProductImage> {
+  const res = await fetch(`/api/admin/products/${productId}/images`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(imageData),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || json.message || 'Failed to add product image');
+  return json.data;
+}
+
+export async function adminSetPrimaryProductImage(
+  productId: string,
+  imageId: string
+): Promise<void> {
+  const res = await fetch(`/api/admin/products/${productId}/images/${imageId}/primary`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to set primary image');
+}
+
+export async function adminReorderProductImages(
+  productId: string,
+  images: { id: string; displayOrder: number }[]
+): Promise<void> {
+  const res = await fetch(`/api/admin/products/${productId}/images/reorder`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ images }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to reorder images');
+}
+
+export async function adminDeleteProductImage(
+  productId: string,
+  imageId: string
+): Promise<void> {
+  const res = await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to delete product image');
 }

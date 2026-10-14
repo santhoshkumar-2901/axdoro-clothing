@@ -12,6 +12,8 @@ import {
   adminGetMetrics,
   adminGetProducts,
   adminArchiveProduct,
+  adminUnarchiveProduct,
+  adminDeleteProduct,
   adminAdjustStock,
   adminGetAuditLogs,
   adminGetOrders,
@@ -26,11 +28,18 @@ import {
   RefreshCw,
   Download,
   Cloud,
+  Plus,
+  Trash2,
+  Loader2,
+  X,
 } from 'lucide-react';
 import { AdminSidebar, AdminTab } from './AdminSidebar.tsx';
 import { AdminHeader } from './AdminHeader.tsx';
 import { AdminLoginView } from './AdminLoginView.tsx';
 import { StockAdjustmentDialog } from './StockAdjustmentDialog.tsx';
+import { ProductImageModal } from './ProductImageModal.tsx';
+import { ProductCreateDialog } from './ProductCreateDialog.tsx';
+import { ProductEditDialog } from './ProductEditDialog.tsx';
 import {
   Card,
   CardHeader,
@@ -98,6 +107,17 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     sku: string;
     currentStock: number;
   } | null>(null);
+
+  // Product action and modals states
+  const [isAddProductOpen, setIsAddProductOpen] = useState(false);
+  const [selectedProductForEdit, setSelectedProductForEdit] = useState<AdminProduct | null>(null);
+  const [productToDelete, setProductToDelete] = useState<AdminProduct | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [deleteProductError, setDeleteProductError] = useState<{
+    message: string;
+    canArchive?: boolean;
+  } | null>(null);
+  const [selectedProductForImages, setSelectedProductForImages] = useState<AdminProduct | null>(null);
 
   // Sync tab with browser URL history (popstate)
   useEffect(() => {
@@ -218,6 +238,63 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       onCatalogueMutated?.();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to archive');
+    }
+  };
+
+  const handleUnarchive = async (productId: string) => {
+    if (
+      !window.confirm(
+        'Are you sure you want to restore this product to the storefront?'
+      )
+    ) {
+      return;
+    }
+    try {
+      await adminUnarchiveProduct(productId);
+      setActionSuccess('Product restored to storefront successfully.');
+      setTimeout(() => setActionSuccess(null), 3000);
+      loadTabData();
+      onCatalogueMutated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to unarchive');
+    }
+  };
+
+  const handleDeleteProductConfirm = async () => {
+    if (!productToDelete || isDeletingProduct) return;
+    setIsDeletingProduct(true);
+    setDeleteProductError(null);
+    try {
+      await adminDeleteProduct(productToDelete.id);
+      setActionSuccess(`Product "${productToDelete.name}" was permanently deleted.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      setProductToDelete(null);
+      setDeleteProductError(null);
+      loadTabData();
+      onCatalogueMutated?.();
+    } catch (err: any) {
+      setDeleteProductError({
+        message: err instanceof Error ? err.message : 'Failed to delete product',
+        canArchive: err?.canArchive || err?.status === 409,
+      });
+    } finally {
+      setIsDeletingProduct(false);
+    }
+  };
+
+  const handleArchiveInstead = async () => {
+    if (!productToDelete) return;
+    const targetProduct = productToDelete;
+    setProductToDelete(null);
+    setDeleteProductError(null);
+    try {
+      await adminArchiveProduct(targetProduct.id);
+      setActionSuccess(`Product "${targetProduct.name}" archived successfully.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      loadTabData();
+      onCatalogueMutated?.();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to archive product');
     }
   };
 
@@ -481,11 +558,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           ) : activeTab === 'products' ? (
             /* 2. Products Tab */
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h2 className="text-base font-bold text-axdoro-charcoal">Storefront Product Catalogue</h2>
                   <p className="text-xs text-axdoro-text-muted">Manage published products and visibility states ({products.length} registered)</p>
                 </div>
+                <Button
+                  onClick={() => setIsAddProductOpen(true)}
+                  className="bg-axdoro-charcoal text-white hover:bg-black font-semibold text-xs flex items-center gap-1.5 shadow-sm"
+                  title="Add new product to catalogue"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Product
+                </Button>
               </div>
 
               <Table>
@@ -496,47 +581,102 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <TableHead>Status</TableHead>
                     <TableHead>Variants</TableHead>
                     <TableHead>Min Price</TableHead>
+                    <TableHead>Discount</TableHead>
                     <TableHead>Stock Units</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-bold text-axdoro-charcoal">{p.name}</TableCell>
-                      <TableCell className="text-axdoro-text-muted">{p.categoryName}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            p.status === 'published'
-                              ? 'success'
-                              : p.status === 'draft'
-                              ? 'secondary'
-                              : 'destructive'
-                          }
-                        >
-                          {p.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="font-mono">{p.variantCount}</TableCell>
-                      <TableCell className="font-bold font-mono text-axdoro-charcoal">
-                        &#8377;{Math.round(p.minPricePaise / 100)}
-                      </TableCell>
-                      <TableCell className="font-mono">{p.totalStock}</TableCell>
-                      <TableCell className="text-right">
-                        {p.status !== 'archived' && (
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleArchive(p.id)}
-                            title="Archive product from storefront"
+                  {products.map((p) => {
+                    const hasDiscount = Boolean(
+                      p.minComparisonPricePaise && p.minComparisonPricePaise > p.minPricePaise
+                    );
+                    const discountPercent = hasDiscount && p.minComparisonPricePaise
+                      ? Math.round(((p.minComparisonPricePaise - p.minPricePaise) / p.minComparisonPricePaise) * 100)
+                      : 0;
+
+                    return (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-bold text-axdoro-charcoal">{p.name}</TableCell>
+                        <TableCell className="text-axdoro-text-muted">{p.categoryName}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              p.status === 'published'
+                                ? 'success'
+                                : p.status === 'draft'
+                                ? 'secondary'
+                                : 'destructive'
+                            }
                           >
-                            Archive
+                            {p.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono">{p.variantCount}</TableCell>
+                        <TableCell className="font-bold font-mono text-axdoro-charcoal">
+                          &#8377;{Math.round(p.minPricePaise / 100)}
+                        </TableCell>
+                        <TableCell>
+                          {hasDiscount ? (
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge variant="success" className="font-mono text-[10px]">
+                                {discountPercent}% OFF
+                              </Badge>
+                              <span className="text-xs text-axdoro-text-muted line-through font-mono">
+                                &#8377;{Math.round(p.minComparisonPricePaise! / 100)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-axdoro-text-muted font-normal">No discount</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono">{p.totalStock}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedProductForEdit(p)}
+                            title={`Edit ${p.name}`}
+                            className="text-axdoro-charcoal hover:bg-axdoro-surface-muted"
+                          >
+                            Edit
                           </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                          {p.status !== 'archived' ? (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleArchive(p.id)}
+                              title="Archive product from storefront"
+                            >
+                              Archive
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleUnarchive(p.id)}
+                              title="Restore product to storefront"
+                              className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300 font-semibold"
+                            >
+                              Unarchive
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteProductError(null);
+                              setProductToDelete(p);
+                            }}
+                            title={`Delete ${p.name}`}
+                            className="text-red-700 hover:text-red-800 hover:bg-red-50 border-red-200"
+                          >
+                            Delete
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -822,6 +962,146 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           currentStock={adjustingVariant.currentStock}
           onSave={handleSaveStock}
           onClose={() => setAdjustingVariant(null)}
+        />
+      )}
+
+      {/* Product Creation Dialog (Phase 2) */}
+      <ProductCreateDialog
+        isOpen={isAddProductOpen}
+        onClose={() => setIsAddProductOpen(false)}
+        onSuccess={() => {
+          setActionSuccess('Product created successfully and published to catalogue.');
+          setTimeout(() => setActionSuccess(null), 3500);
+          loadTabData();
+          onCatalogueMutated?.();
+        }}
+      />
+
+      {/* Product Edit Dialog (Phase 3) */}
+      <ProductEditDialog
+        productId={selectedProductForEdit?.id || null}
+        isOpen={Boolean(selectedProductForEdit)}
+        onClose={() => setSelectedProductForEdit(null)}
+        onSuccess={() => {
+          setActionSuccess('Product and variants updated successfully.');
+          setTimeout(() => setActionSuccess(null), 3500);
+          loadTabData();
+          onCatalogueMutated?.();
+        }}
+      />
+
+      {/* Product Deletion Dialog (Phase 4 Safe Permanent Deletion) */}
+      {productToDelete && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-product-dialog-title"
+        >
+          <div className="bg-axdoro-surface border border-red-200 rounded-xl shadow-elevated max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-axdoro-border pb-3">
+              <div className="flex items-center gap-2 text-red-700">
+                <Trash2 className="w-5 h-5 flex-shrink-0" />
+                <h3 id="delete-product-dialog-title" className="text-base font-bold">
+                  Delete Product Permanently
+                </h3>
+              </div>
+              <button
+                disabled={isDeletingProduct}
+                onClick={() => {
+                  setProductToDelete(null);
+                  setDeleteProductError(null);
+                }}
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1 rounded-md disabled:opacity-40"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <p className="text-axdoro-charcoal leading-relaxed">
+                Are you sure you want to permanently delete <strong className="font-bold text-axdoro-charcoal">{productToDelete.name}</strong>?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-900 space-y-1.5 leading-relaxed">
+                <div className="flex items-center gap-1.5 font-bold text-red-800">
+                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <span>Permanent Deletion Cannot Be Undone</span>
+                </div>
+                <p>
+                  This action removes the product, its variants, inventory tracking, and hosted image records permanently.
+                </p>
+              </div>
+
+              {deleteProductError && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                    <p className="font-medium text-xs leading-relaxed">
+                      {deleteProductError.message}
+                    </p>
+                  </div>
+                  {deleteProductError.canArchive && (
+                    <div className="pt-2 border-t border-amber-200 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-amber-800 font-medium">
+                        Recommended safe alternative:
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleArchiveInstead}
+                        className="bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-900 font-semibold text-xs h-7 px-2.5"
+                      >
+                        Archive Product Instead
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-axdoro-border">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeletingProduct}
+                onClick={() => {
+                  setProductToDelete(null);
+                  setDeleteProductError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={isDeletingProduct}
+                onClick={handleDeleteProductConfirm}
+                className="font-semibold"
+                aria-busy={isDeletingProduct}
+              >
+                {isDeletingProduct ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete Permanently'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Image Management Modal (Preserved for Phase 3 reuse) */}
+      {selectedProductForImages && (
+        <ProductImageModal
+          productId={selectedProductForImages.id}
+          productName={selectedProductForImages.name}
+          onClose={() => setSelectedProductForImages(null)}
+          onImagesUpdated={loadTabData}
         />
       )}
     </div>

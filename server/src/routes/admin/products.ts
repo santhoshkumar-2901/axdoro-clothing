@@ -6,6 +6,8 @@ import {
   productUpdateSchema,
   productVariantSchema,
   productVariantUpdateSchema,
+  productImageAddSchema,
+  productImageReorderSchema,
 } from '../../schemas/admin.js';
 import {
   adminGetProducts,
@@ -13,9 +15,19 @@ import {
   adminCreateProduct,
   adminUpdateProduct,
   adminArchiveProduct,
+  adminUnarchiveProduct,
+  adminDeleteProduct,
   adminCreateVariant,
   adminUpdateVariant,
+  adminAddProductImage,
+  adminSetPrimaryImage,
+  adminReorderProductImages,
+  adminDeleteProductImage,
 } from '../../services/admin-catalogue.service.js';
+import {
+  generateUploadSignature,
+  isCloudinaryConfigured,
+} from '../../services/cloudinary.service.js';
 
 export const adminProductsRouter = Router();
 
@@ -151,6 +163,56 @@ adminProductsRouter.post('/:id/archive', async (req: Request, res: Response, nex
   }
 });
 
+// POST /api/admin/products/:id/unarchive
+adminProductsRouter.post('/:id/unarchive', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await adminUnarchiveProduct(req.params.id, req.admin!);
+    const updated = await adminGetProductById(req.params.id);
+    res.json({
+      status: 'success',
+      message: 'Product unarchived successfully',
+      data: updated,
+      product: updated,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/products/:id
+adminProductsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await adminDeleteProduct(req.params.id, req.admin!);
+
+    if (result.status === 'not_found') {
+      res.status(404).json({
+        status: 'error',
+        error: 'Product not found',
+        message: 'Product not found',
+      });
+      return;
+    }
+
+    if (result.status === 'conflict') {
+      res.status(409).json({
+        status: 'error',
+        error: result.message || 'Product cannot be deleted because it is referenced by historical orders',
+        message: result.message || 'Product cannot be deleted because it is referenced by historical orders',
+        canArchive: true,
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Product permanently deleted successfully',
+      deletedPublicIds: result.deletedPublicIds,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /api/admin/products/:id/variants
 adminProductsRouter.post('/:id/variants', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -229,6 +291,14 @@ adminProductsRouter.put('/:id/variants/:variantId', async (req: Request, res: Re
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Comparison price') || msg.includes('Insufficient stock') || msg.includes('negative')) {
+      res.status(400).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
     if (msg.includes('duplicate key value') || msg.includes('chk_variant_sku') || msg.includes('uq_product_variant')) {
       if (msg.includes('product_variants_sku_key') || msg.includes('sku')) {
         res.status(409).json({
@@ -245,6 +315,157 @@ adminProductsRouter.put('/:id/variants/:variantId', async (req: Request, res: Re
       }
       return;
     }
+    next(err);
+  }
+});
+
+// -------------------------------------------------------------
+// Product Image Management Routes
+// -------------------------------------------------------------
+
+// POST /api/admin/products/:id/images/signature
+adminProductsRouter.post('/:id/images/signature', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const product = await adminGetProductById(req.params.id);
+    if (!product) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Product not found',
+        message: 'Product not found',
+      });
+      return;
+    }
+
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({
+        status: 'error',
+        code: 'CLOUDINARY_NOT_CONFIGURED',
+        error: 'Cloudinary credentials are not configured on this server',
+        message: 'Cloudinary credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) must be set in server environment variables.',
+      });
+      return;
+    }
+
+    const config = generateUploadSignature({
+      productId: req.params.id,
+    });
+
+    res.json({
+      status: 'success',
+      data: config,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/products/:id/images
+adminProductsRouter.post('/:id/images', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parseResult = productImageAddSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid image payload: ' + parseResult.error.errors.map((e) => e.message).join(', '),
+        message: 'Invalid image payload',
+        errors: parseResult.error.errors,
+      });
+      return;
+    }
+
+    const image = await adminAddProductImage(req.params.id, parseResult.data, req.admin!);
+    res.status(201).json({
+      status: 'success',
+      data: image,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('PRODUCT_NOT_FOUND')) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Product not found',
+        message: 'Product not found',
+      });
+      return;
+    }
+    next(err);
+  }
+});
+
+// PATCH /api/admin/products/:id/images/:imageId/primary
+adminProductsRouter.patch('/:id/images/:imageId/primary', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const updated = await adminSetPrimaryImage(req.params.id, req.params.imageId, req.admin!);
+    if (!updated) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Image not found for this product',
+        message: 'Image not found for this product',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Primary image updated successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/admin/products/:id/images/reorder
+adminProductsRouter.put('/:id/images/reorder', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parseResult = productImageReorderSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid reorder payload: ' + parseResult.error.errors.map((e) => e.message).join(', '),
+        message: 'Invalid reorder payload',
+        errors: parseResult.error.errors,
+      });
+      return;
+    }
+
+    const updated = await adminReorderProductImages(req.params.id, parseResult.data.images, req.admin!);
+    if (!updated) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Product not found',
+        message: 'Product not found',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Images reordered successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/products/:id/images/:imageId
+adminProductsRouter.delete('/:id/images/:imageId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await adminDeleteProductImage(req.params.id, req.params.imageId, req.admin!);
+    if (!result.success) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Image not found for this product',
+        message: 'Image not found for this product',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Image deleted successfully',
+      deletedPublicId: result.deletedPublicId,
+    });
+  } catch (err) {
     next(err);
   }
 });

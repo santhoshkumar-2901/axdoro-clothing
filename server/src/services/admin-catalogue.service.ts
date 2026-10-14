@@ -7,7 +7,10 @@ import {
   categoryCreateSchema,
   categoryUpdateSchema,
   productVariantSchema,
+  productImageAddSchema,
+  productImageReorderSchema,
 } from '../schemas/admin.js';
+import { deleteCloudinaryAsset } from './cloudinary.service.js';
 import { z } from 'zod';
 
 export interface AdminCategoryRow {
@@ -34,6 +37,7 @@ export interface AdminProductSummary {
   isNewArrival: boolean;
   fabricSpec?: string | null;
   minPricePaise: number;
+  minComparisonPricePaise?: number | null;
   totalStock: number;
   variantCount: number;
   createdAt: string;
@@ -275,6 +279,16 @@ export async function adminGetProducts(params: {
       p.is_new_arrival,
       p.fabric_spec,
       COALESCE(MIN(pv.price_paise), 0) AS min_price_paise,
+      COALESCE(
+        (
+          SELECT pv_min.comparison_price_paise
+          FROM product_variants pv_min
+          WHERE pv_min.product_id = p.id
+          ORDER BY pv_min.price_paise ASC, pv_min.created_at ASC
+          LIMIT 1
+        ),
+        0
+      ) AS min_comparison_price_paise,
       COALESCE(SUM(pv.stock_quantity), 0) AS total_stock,
       COUNT(pv.id)::int AS variant_count,
       p.created_at,
@@ -301,6 +315,7 @@ export async function adminGetProducts(params: {
     is_new_arrival: boolean;
     fabric_spec: string | null;
     min_price_paise: number;
+    min_comparison_price_paise: number;
     total_stock: number;
     variant_count: number;
     created_at: Date;
@@ -320,6 +335,7 @@ export async function adminGetProducts(params: {
     isNewArrival: row.is_new_arrival,
     fabricSpec: row.fabric_spec,
     minPricePaise: Number(row.min_price_paise),
+    minComparisonPricePaise: row.min_comparison_price_paise ? Number(row.min_comparison_price_paise) : null,
     totalStock: Number(row.total_stock),
     variantCount: row.variant_count,
     createdAt: row.created_at.toISOString(),
@@ -380,9 +396,20 @@ export async function adminCreateProduct(
     // 3. Insert images
     for (const img of data.images) {
       await client.query(
-        `INSERT INTO product_images (product_id, image_url, alt_text, display_order, is_primary)
-         VALUES ($1, $2, $3, $4, $5);`,
-        [productId, img.imageUrl, img.altText || null, img.displayOrder, img.isPrimary]
+        `INSERT INTO product_images (product_id, image_url, alt_text, display_order, is_primary, public_id, width, height, format, bytes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);`,
+        [
+          productId,
+          img.imageUrl,
+          img.altText || null,
+          img.displayOrder,
+          img.isPrimary,
+          img.publicId || null,
+          img.width || null,
+          img.height || null,
+          img.format || null,
+          img.bytes || null,
+        ]
       );
     }
 
@@ -432,7 +459,7 @@ export async function adminGetProductById(id: string, client?: any): Promise<any
   }));
 
   const imgRes = await runner(
-    `SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC;`,
+    `SELECT * FROM product_images WHERE product_id = $1 ORDER BY display_order ASC, created_at ASC;`,
     [id]
   );
   product.images = imgRes.rows.map((i: any) => ({
@@ -442,6 +469,12 @@ export async function adminGetProductById(id: string, client?: any): Promise<any
     altText: i.alt_text,
     displayOrder: i.display_order,
     isPrimary: i.is_primary,
+    publicId: i.public_id,
+    width: i.width,
+    height: i.height,
+    format: i.format,
+    bytes: i.bytes,
+    createdAt: i.created_at,
   }));
 
   return product;
@@ -521,6 +554,29 @@ export async function adminArchiveProduct(id: string, actor: AdminUserDTO): Prom
       adminId: actor.id,
       adminEmail: actor.email,
       action: 'PRODUCT_ARCHIVE',
+      entityType: 'product',
+      entityId: id,
+      details: { slug: res.rows[0].slug },
+      client,
+    });
+  });
+}
+
+export async function adminUnarchiveProduct(id: string, actor: AdminUserDTO): Promise<void> {
+  return await withTransaction(async (client) => {
+    const res = await client.query<{ slug: string }>(
+      `UPDATE products SET status = 'published' WHERE id = $1 RETURNING slug;`,
+      [id]
+    );
+
+    if (res.rows.length === 0) {
+      throw new Error('Product not found');
+    }
+
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_UNARCHIVE',
       entityType: 'product',
       entityId: id,
       details: { slug: res.rows[0].slug },
@@ -632,31 +688,89 @@ export async function adminUpdateVariant(
   }
 
   return await withTransaction(async (client) => {
-    if (setClauses.length === 0) {
-      // If no fields to update, verify that the variant exists under this product
-      const checkRes = await client.query<{ id: string }>(
-        `SELECT id FROM product_variants WHERE id = $1 AND product_id = $2;`,
-        [variantId, productId]
-      );
-      return checkRes.rows.length > 0;
-    }
+    // 1. Lock and fetch current variant row to verify existence and protect against concurrent stock mutations
+    const prevRes = await client.query<{
+      id: string;
+      stock_quantity: number;
+      sku: string;
+      price_paise: number;
+      comparison_price_paise: number | null;
+    }>(
+      `SELECT id, stock_quantity, sku, price_paise, comparison_price_paise FROM product_variants WHERE id = $1 AND product_id = $2 FOR UPDATE;`,
+      [variantId, productId]
+    );
 
-    const sql = `UPDATE product_variants SET ${setClauses.join(', ')} WHERE id = $1 AND product_id = $2 RETURNING id;`;
-    const res = await client.query<{ id: string }>(sql, params);
-
-    if ((res.rowCount ?? 0) === 0 || res.rows.length === 0) {
+    if (prevRes.rows.length === 0) {
       return false;
     }
 
-    await createAuditLog({
-      adminId: actor.id,
-      adminEmail: actor.email,
-      action: 'VARIANT_UPDATE',
-      entityType: 'variant',
-      entityId: variantId,
-      details: { productId, ...data },
-      client,
-    });
+    const currentVariant = prevRes.rows[0];
+
+    // Check cross-price comparison if either selling or comparison price was updated individually
+    const effectivePrice = data.pricePaise !== undefined ? data.pricePaise : currentVariant.price_paise;
+    const effectiveCompPrice =
+      data.comparisonPricePaise !== undefined ? data.comparisonPricePaise : currentVariant.comparison_price_paise;
+    if (effectiveCompPrice !== null && effectiveCompPrice !== undefined && effectiveCompPrice < effectivePrice) {
+      throw new Error('Comparison price cannot be less than selling price');
+    }
+
+    let stockChanged = false;
+    const previousStock = currentVariant.stock_quantity;
+    let newStock = previousStock;
+
+    if (data.stockQuantity !== undefined) {
+      if (data.stockQuantity < 0) {
+        throw new Error('Insufficient stock: adjustment would result in negative quantity');
+      }
+      newStock = data.stockQuantity;
+      if (newStock !== previousStock) {
+        stockChanged = true;
+        params.push(newStock);
+        setClauses.push(`stock_quantity = $${params.length}`);
+      }
+    }
+
+    if (setClauses.length > 0) {
+      const sql = `UPDATE product_variants SET ${setClauses.join(', ')} WHERE id = $1 AND product_id = $2 RETURNING id;`;
+      const res = await client.query<{ id: string }>(sql, params);
+
+      if ((res.rowCount ?? 0) === 0 || res.rows.length === 0) {
+        return false;
+      }
+    }
+
+    // Record stock adjustment audit log if stock quantity changed
+    if (stockChanged) {
+      await createAuditLog({
+        adminId: actor.id,
+        adminEmail: actor.email,
+        action: 'STOCK_ADJUSTMENT',
+        entityType: 'variant',
+        entityId: variantId,
+        details: {
+          productId,
+          sku: data.sku || currentVariant.sku,
+          previousQuantity: previousStock,
+          newQuantity: newStock,
+          delta: newStock - previousStock,
+          reason: 'Stock updated during variant edit',
+        },
+        client,
+      });
+    }
+
+    // Record variant update audit log if any variant attributes were supplied
+    if (setClauses.length > 0) {
+      await createAuditLog({
+        adminId: actor.id,
+        adminEmail: actor.email,
+        action: 'VARIANT_UPDATE',
+        entityType: 'variant',
+        entityId: variantId,
+        details: { productId, ...data },
+        client,
+      });
+    }
 
     return true;
   });
@@ -866,4 +980,391 @@ export async function adminGetDashboardMetrics(): Promise<AdminDashboardMetrics>
       message: 'Order management scheduled for Phase 5',
     },
   };
+}
+
+// -------------------------------------------------------------
+// Product Image Management
+// -------------------------------------------------------------
+
+export interface ProductImageDTO {
+  id: string;
+  productId: string;
+  imageUrl: string;
+  altText: string | null;
+  displayOrder: number;
+  isPrimary: boolean;
+  publicId: string | null;
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  bytes: number | null;
+  createdAt: string;
+}
+
+export async function adminAddProductImage(
+  productId: string,
+  data: z.infer<typeof productImageAddSchema>,
+  actor: AdminUserDTO
+): Promise<ProductImageDTO> {
+  return withTransaction(async (client) => {
+    // 1. Verify product exists
+    const prodCheck = await client.query(`SELECT id, name FROM products WHERE id = $1;`, [productId]);
+    if (prodCheck.rows.length === 0) {
+      throw new Error(`PRODUCT_NOT_FOUND: Product with ID '${productId}' not found`);
+    }
+
+    // 2. Determine display order if not specified or 0
+    let displayOrder = data.displayOrder;
+    if (!displayOrder) {
+      const orderRes = await client.query(
+        `SELECT COALESCE(MAX(display_order), -1) + 1 AS next_order FROM product_images WHERE product_id = $1;`,
+        [productId]
+      );
+      displayOrder = orderRes.rows[0].next_order;
+    }
+
+    // 3. Determine is_primary status
+    const countRes = await client.query(
+      `SELECT COUNT(*)::int AS count FROM product_images WHERE product_id = $1;`,
+      [productId]
+    );
+    const existingCount = countRes.rows[0].count;
+    let isPrimary = data.isPrimary;
+    if (existingCount === 0) {
+      // First image is always primary
+      isPrimary = true;
+    } else if (isPrimary) {
+      // If marking as primary, clear primary from other images first to satisfy partial unique index
+      await client.query(
+        `UPDATE product_images SET is_primary = false WHERE product_id = $1;`,
+        [productId]
+      );
+    }
+
+    // 4. Insert image record
+    const insertRes = await client.query(
+      `INSERT INTO product_images (
+         product_id, image_url, alt_text, display_order, is_primary,
+         public_id, width, height, format, bytes
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *;`,
+      [
+        productId,
+        data.imageUrl,
+        data.altText || null,
+        displayOrder,
+        isPrimary,
+        data.publicId || null,
+        data.width || null,
+        data.height || null,
+        data.format || null,
+        data.bytes || null,
+      ]
+    );
+    const row = insertRes.rows[0];
+
+    // 5. Audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_IMAGE_ADD',
+      entityType: 'product',
+      entityId: productId,
+      details: {
+        imageId: row.id,
+        imageUrl: data.imageUrl,
+        publicId: data.publicId || null,
+        isPrimary: row.is_primary,
+        displayOrder: row.display_order,
+      },
+      client,
+    });
+
+    return {
+      id: row.id,
+      productId: row.product_id,
+      imageUrl: row.image_url,
+      altText: row.alt_text,
+      displayOrder: row.display_order,
+      isPrimary: row.is_primary,
+      publicId: row.public_id,
+      width: row.width,
+      height: row.height,
+      format: row.format,
+      bytes: row.bytes,
+      createdAt: row.created_at.toISOString(),
+    };
+  });
+}
+
+export async function adminSetPrimaryImage(
+  productId: string,
+  imageId: string,
+  actor: AdminUserDTO
+): Promise<boolean> {
+  return withTransaction(async (client) => {
+    // 1. Verify image exists for product
+    const checkRes = await client.query(
+      `SELECT id, is_primary FROM product_images WHERE id = $1 AND product_id = $2;`,
+      [imageId, productId]
+    );
+    if (checkRes.rows.length === 0) {
+      return false;
+    }
+
+    if (checkRes.rows[0].is_primary) {
+      return true; // Already primary
+    }
+
+    // 2. Unset all primary for this product
+    await client.query(`UPDATE product_images SET is_primary = false WHERE product_id = $1;`, [productId]);
+
+    // 3. Set the target image as primary
+    await client.query(`UPDATE product_images SET is_primary = true WHERE id = $1 AND product_id = $2;`, [
+      imageId,
+      productId,
+    ]);
+
+    // 4. Audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_IMAGE_SET_PRIMARY',
+      entityType: 'product',
+      entityId: productId,
+      details: { imageId },
+      client,
+    });
+
+    return true;
+  });
+}
+
+export async function adminReorderProductImages(
+  productId: string,
+  imageOrders: { id: string; displayOrder: number }[],
+  actor: AdminUserDTO
+): Promise<boolean> {
+  return withTransaction(async (client) => {
+    // 1. Verify product exists
+    const prodCheck = await client.query(`SELECT id FROM products WHERE id = $1;`, [productId]);
+    if (prodCheck.rows.length === 0) {
+      return false;
+    }
+
+    // 2. Update display order for each image
+    for (const item of imageOrders) {
+      await client.query(
+        `UPDATE product_images SET display_order = $1 WHERE id = $2 AND product_id = $3;`,
+        [item.displayOrder, item.id, productId]
+      );
+    }
+
+    // 3. Audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_IMAGES_REORDER',
+      entityType: 'product',
+      entityId: productId,
+      details: { reorderedCount: imageOrders.length },
+      client,
+    });
+
+    return true;
+  });
+}
+
+export async function adminDeleteProductImage(
+  productId: string,
+  imageId: string,
+  actor: AdminUserDTO
+): Promise<{ success: boolean; deletedPublicId?: string | null }> {
+  let publicIdToDelete: string | null = null;
+
+  const result = await withTransaction(async (client) => {
+    // 1. Fetch image to verify ownership and grab public_id
+    const imgRes = await client.query(
+      `SELECT * FROM product_images WHERE id = $1 AND product_id = $2;`,
+      [imageId, productId]
+    );
+    if (imgRes.rows.length === 0) {
+      return { success: false };
+    }
+
+    const img = imgRes.rows[0];
+    publicIdToDelete = img.public_id;
+    const wasPrimary = img.is_primary;
+
+    // 2. Delete database row
+    await client.query(`DELETE FROM product_images WHERE id = $1 AND product_id = $2;`, [imageId, productId]);
+
+    // 3. If deleted image was primary, promote lowest display_order image if any remain
+    if (wasPrimary) {
+      const remainingRes = await client.query(
+        `SELECT id FROM product_images WHERE product_id = $1 ORDER BY display_order ASC, created_at ASC LIMIT 1;`,
+        [productId]
+      );
+      if (remainingRes.rows.length > 0) {
+        await client.query(
+          `UPDATE product_images SET is_primary = true WHERE id = $1;`,
+          [remainingRes.rows[0].id]
+        );
+      }
+    }
+
+    // 4. Audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_IMAGE_DELETE',
+      entityType: 'product',
+      entityId: productId,
+      details: { imageId, publicId: img.public_id, wasPrimary },
+      client,
+    });
+
+    return { success: true, deletedPublicId: publicIdToDelete };
+  });
+
+  if (result.success && publicIdToDelete) {
+    // Safe Cloudinary deletion occurs after database transaction commits cleanly
+    try {
+      await deleteCloudinaryAsset(publicIdToDelete);
+    } catch (err: unknown) {
+      console.warn(`[Cloudinary] Asset deletion warning for '${publicIdToDelete}':`, err);
+    }
+  }
+
+  return result;
+}
+
+export interface DeleteProductResult {
+  status: 'deleted' | 'not_found' | 'conflict';
+  message?: string;
+  deletedPublicIds?: string[];
+}
+
+/**
+ * Permanently deletes a product if and only if it is not referenced by any historical orders or enquiries.
+ * Child images and variants are removed inside an atomic transaction with audit logging.
+ * Remote Cloudinary cleanup is executed strictly post-commit.
+ */
+export async function adminDeleteProduct(
+  id: string,
+  actor: AdminUserDTO
+): Promise<DeleteProductResult> {
+  if (!UUID_REGEX.test(id)) {
+    return { status: 'not_found', message: 'Product not found' };
+  }
+
+  let publicIdsToClean: string[] = [];
+
+  const txResult = await withTransaction(async (client) => {
+    // 1. Lock all associated variants first in deterministic ID order to align with createOrder lock ordering
+    await client.query(
+      `SELECT id FROM product_variants WHERE product_id = $1 ORDER BY id ASC FOR UPDATE;`,
+      [id]
+    );
+
+    // 2. Lock product row to prevent concurrent modifications
+    const prodRes = await client.query<{ id: string; name: string; slug: string }>(
+      `SELECT id, name, slug FROM products WHERE id = $1 FOR UPDATE;`,
+      [id]
+    );
+
+    if (prodRes.rows.length === 0) {
+      return { status: 'not_found' as const, message: 'Product not found' };
+    }
+
+    const product = prodRes.rows[0];
+
+    // 3. Check for protected order items referencing the product or its variants
+    const orderCheckRes = await client.query(
+      `SELECT 1 FROM order_items oi
+       LEFT JOIN product_variants pv ON oi.variant_id = pv.id
+       WHERE oi.product_id = $1 OR pv.product_id = $1
+       LIMIT 1;`,
+      [id]
+    );
+
+    if (orderCheckRes.rows.length > 0) {
+      return {
+        status: 'conflict' as const,
+        message:
+          'Product cannot be deleted because it is referenced by historical customer orders. Please archive the product instead to preserve order integrity.',
+      };
+    }
+
+    // 4. Check for protected customer enquiry references
+    const enquiryCheckRes = await client.query(
+      `SELECT 1 FROM enquiries WHERE product_id = $1 LIMIT 1;`,
+      [id]
+    );
+
+    if (enquiryCheckRes.rows.length > 0) {
+      return {
+        status: 'conflict' as const,
+        message:
+          'Product cannot be deleted because it is referenced by customer enquiries. Please archive the product instead.',
+      };
+    }
+
+    // 5. Fetch all Cloudinary public_ids for associated images before deletion
+    const imgRes = await client.query<{ public_id: string }>(
+      `SELECT public_id FROM product_images WHERE product_id = $1 AND public_id IS NOT NULL;`,
+      [id]
+    );
+    publicIdsToClean = imgRes.rows.map((r) => r.public_id).filter(Boolean);
+
+    // 6. Delete dependent child records
+    const imgDelRes = await client.query(
+      `DELETE FROM product_images WHERE product_id = $1;`,
+      [id]
+    );
+    const varDelRes = await client.query(
+      `DELETE FROM product_variants WHERE product_id = $1;`,
+      [id]
+    );
+    await client.query(
+      `DELETE FROM products WHERE id = $1;`,
+      [id]
+    );
+
+    // 7. Write immutable admin audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_DELETE',
+      entityType: 'product',
+      entityId: id,
+      details: {
+        name: product.name,
+        slug: product.slug,
+        deletedVariantCount: varDelRes.rowCount ?? 0,
+        deletedImageCount: imgDelRes.rowCount ?? 0,
+        deletedPublicIds: publicIdsToClean,
+      },
+      client,
+    });
+
+    return {
+      status: 'deleted' as const,
+      message: 'Product permanently deleted successfully',
+      deletedPublicIds: publicIdsToClean,
+    };
+  });
+
+  // 8. Remote Cloudinary asset deletion occurs strictly AFTER transaction commits cleanly
+  if (txResult.status === 'deleted' && publicIdsToClean.length > 0) {
+    for (const pubId of publicIdsToClean) {
+      try {
+        await deleteCloudinaryAsset(pubId);
+      } catch (err: unknown) {
+        console.warn(`[Cloudinary] Asset cleanup warning for orphaned public_id '${pubId}':`, err);
+      }
+    }
+  }
+
+  return txResult;
 }

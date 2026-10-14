@@ -47,4 +47,48 @@ describe('Admin Portal Route Isolation & UI Helpers (Phase 2)', () => {
     expect(isAdminRoute('/shop')).toBe(false);
     expect(isAdminRoute('/about')).toBe(false);
   });
+
+  it('correctly calculates and formats discount based on product comparison price', () => {
+    function computeDiscount(minPricePaise: number, minComparisonPricePaise?: number | null) {
+      const hasDiscount = Boolean(
+        minComparisonPricePaise && minComparisonPricePaise > minPricePaise
+      );
+      const discountPercent = hasDiscount && minComparisonPricePaise
+        ? Math.round(((minComparisonPricePaise - minPricePaise) / minComparisonPricePaise) * 100)
+        : 0;
+
+      if (!hasDiscount) {
+        return { hasDiscount: false, label: 'No discount' };
+      }
+
+      return {
+        hasDiscount: true,
+        discountPercent,
+        originalPriceRupees: Math.round(minComparisonPricePaise! / 100),
+        sellingPriceRupees: Math.round(minPricePaise / 100),
+      };
+    }
+
+    // Case 1: Product with discount (₹899 original, ₹699 selling -> 22% OFF)
+    const discounted = computeDiscount(69900, 89900);
+    expect(discounted.hasDiscount).toBe(true);
+    expect(discounted.discountPercent).toBe(22);
+    expect(discounted.originalPriceRupees).toBe(899);
+    expect(discounted.sellingPriceRupees).toBe(699);
+
+    // Case 2: Product with no comparison price
+    const noComp = computeDiscount(69900, null);
+    expect(noComp.hasDiscount).toBe(false);
+    expect(noComp.label).toBe('No discount');
+
+    // Case 3: Comparison price equal to selling price
+    const equalPrice = computeDiscount(69900, 69900);
+    expect(equalPrice.hasDiscount).toBe(false);
+    expect(equalPrice.label).toBe('No discount');
+
+    // Case 4: Zero comparison price
+    const zeroComp = computeDiscount(69900, 0);
+    expect(zeroComp.hasDiscount).toBe(false);
+    expect(zeroComp.label).toBe('No discount');
+  });
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Product, ProductVariant } from '../types/product.ts';
 import { X, Check, ShoppingBag, Layers, AlertCircle, Plus, Minus, ImageOff } from 'lucide-react';
 
@@ -21,6 +21,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   onAddToCart,
   onOpenBulkWithProduct,
 }) => {
+  const overlayRef = useRef<HTMLDivElement>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
@@ -52,6 +53,33 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [product, onClose]);
+
+  // Lock background document scrolling while modal is open, and safely restore on close/unmount
+  useEffect(() => {
+    if (!product) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    // Prevent touch gestures directly on the backdrop from dragging/scrolling the background
+    const overlay = overlayRef.current;
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.target === overlay) {
+        e.preventDefault();
+      }
+    };
+
+    if (overlay) {
+      overlay.addEventListener('touchmove', handleTouchMove, { passive: false });
+    }
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      if (overlay) {
+        overlay.removeEventListener('touchmove', handleTouchMove);
+      }
+    };
+  }, [product]);
 
   if (!product) return null;
 
@@ -93,30 +121,32 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+      ref={overlayRef}
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 md:p-6 overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-modal-title"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-8"
+        className="relative w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden flex flex-col my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close Button */}
+        {/* Close Button - pinned at top right */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-20 p-2 rounded-full bg-axdoro-surface/90 text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-bg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+          className="absolute top-3 right-3 sm:top-4 sm:right-4 z-30 p-2 rounded-full bg-axdoro-surface/90 backdrop-blur-md text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-bg shadow-sm transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
           aria-label="Close product details dialog"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <div className="grid grid-cols-1 md:grid-cols-2">
+        {/* Scrollable Content Container: single scroll on mobile, split columns on desktop */}
+        <div className="overflow-y-auto md:overflow-hidden flex-1 min-h-0 flex flex-col md:flex-row">
           {/* Left: Product Images Gallery */}
-          <div className="p-6 bg-axdoro-bg/50 flex flex-col justify-between border-b md:border-b-0 md:border-r border-axdoro-border">
+          <div className="md:w-1/2 min-h-0 p-5 sm:p-6 bg-axdoro-bg/50 flex flex-col justify-between border-b md:border-b-0 md:border-r border-axdoro-border flex-shrink-0 md:max-h-full md:overflow-y-auto">
             {/* Main Image Container */}
-            <div className="relative aspect-[3/4] rounded-xl overflow-hidden bg-stone-100 border border-axdoro-border mb-4">
+            <div className="relative aspect-[3/4] max-h-[36vh] sm:max-h-[44vh] md:max-h-[50vh] rounded-xl overflow-hidden bg-stone-100 border border-axdoro-border mb-3 sm:mb-4 mx-auto w-full flex items-center justify-center">
               {imageError || !currentImage ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-stone-100 text-axdoro-text-muted text-xs">
                   <ImageOff className="w-10 h-10 text-stone-400 mb-2" />
@@ -141,7 +171,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
             {/* Thumbnail selector */}
             {product.images && product.images.length > 1 && (
-              <div className="flex items-center gap-3 overflow-x-auto pb-1" aria-label="Product thumbnail gallery">
+              <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto pb-1" aria-label="Product thumbnail gallery">
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
@@ -151,7 +181,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                       setImageError(false);
                     }}
                     aria-label={`View image ${idx + 1}`}
-                    className={`relative w-16 h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                    className={`relative w-14 h-18 sm:w-16 sm:h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
                       selectedImageIndex === idx
                         ? 'border-axdoro-charcoal scale-105 shadow-subtle'
                         : 'border-axdoro-border opacity-70 hover:opacity-100'
@@ -165,12 +195,12 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           </div>
 
           {/* Right: Specifications & Selections */}
-          <div className="p-6 sm:p-8 flex flex-col justify-between space-y-6">
+          <div className="flex-1 min-h-0 p-5 sm:p-6 md:p-8 flex flex-col justify-between space-y-6 md:overflow-y-auto">
             <div>
-              <span className="text-[11px] font-mono tracking-widest text-axdoro-accent-muted uppercase block font-semibold mb-1">
+              <span className="text-[11px] font-mono tracking-widest text-axdoro-accent-muted uppercase block font-semibold mb-1 pr-10">
                 {product.categoryLabel || product.category.name}
               </span>
-              <h2 id="product-modal-title" className="text-2xl sm:text-3xl font-extrabold text-axdoro-charcoal tracking-tight">
+              <h2 id="product-modal-title" className="text-2xl sm:text-3xl font-extrabold text-axdoro-charcoal tracking-tight pr-10">
                 {product.name}
               </h2>
 
