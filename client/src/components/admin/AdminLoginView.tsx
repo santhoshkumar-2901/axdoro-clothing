@@ -42,7 +42,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
 
         <div className="flex justify-center mb-6">
           <img
-            src="/logo-dark.png"
+            src="/logo-white.png"
             alt="AXDORO"
             width={144}
             height={36}
@@ -106,7 +106,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
               <Button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 bg-axdoro-charcoal hover:bg-black text-white font-semibold shadow-subtle cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                className="w-full mt-2 bg-axdoro-charcoal text-white font-semibold shadow-subtle cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                 size="lg"
               >
                 {isLoading ? 'Authenticating...' : 'Sign In as Administrator'}

@@ -9,7 +9,7 @@
     <title>AXDORO — Clothing Made for Every Occasion</title>
     <meta name="description" content="Discover quality clothing designed for everyday wear and professional bulk requirements. Wear Your Attitude. Express Your Style." />
     <meta name="robots" content="index, follow" />
-    <meta name="theme-color" content="#FAF8F5" />
+    <meta name="theme-color" content="#0D0D0D" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="AXDORO — Clothing Made for Every Occasion" />
     <meta property="og:description" content="Discover quality clothing designed for everyday wear and professional bulk requirements. Wear Your Attitude. Express Your Style." />
@@ -22,18 +22,6 @@
   </head>
   <body class="bg-axdoro-bg text-axdoro-text antialiased min-h-screen">
     <div id="root"></div>
-    <script>
-      (function() {
-        try {
-          if (!window.location.pathname.startsWith('/admin')) {
-            var validThemes = ['deep-purple', 'midnight-neon', 'ice-white'];
-            var stored = localStorage.getItem('axdoro_theme_preview');
-            var theme = validThemes.indexOf(stored) !== -1 ? stored : 'deep-purple';
-            document.documentElement.setAttribute('data-theme', theme);
-          }
-        } catch (e) {}
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

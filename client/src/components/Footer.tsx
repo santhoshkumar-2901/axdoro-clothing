@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ProductCategory, Category } from '../types/product.ts';
 import { MessageSquare, Mail, Phone } from 'lucide-react';
-import { ThemeId, getStoredTheme } from '../lib/theme.ts';
 
 interface FooterProps {
   onSelectCategory: (category: ProductCategory | 'all') => void;
   onOpenBulk: () => void;
   onScrollToShop: () => void;
   onScrollToAbout: () => void;
-  currentTheme?: ThemeId;
   categories?: Category[];
   onNavigate?: (path: string) => void;
 }
@@ -18,13 +16,10 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenBulk,
   onScrollToShop,
   onScrollToAbout,
-  currentTheme,
   categories = [],
   onNavigate,
 }) => {
   const [activePolicyModal, setActivePolicyModal] = useState<string | null>(null);
-  const effectiveTheme = currentTheme || getStoredTheme();
-  const isDarkTheme = effectiveTheme === 'deep-purple' || effectiveTheme === 'midnight-neon';
 
   useEffect(() => {
     if (!activePolicyModal) return;
@@ -60,7 +55,7 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center">
               <img
-                src={isDarkTheme ? '/logo-white.png' : '/logo-dark.png'}
+                src="/logo-white.png"
                 alt="AXDORO"
                 width={128}
                 height={32}

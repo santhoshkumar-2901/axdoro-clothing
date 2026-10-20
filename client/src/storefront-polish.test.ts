@@ -11,7 +11,7 @@ describe('Storefront Polish, Accessibility & SEO Verification (Phase 6)', () => 
     // Core document tags
     expect(htmlContent).toContain('<html lang="en">');
     expect(htmlContent).toContain('<meta name="robots" content="index, follow" />');
-    expect(htmlContent).toContain('<meta name="theme-color" content="#FAF8F5" />');
+    expect(htmlContent).toContain('<meta name="theme-color" content="#0D0D0D" />');
 
     // Open Graph
     expect(htmlContent).toContain('<meta property="og:type" content="website" />');

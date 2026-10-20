@@ -56,7 +56,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <img
-                src="/logo-dark.png"
+                src="/logo-white.png"
                 alt="AXDORO"
                 width={128}
                 height={32}
@@ -104,7 +104,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                     : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-axdoro-surface-muted'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-axdoro-accent-subtle' : 'text-axdoro-text-muted'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-axdoro-accent' : 'text-axdoro-text-muted'}`} />
                 <span>{item.label}</span>
               </button>
             );
