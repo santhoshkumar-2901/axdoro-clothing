@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product, ProductCategory, CartItem, ProductVariant } from './types/product.ts';
-import { fetchProductBySlug } from './api/catalogue.ts';
-import { PromoBanner } from './components/PromoBanner.tsx';
+import { Product, ProductCategory, Category, CartItem, ProductVariant } from './types/product.ts';
+import { fetchProductBySlug, fetchCategories } from './api/catalogue.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
 import { CategoryShowcase } from './components/CategoryShowcase.tsx';
+import { HomepageCollections } from './components/HomepageCollections.tsx';
 import { ProductCatalogue } from './components/ProductCatalogue.tsx';
+import { CategoryPage } from './components/CategoryPage.tsx';
 import { EditorialSection } from './components/EditorialSection.tsx';
 import { Newsletter } from './components/Newsletter.tsx';
 import { Footer } from './components/Footer.tsx';
@@ -21,6 +22,7 @@ export default function App(): React.JSX.Element {
     typeof window !== 'undefined' ? window.location.pathname : '/'
   );
   const [theme, setTheme] = useState<ThemeId>(() => getStoredTheme());
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -50,9 +52,28 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Fetch active categories on mount and when catalogue mutates
+  useEffect(() => {
+    let isCurrent = true;
+    fetchCategories()
+      .then((data) => {
+        if (isCurrent) {
+          setCategories(data);
+        }
+      })
+      .catch(() => {
+        // Handled gracefully with fallback
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [catalogueVersion]);
+
   const navigate = (path: string) => {
     window.history.pushState(null, '', path);
     setCurrentPath(path);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Cart operations with exact integer paise pricing
@@ -154,6 +175,11 @@ export default function App(): React.JSX.Element {
     );
   }
 
+  const isCategoryRoute = currentPath.startsWith('/category/');
+  const categorySlug = isCategoryRoute
+    ? decodeURIComponent(currentPath.replace(/^\/category\//, '').replace(/\/.*$/, ''))
+    : '';
+
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
@@ -161,58 +187,98 @@ export default function App(): React.JSX.Element {
       data-theme={theme}
       className="storefront-root min-h-screen bg-axdoro-bg text-axdoro-text flex flex-col justify-between selection:bg-axdoro-accent selection:text-white"
     >
-      {/* 1. Promotional Header Banner */}
-      <PromoBanner onOpenBulk={handleOpenGeneralBulk} />
-
-      {/* 2. Responsive Sticky Navbar */}
+      {/* Responsive Sticky Navbar */}
       <Navbar
         cartCount={totalCartCount}
         onOpenCart={() => setIsCartOpen(true)}
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={(cat) => {
+          setSelectedCategory(cat);
+          if (isCategoryRoute) {
+            navigate('/');
+            setTimeout(() => handleScrollToShop(), 50);
+          }
+        }}
         onOpenBulk={handleOpenGeneralBulk}
         onScrollToShop={handleScrollToShop}
         onScrollToAbout={handleScrollToAbout}
         currentTheme={theme}
         onSelectTheme={handleThemeChange}
+        categories={categories}
+        onNavigate={navigate}
       />
 
-      {/* 3. Hero Campaign Section */}
+      {/* Main Content Area: Dedicated Category Page or Storefront Homepage */}
       <main className="flex-1">
-        <Hero
-          onExplore={handleScrollToShop}
-          onOpenBulk={handleOpenGeneralBulk}
-        />
+        {isCategoryRoute && categorySlug ? (
+          <CategoryPage
+            slug={categorySlug}
+            onNavigate={navigate}
+            onQuickView={handleQuickView}
+            onAddToCart={handleAddToCart}
+            onOpenBulk={handleOpenGeneralBulk}
+          />
+        ) : (
+          <>
+            {/* 3. Hero Campaign Section */}
+            <Hero
+              onExplore={handleScrollToShop}
+              onOpenBulk={handleOpenGeneralBulk}
+            />
 
-        {/* 4. Category Showcase Cards */}
-        <CategoryShowcase
-          activeCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          onScrollToShop={handleScrollToShop}
-        />
+            {/* 4. Category Showcase Cards */}
+            <CategoryShowcase
+              activeCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              onScrollToShop={handleScrollToShop}
+              categories={categories}
+              onNavigate={navigate}
+            />
 
-        {/* 5. Product Catalogue & Filters */}
-        <ProductCatalogue
-          key={catalogueVersion}
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          onQuickView={handleQuickView}
-          onAddToCart={handleAddToCart}
-        />
+            {/* 4.5. Admin-Curated Homepage Collections */}
+            <HomepageCollections
+              key={`collections-${catalogueVersion}`}
+              onQuickView={handleQuickView}
+              onAddToCart={handleAddToCart}
+              onNavigateCategory={(cat) => {
+                setSelectedCategory(cat);
+                handleScrollToShop();
+              }}
+            />
 
-        {/* 6. Editorial Brand Story & Pillars */}
-        <EditorialSection onOpenBulk={handleOpenGeneralBulk} />
+            {/* 5. Product Catalogue & Filters */}
+            <ProductCatalogue
+              key={catalogueVersion}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              onQuickView={handleQuickView}
+              onAddToCart={handleAddToCart}
+              categories={categories}
+            />
 
-        {/* 7. Newsletter Signup (Demo UI) */}
-        <Newsletter />
+            {/* 6. Editorial Brand Story & Pillars */}
+            <EditorialSection onOpenBulk={handleOpenGeneralBulk} />
+
+            {/* 7. Newsletter Signup (Demo UI) */}
+            <Newsletter />
+          </>
+        )}
       </main>
 
       {/* 8. Footer */}
       <Footer
-        onSelectCategory={setSelectedCategory}
+        onSelectCategory={(cat) => {
+          setSelectedCategory(cat);
+          if (isCategoryRoute) {
+            navigate('/');
+            setTimeout(() => handleScrollToShop(), 50);
+          }
+        }}
         onOpenBulk={handleOpenGeneralBulk}
         onScrollToShop={handleScrollToShop}
         onScrollToAbout={handleScrollToAbout}
         currentTheme={theme}
+        categories={categories}
+        onNavigate={navigate}
       />
 
       {/* Interactive Modals & Drawers */}

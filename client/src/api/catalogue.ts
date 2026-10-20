@@ -1,4 +1,4 @@
-import { Product, Category } from '../types/product.ts';
+import { Product, Category, HomepageCollection } from '../types/product.ts';
 
 export interface ProductsFetchParams {
   page?: number;
@@ -94,4 +94,47 @@ export async function fetchProductBySlug(slug: string): Promise<Product> {
     ...product,
     categoryLabel: product.category?.name || 'AXDORO Collection',
   };
+}
+
+export async function fetchCategoryBySlug(slug: string): Promise<Category> {
+  const response = await fetch(`/api/categories/${encodeURIComponent(slug)}`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('Category not found');
+    }
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Failed to fetch category (HTTP ${response.status})`);
+  }
+
+  const json = await response.json();
+  return json.data || json.category;
+}
+
+export async function fetchHomepageCollections(): Promise<HomepageCollection[]> {
+  const response = await fetch('/api/collections', {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Failed to fetch collections (HTTP ${response.status})`);
+  }
+
+  const json = await response.json();
+  const rawCollections: HomepageCollection[] = json.data || json.collections || [];
+
+  return rawCollections.map((col) => ({
+    ...col,
+    products: (col.products || []).map((p: Product) => ({
+      ...p,
+      categoryLabel: p.category?.name || 'AXDORO Collection',
+    })),
+  }));
 }

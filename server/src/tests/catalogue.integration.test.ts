@@ -224,6 +224,72 @@ describe('Real PostgreSQL Catalogue Integration Tests (axdoro_test)', () => {
       expect(res.body.data[0].slug).toBe('t-shirts');
       expect(res.body.data[1].slug).toBe('shirts');
     });
+
+    it('returns category details for an active category slug via GET /api/categories/:slug', async () => {
+      const res = await request(app).get('/api/categories/t-shirts');
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.body.data.slug).toBe('t-shirts');
+      expect(res.body.data.name).toBe('T-Shirts');
+    });
+
+    it('returns 404 for non-existent category slug', async () => {
+      const res = await request(app).get('/api/categories/non-existent-category');
+      expect(res.status).toBe(404);
+      expect(res.body.status).toBe('error');
+      expect(res.body.message).toBe('Category not found');
+    });
+
+    it('returns 404 for deactivated category and excludes its products from public access', async () => {
+      // Create a deactivated category with a published product
+      const client = await testPool.connect();
+      let deactCatId: string;
+      try {
+        const catRes = await client.query<{ id: string }>(
+          `INSERT INTO categories (slug, name, description, display_order, is_active)
+           VALUES ('deactivated-hoodies', 'Deactivated Hoodies', 'Temporarily inactive', 99, false)
+           RETURNING id`
+        );
+        deactCatId = catRes.rows[0].id;
+
+        const prodRes = await client.query<{ id: string }>(
+          `INSERT INTO products (slug, name, description, category_id, status, is_featured)
+           VALUES ('inactive-cat-hoodie', 'Inactive Category Hoodie', 'Hidden product', $1, 'published', true)
+           RETURNING id`,
+          [deactCatId]
+        );
+
+        await client.query(
+          `INSERT INTO product_variants (product_id, size, color, sku, price_paise, stock_quantity, is_active)
+           VALUES ($1, 'L', 'Black', 'HOOD-INACT-L', 199900, 10, true)`,
+          [prodRes.rows[0].id]
+        );
+      } finally {
+        client.release();
+      }
+
+      // 1. GET /api/categories/:slug returns 404
+      const catRes = await request(app).get('/api/categories/deactivated-hoodies');
+      expect(catRes.status).toBe(404);
+      expect(catRes.body.status).toBe('error');
+
+      // 2. GET /api/products?category=deactivated-hoodies returns 0 products
+      const filteredRes = await request(app).get('/api/products?category=deactivated-hoodies');
+      expect(filteredRes.status).toBe(200);
+      expect(filteredRes.body.data.length).toBe(0);
+      expect(filteredRes.body.pagination.totalCount).toBe(0);
+
+      // 3. GET /api/products does not include the product belonging to inactive category
+      const listRes = await request(app).get('/api/products');
+      expect(listRes.status).toBe(200);
+      const slugs = listRes.body.data.map((p: { slug: string }) => p.slug);
+      expect(slugs).not.toContain('inactive-cat-hoodie');
+
+      // 4. GET /api/products/:slug returns 404 for product with inactive category
+      const directProdRes = await request(app).get('/api/products/inactive-cat-hoodie');
+      expect(directProdRes.status).toBe(404);
+      expect(directProdRes.body.status).toBe('error');
+    });
   });
 
   describe('Public Products Listing API: GET /api/products', () => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShoppingBag, Search, Menu, X, Layers } from 'lucide-react';
-import { ProductCategory } from '../types/product.ts';
+import { ProductCategory, Category } from '../types/product.ts';
 import { ThemeId, getStoredTheme } from '../lib/theme.ts';
 import { ThemePreviewSwitcher } from './ThemePreviewSwitcher.tsx';
 
@@ -13,6 +13,8 @@ interface NavbarProps {
   onScrollToAbout: () => void;
   currentTheme?: ThemeId;
   onSelectTheme?: (theme: ThemeId) => void;
+  categories?: Category[];
+  onNavigate?: (path: string) => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -24,6 +26,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onScrollToAbout,
   currentTheme,
   onSelectTheme,
+  categories = [],
+  onNavigate,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const effectiveTheme = currentTheme || getStoredTheme();
@@ -81,31 +85,57 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
               <button
                 onClick={() => {
-                  onSelectCategory('all');
-                  onScrollToShop();
+                  if (onNavigate && window.location.pathname !== '/') {
+                    onNavigate('/');
+                    setTimeout(() => onScrollToShop(), 50);
+                  } else {
+                    onSelectCategory('all');
+                    onScrollToShop();
+                  }
                 }}
                 className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
               >
                 Collection
               </button>
-              <button
-                onClick={() => {
-                  onSelectCategory('t-shirts');
-                  onScrollToShop();
-                }}
-                className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-              >
-                T-Shirts <span className="text-[10px] text-axdoro-accent-muted font-mono font-bold ml-0.5">140 GSM</span>
-              </button>
-              <button
-                onClick={() => {
-                  onSelectCategory('shirts');
-                  onScrollToShop();
-                }}
-                className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-              >
-                Shirts
-              </button>
+              {categories.length > 0 ? (
+                categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => {
+                      if (onNavigate) {
+                        onNavigate(`/category/${cat.slug}`);
+                      } else {
+                        onSelectCategory(cat.slug);
+                        onScrollToShop();
+                      }
+                    }}
+                    className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  >
+                    {cat.name}
+                  </button>
+                ))
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      if (onNavigate) onNavigate('/category/t-shirts');
+                      else { onSelectCategory('t-shirts'); onScrollToShop(); }
+                    }}
+                    className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  >
+                    T-Shirts
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (onNavigate) onNavigate('/category/shirts');
+                      else { onSelectCategory('shirts'); onScrollToShop(); }
+                    }}
+                    className="text-axdoro-text hover:text-black transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  >
+                    Shirts
+                  </button>
+                </>
+              )}
               <button
                 onClick={onOpenBulk}
                 className="flex items-center gap-1.5 text-axdoro-accent-muted hover:text-axdoro-accent transition-colors cursor-pointer py-1 px-1.5 rounded font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
@@ -200,33 +230,60 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={() => {
                 setMobileMenuOpen(false);
-                onSelectCategory('all');
-                onScrollToShop();
+                if (onNavigate && window.location.pathname !== '/') {
+                  onNavigate('/');
+                  setTimeout(() => onScrollToShop(), 50);
+                } else {
+                  onSelectCategory('all');
+                  onScrollToShop();
+                }
               }}
               className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
             >
               All Collection
             </button>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onSelectCategory('t-shirts');
-                onScrollToShop();
-              }}
-              className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-            >
-              T-Shirts (140 GSM)
-            </button>
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onSelectCategory('shirts');
-                onScrollToShop();
-              }}
-              className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-            >
-              Shirts Collection
-            </button>
+            {categories.length > 0 ? (
+              categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (onNavigate) {
+                      onNavigate(`/category/${cat.slug}`);
+                    } else {
+                      onSelectCategory(cat.slug);
+                      onScrollToShop();
+                    }
+                  }}
+                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                >
+                  {cat.name}
+                </button>
+              ))
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (onNavigate) onNavigate('/category/t-shirts');
+                    else { onSelectCategory('t-shirts'); onScrollToShop(); }
+                  }}
+                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                >
+                  T-Shirts (140 GSM)
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    if (onNavigate) onNavigate('/category/shirts');
+                    else { onSelectCategory('shirts'); onScrollToShop(); }
+                  }}
+                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                >
+                  Shirts Collection
+                </button>
+              </>
+            )}
             <button
               onClick={() => {
                 setMobileMenuOpen(false);

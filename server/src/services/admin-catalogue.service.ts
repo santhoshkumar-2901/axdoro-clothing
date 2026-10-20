@@ -8,7 +8,9 @@ import {
   categoryUpdateSchema,
   productVariantSchema,
   productImageAddSchema,
+  productImageUpdateSchema,
   productImageReorderSchema,
+  homepageCollectionUpdateSchema,
 } from '../schemas/admin.js';
 import { deleteCloudinaryAsset } from './cloudinary.service.js';
 import { z } from 'zod';
@@ -396,8 +398,8 @@ export async function adminCreateProduct(
     // 3. Insert images
     for (const img of data.images) {
       await client.query(
-        `INSERT INTO product_images (product_id, image_url, alt_text, display_order, is_primary, public_id, width, height, format, bytes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);`,
+        `INSERT INTO product_images (product_id, image_url, alt_text, display_order, is_primary, public_id, width, height, format, bytes, color)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);`,
         [
           productId,
           img.imageUrl,
@@ -409,6 +411,7 @@ export async function adminCreateProduct(
           img.height || null,
           img.format || null,
           img.bytes || null,
+          img.color || null,
         ]
       );
     }
@@ -474,6 +477,7 @@ export async function adminGetProductById(id: string, client?: any): Promise<any
     height: i.height,
     format: i.format,
     bytes: i.bytes,
+    color: i.color || null,
     createdAt: i.created_at,
   }));
 
@@ -998,6 +1002,7 @@ export interface ProductImageDTO {
   height: number | null;
   format: string | null;
   bytes: number | null;
+  color: string | null;
   createdAt: string;
 }
 
@@ -1012,6 +1017,19 @@ export async function adminAddProductImage(
     if (prodCheck.rows.length === 0) {
       throw new Error(`PRODUCT_NOT_FOUND: Product with ID '${productId}' not found`);
     }
+
+    // 1b. If color specified, validate it corresponds to an active variant color of this product
+    if (data.color && data.color.trim()) {
+      const varColorCheck = await client.query(
+        `SELECT id FROM product_variants WHERE product_id = $1 AND LOWER(color) = LOWER($2) AND is_active = true LIMIT 1;`,
+        [productId, data.color.trim()]
+      );
+      if (varColorCheck.rows.length === 0) {
+        throw new Error(`INVALID_COLOR: Color '${data.color}' is not an active variant color for this product`);
+      }
+    }
+
+    const assignedColor = data.color && data.color.trim() ? data.color.trim() : null;
 
     // 2. Determine display order if not specified or 0
     let displayOrder = data.displayOrder;
@@ -1045,8 +1063,8 @@ export async function adminAddProductImage(
     const insertRes = await client.query(
       `INSERT INTO product_images (
          product_id, image_url, alt_text, display_order, is_primary,
-         public_id, width, height, format, bytes
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         public_id, width, height, format, bytes, color
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *;`,
       [
         productId,
@@ -1059,6 +1077,7 @@ export async function adminAddProductImage(
         data.height || null,
         data.format || null,
         data.bytes || null,
+        assignedColor,
       ]
     );
     const row = insertRes.rows[0];
@@ -1076,6 +1095,7 @@ export async function adminAddProductImage(
         publicId: data.publicId || null,
         isPrimary: row.is_primary,
         displayOrder: row.display_order,
+        color: assignedColor,
       },
       client,
     });
@@ -1092,6 +1112,79 @@ export async function adminAddProductImage(
       height: row.height,
       format: row.format,
       bytes: row.bytes,
+      color: row.color || null,
+      createdAt: row.created_at.toISOString(),
+    };
+  });
+}
+
+export async function adminUpdateProductImage(
+  productId: string,
+  imageId: string,
+  data: z.infer<typeof productImageUpdateSchema>,
+  actor: AdminUserDTO
+): Promise<ProductImageDTO | null> {
+  return withTransaction(async (client) => {
+    // 1. Verify image exists for this product
+    const imgCheck = await client.query(
+      `SELECT * FROM product_images WHERE id = $1 AND product_id = $2;`,
+      [imageId, productId]
+    );
+    if (imgCheck.rows.length === 0) {
+      return null;
+    }
+
+    // 2. If color specified, validate it corresponds to an active variant color of this product
+    if (data.color && data.color.trim()) {
+      const varColorCheck = await client.query(
+        `SELECT id FROM product_variants WHERE product_id = $1 AND LOWER(color) = LOWER($2) AND is_active = true LIMIT 1;`,
+        [productId, data.color.trim()]
+      );
+      if (varColorCheck.rows.length === 0) {
+        throw new Error(`INVALID_COLOR: Color '${data.color}' is not an active variant color for this product`);
+      }
+    }
+
+    const assignedColor = data.color && data.color.trim() ? data.color.trim() : null;
+
+    const updateRes = await client.query(
+      `UPDATE product_images
+       SET color = $1,
+           alt_text = CASE WHEN $2::text IS NOT NULL THEN $2 ELSE alt_text END
+       WHERE id = $3 AND product_id = $4
+       RETURNING *;`,
+      [assignedColor, data.altText !== undefined ? data.altText : null, imageId, productId]
+    );
+
+    const row = updateRes.rows[0];
+
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'PRODUCT_IMAGE_UPDATE',
+      entityType: 'product',
+      entityId: productId,
+      details: {
+        imageId,
+        color: assignedColor,
+        altText: row.alt_text,
+      },
+      client,
+    });
+
+    return {
+      id: row.id,
+      productId: row.product_id,
+      imageUrl: row.image_url,
+      altText: row.alt_text,
+      displayOrder: row.display_order,
+      isPrimary: row.is_primary,
+      publicId: row.public_id,
+      width: row.width,
+      height: row.height,
+      format: row.format,
+      bytes: row.bytes,
+      color: row.color || null,
       createdAt: row.created_at.toISOString(),
     };
   });
@@ -1367,4 +1460,261 @@ export async function adminDeleteProduct(
   }
 
   return txResult;
+}
+
+export interface AdminHomepageCollectionProduct {
+  id: string;
+  slug: string;
+  name: string;
+  status: 'draft' | 'published' | 'archived';
+  displayOrder: number;
+  categoryName: string;
+  categorySlug: string;
+  minPricePaise: number;
+  price: number;
+  totalStock: number;
+  imageUrl?: string;
+}
+
+export interface AdminHomepageCollection {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  isEnabled: boolean;
+  displayOrder: number;
+  products: AdminHomepageCollectionProduct[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function adminGetHomepageCollections(): Promise<AdminHomepageCollection[]> {
+  const colRes = await query<{
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    is_enabled: boolean;
+    display_order: number;
+    created_at: Date;
+    updated_at: Date;
+  }>(`
+    SELECT id, slug, title, description, is_enabled, display_order, created_at, updated_at
+    FROM homepage_collections
+    ORDER BY display_order ASC, created_at ASC;
+  `);
+
+  if (colRes.rows.length === 0) {
+    return [];
+  }
+
+  const prodRes = await query<{
+    collection_id: string;
+    product_id: string;
+    product_slug: string;
+    product_name: string;
+    status: 'draft' | 'published' | 'archived';
+    display_order: number;
+    category_name: string;
+    category_slug: string;
+    min_price_paise: number | string;
+    total_stock: number | string;
+    image_url: string | null;
+  }>(`
+    SELECT
+      hcp.collection_id,
+      p.id AS product_id,
+      p.slug AS product_slug,
+      p.name AS product_name,
+      p.status,
+      hcp.display_order,
+      c.name AS category_name,
+      c.slug AS category_slug,
+      COALESCE(
+        (
+          SELECT pv_min.price_paise
+          FROM product_variants pv_min
+          WHERE pv_min.product_id = p.id AND pv_min.is_active = true
+          ORDER BY pv_min.price_paise ASC, pv_min.created_at ASC
+          LIMIT 1
+        ),
+        0
+      ) AS min_price_paise,
+      COALESCE(
+        (
+          SELECT SUM(pv.stock_quantity)
+          FROM product_variants pv
+          WHERE pv.product_id = p.id AND pv.is_active = true
+        ),
+        0
+      ) AS total_stock,
+      (
+        SELECT img.image_url
+        FROM product_images img
+        WHERE img.product_id = p.id
+        ORDER BY img.is_primary DESC, img.display_order ASC
+        LIMIT 1
+      ) AS image_url
+    FROM homepage_collection_products hcp
+    JOIN products p ON hcp.product_id = p.id
+    JOIN categories c ON p.category_id = c.id
+    ORDER BY hcp.collection_id, hcp.display_order ASC, hcp.created_at ASC;
+  `);
+
+  const productsByCollectionId = new Map<string, AdminHomepageCollectionProduct[]>();
+  for (const row of prodRes.rows) {
+    const list = productsByCollectionId.get(row.collection_id) || [];
+    const minPaise = Number(row.min_price_paise);
+    list.push({
+      id: row.product_id,
+      slug: row.product_slug,
+      name: row.product_name,
+      status: row.status,
+      displayOrder: row.display_order,
+      categoryName: row.category_name,
+      categorySlug: row.category_slug,
+      minPricePaise: minPaise,
+      price: Math.round(minPaise / 100),
+      totalStock: Number(row.total_stock),
+      imageUrl: row.image_url || undefined,
+    });
+    productsByCollectionId.set(row.collection_id, list);
+  }
+
+  return colRes.rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description,
+    isEnabled: row.is_enabled,
+    displayOrder: row.display_order,
+    products: productsByCollectionId.get(row.id) || [],
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  }));
+}
+
+export async function adminUpdateHomepageCollection(
+  id: string,
+  data: z.infer<typeof homepageCollectionUpdateSchema>,
+  actor: AdminUserDTO
+): Promise<AdminHomepageCollection> {
+  const existing = await query<{ id: string; slug: string; title: string }>(
+    `SELECT id, slug, title FROM homepage_collections WHERE id = $1;`,
+    [id]
+  );
+  if (existing.rows.length === 0) {
+    throw new Error('Collection not found');
+  }
+
+  const setClauses: string[] = [];
+  const params: unknown[] = [id];
+
+  if (data.title !== undefined) {
+    params.push(data.title);
+    setClauses.push(`title = $${params.length}`);
+  }
+  if (data.description !== undefined) {
+    params.push(data.description);
+    setClauses.push(`description = $${params.length}`);
+  }
+  if (data.isEnabled !== undefined) {
+    params.push(data.isEnabled);
+    setClauses.push(`is_enabled = $${params.length}`);
+  }
+  if (data.displayOrder !== undefined) {
+    params.push(data.displayOrder);
+    setClauses.push(`display_order = $${params.length}`);
+  }
+
+  await withTransaction(async (client) => {
+    if (setClauses.length > 0) {
+      const sql = `UPDATE homepage_collections SET ${setClauses.join(', ')} WHERE id = $1;`;
+      await client.query(sql, params);
+    }
+
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'COLLECTION_UPDATE',
+      entityType: 'collection',
+      entityId: id,
+      details: { slug: existing.rows[0].slug, ...data },
+      client,
+    });
+  });
+
+  const collections = await adminGetHomepageCollections();
+  const updated = collections.find((c) => c.id === id);
+  if (!updated) {
+    throw new Error('Collection not found after update');
+  }
+  return updated;
+}
+
+export async function adminUpdateCollectionProducts(
+  collectionId: string,
+  productIds: string[],
+  actor: AdminUserDTO
+): Promise<AdminHomepageCollection> {
+  await withTransaction(async (client) => {
+    const colRes = await client.query<{ id: string; slug: string; title: string }>(
+      `SELECT id, slug, title FROM homepage_collections WHERE id = $1;`,
+      [collectionId]
+    );
+    if (colRes.rows.length === 0) {
+      throw new Error('Collection not found');
+    }
+
+    const deduplicatedProductIds = [...new Set(productIds)];
+
+    // Verify all productIds exist if any provided
+    if (deduplicatedProductIds.length > 0) {
+      const prodCheck = await client.query<{ id: string }>(
+        `SELECT id FROM products WHERE id = ANY($1::uuid[]);`,
+        [deduplicatedProductIds]
+      );
+      if (prodCheck.rows.length !== deduplicatedProductIds.length) {
+        const foundSet = new Set(prodCheck.rows.map((r) => r.id));
+        const missing = deduplicatedProductIds.filter((pid) => !foundSet.has(pid));
+        throw new Error(`One or more product IDs do not exist: ${missing.join(', ')}`);
+      }
+    }
+
+    // Delete existing associations
+    await client.query(
+      `DELETE FROM homepage_collection_products WHERE collection_id = $1;`,
+      [collectionId]
+    );
+
+    // Insert updated associations with sequential display_order
+    for (let i = 0; i < deduplicatedProductIds.length; i++) {
+      await client.query(
+        `INSERT INTO homepage_collection_products (collection_id, product_id, display_order)
+         VALUES ($1, $2, $3);`,
+        [collectionId, deduplicatedProductIds[i], i + 1]
+      );
+    }
+
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'COLLECTION_PRODUCTS_UPDATE',
+      entityType: 'collection',
+      entityId: collectionId,
+      details: {
+        slug: colRes.rows[0].slug,
+        productIds: deduplicatedProductIds,
+        count: deduplicatedProductIds.length,
+      },
+      client,
+    });
+  });
+
+  const collections = await adminGetHomepageCollections();
+  const updated = collections.find((c) => c.id === collectionId);
+  if (!updated) {
+    throw new Error('Collection not found after products update');
+  }
+  return updated;
 }

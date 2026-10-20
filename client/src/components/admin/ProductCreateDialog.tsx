@@ -46,6 +46,7 @@ interface ImageFormItem {
   imageUrl: string;
   altText: string;
   isPrimary: boolean;
+  color?: string;
 }
 
 function slugify(text: string): string {
@@ -363,6 +364,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
         altText: img.altText.trim() || null,
         displayOrder: i,
         isPrimary: img.isPrimary,
+        color: img.color?.trim() || null,
       });
     }
 
@@ -827,6 +829,21 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
                         onChange={(e) => handleUpdateImage(img.id, 'altText', e.target.value)}
                         className="text-xs h-8"
                       />
+                    </div>
+                    <div className="w-full sm:w-36 space-y-1">
+                      <select
+                        value={img.color || ''}
+                        onChange={(e) => handleUpdateImage(img.id, 'color', e.target.value)}
+                        className="text-xs h-8 px-2 rounded-md border border-axdoro-border bg-axdoro-surface text-axdoro-charcoal w-full"
+                        title="Assign to variant color"
+                      >
+                        <option value="">Shared / All</option>
+                        {Array.from(new Set(variants.map((v) => v.color.trim()).filter(Boolean))).map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="flex items-center justify-between sm:justify-end gap-3">
                       <label className="flex items-center gap-1.5 text-xs cursor-pointer">

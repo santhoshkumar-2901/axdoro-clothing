@@ -1,6 +1,6 @@
 // AXDORO Product & Storefront Types (Real Catalogue & In-Memory Storefront)
 
-export type ProductCategory = 't-shirts' | 'shirts';
+export type ProductCategory = 't-shirts' | 'shirts' | (string & {});
 
 export interface Category {
   id: string;
@@ -22,6 +22,15 @@ export interface ProductVariant {
   originalPrice?: number;
   stock: number;
   isActive: boolean;
+}
+
+export interface ProductImageDetail {
+  id: string;
+  url: string;
+  altText?: string;
+  displayOrder: number;
+  isPrimary: boolean;
+  color?: string | null;
 }
 
 export interface Product {
@@ -51,6 +60,7 @@ export interface Product {
   isNewArrival: boolean;
   createdAt: string;
   variants?: ProductVariant[];
+  allImages?: ProductImageDetail[];
 }
 
 export interface CartItem {
@@ -72,4 +82,39 @@ export type SortOption = 'featured' | 'newest' | 'price-asc' | 'price-desc' | 'd
 export function formatPaiseToINR(paise: number): string {
   const rupees = Math.floor(paise / 100);
   return `₹${rupees.toLocaleString('en-IN')}`;
+}
+
+export interface HomepageCollection {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  displayOrder: number;
+  products: Product[];
+}
+
+export interface AdminHomepageCollectionProduct {
+  id: string;
+  slug: string;
+  name: string;
+  status: 'draft' | 'published' | 'archived';
+  displayOrder: number;
+  categoryName: string;
+  categorySlug: string;
+  minPricePaise: number;
+  price: number;
+  totalStock: number;
+  imageUrl?: string;
+}
+
+export interface AdminHomepageCollection {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  isEnabled: boolean;
+  displayOrder: number;
+  products: AdminHomepageCollectionProduct[];
+  createdAt: string;
+  updatedAt: string;
 }

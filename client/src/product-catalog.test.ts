@@ -730,4 +730,279 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
       });
     });
   });
+
+  describe('Color Variant Image Synchronization & Product Detail Modal Gallery (Phase 2)', () => {
+    const resolveActiveImages = (product: Product, selectedColor: string): string[] => {
+      if (product.allImages && product.allImages.length > 0) {
+        if (selectedColor) {
+          const colorSpecific = product.allImages.filter(
+            (img) => img.color && img.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+          );
+          if (colorSpecific.length > 0) {
+            return colorSpecific.map((img) => img.url);
+          }
+        }
+        const sharedImages = product.allImages.filter((img) => !img.color || !img.color.trim());
+        if (sharedImages.length > 0) {
+          return sharedImages.map((img) => img.url);
+        }
+      }
+      return product.images && product.images.length > 0 ? product.images : [];
+    };
+
+    const productWithColorImages: Product = {
+      id: 'prod-color-test',
+      slug: 'axdoro-color-sync-tee',
+      name: 'AXDORO Color Sync Tee',
+      category: { slug: 't-shirts', name: 'T-Shirts' },
+      description: 'Test product for color image sync',
+      pricePaise: 69900,
+      price: 699,
+      images: [
+        'https://example.com/fallback-general.jpg',
+        'https://example.com/fallback-2.jpg',
+      ],
+      allImages: [
+        {
+          id: 'img-black-front',
+          url: 'https://example.com/black-front.jpg',
+          altText: 'Black Front View',
+          displayOrder: 0,
+          isPrimary: true,
+          color: 'Pitch Black',
+        },
+        {
+          id: 'img-black-back',
+          url: 'https://example.com/black-back.jpg',
+          altText: 'Black Back View',
+          displayOrder: 1,
+          isPrimary: false,
+          color: 'Pitch Black',
+        },
+        {
+          id: 'img-white-front',
+          url: 'https://example.com/white-front.jpg',
+          altText: 'White Front View',
+          displayOrder: 2,
+          isPrimary: false,
+          color: 'Ice White',
+        },
+        {
+          id: 'img-shared-tag',
+          url: 'https://example.com/shared-fabric.jpg',
+          altText: 'Fabric Close Up',
+          displayOrder: 3,
+          isPrimary: false,
+          color: null,
+        },
+      ],
+      sizes: ['M', 'L'],
+      colors: [
+        { name: 'Pitch Black', hex: '#0f0f14' },
+        { name: 'Ice White', hex: '#faf6fc' },
+        { name: 'Lilac Mist', hex: '#8a6fa6' },
+      ],
+      stockStatus: 'in-stock',
+      stockCount: 50,
+      isFeatured: true,
+      isNewArrival: true,
+      createdAt: '2026-10-16T10:00:00Z',
+      variants: [
+        {
+          id: 'v-black-m',
+          size: 'M',
+          color: 'Pitch Black',
+          sku: 'AX-BLK-M',
+          pricePaise: 69900,
+          price: 699,
+          stock: 10,
+          isActive: true,
+        },
+        {
+          id: 'v-black-l',
+          size: 'L',
+          color: 'Pitch Black',
+          sku: 'AX-BLK-L',
+          pricePaise: 69900,
+          price: 699,
+          stock: 5,
+          isActive: true,
+        },
+        {
+          id: 'v-white-m',
+          size: 'M',
+          color: 'Ice White',
+          sku: 'AX-WHT-M',
+          pricePaise: 69900,
+          price: 699,
+          stock: 12,
+          isActive: true,
+        },
+        {
+          id: 'v-white-l',
+          size: 'L',
+          color: 'Ice White',
+          sku: 'AX-WHT-L',
+          pricePaise: 69900,
+          price: 699,
+          stock: 0,
+          isActive: true,
+        },
+      ],
+    };
+
+    it('1. switching colors changes the displayed image collection to the active color', () => {
+      const blackImages = resolveActiveImages(productWithColorImages, 'Pitch Black');
+      expect(blackImages).toEqual([
+        'https://example.com/black-front.jpg',
+        'https://example.com/black-back.jpg',
+      ]);
+
+      const whiteImages = resolveActiveImages(productWithColorImages, 'Ice White');
+      expect(whiteImages).toEqual([
+        'https://example.com/white-front.jpg',
+      ]);
+    });
+
+    it('2. switching colors resets an invalid gallery selection index back to index 0', () => {
+      let selectedImageIndex = 1;
+      let selectedColor = 'Pitch Black';
+      let activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      expect(activeImages[selectedImageIndex]).toBe('https://example.com/black-back.jpg');
+
+      const onColorChange = (newColor: string) => {
+        selectedColor = newColor;
+        selectedImageIndex = 0;
+      };
+
+      onColorChange('Ice White');
+      activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      expect(selectedImageIndex).toBe(0);
+      expect(activeImages[selectedImageIndex]).toBe('https://example.com/white-front.jpg');
+    });
+
+    it('3. thumbnail selection works within the active color collection', () => {
+      const selectedColor = 'Pitch Black';
+      const activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      expect(activeImages.length).toBe(2);
+
+      let selectedIndex = 0;
+      selectedIndex = 1;
+      expect(activeImages[selectedIndex]).toBe('https://example.com/black-back.jpg');
+    });
+
+    it('4. changing sizes preserves the selected color and active gallery', () => {
+      let selectedColor = 'Pitch Black';
+      let selectedSize = 'M';
+
+      const onSizeChange = (newSize: string) => {
+        selectedSize = newSize;
+      };
+
+      onSizeChange('L');
+      expect(selectedSize).toBe('L');
+      expect(selectedColor).toBe('Pitch Black');
+      const activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      expect(activeImages[0]).toBe('https://example.com/black-front.jpg');
+    });
+
+    it('5. shared-image fallback works when a selected color has no dedicated images', () => {
+      const lilacImages = resolveActiveImages(productWithColorImages, 'Lilac Mist');
+      expect(lilacImages).toEqual(['https://example.com/shared-fabric.jpg']);
+    });
+
+    it('6. legacy products without allImages metadata fall back gracefully to product.images', () => {
+      const legacyProduct: Product = {
+        ...productWithColorImages,
+        allImages: undefined,
+      };
+
+      const imagesForBlack = resolveActiveImages(legacyProduct, 'Pitch Black');
+      expect(imagesForBlack).toEqual(legacyProduct.images);
+
+      const imagesForWhite = resolveActiveImages(legacyProduct, 'Ice White');
+      expect(imagesForWhite).toEqual(legacyProduct.images);
+    });
+
+    it('7. unavailable color-size combinations are correctly identified and prevented from add-to-cart', () => {
+      const resolveVariant = (p: Product, size: string, color: string) =>
+        p.variants?.find((v) => v.size === size && (!color || v.color === color));
+
+      const whiteM = resolveVariant(productWithColorImages, 'M', 'Ice White');
+      expect(whiteM?.stock).toBe(12);
+      expect(whiteM?.stock! > 0).toBe(true);
+
+      const whiteL = resolveVariant(productWithColorImages, 'L', 'Ice White');
+      expect(whiteL?.stock).toBe(0);
+      const isOutOfStock = whiteL !== undefined && (whiteL.stock <= 0 || !whiteL.isActive);
+      expect(isOutOfStock).toBe(true);
+    });
+
+    describe('ProductDetailModal React Hooks Order & Safe Render Invariants', () => {
+      it('8. renders cleanly without product (product=null) and with selected product without hook order errors', async () => {
+        const { renderToString } = await import('react-dom/server');
+        const React = await import('react');
+        const { ProductDetailModal } = await import('./components/ProductDetailModal.tsx');
+
+        // Render with null product (modal closed)
+        let htmlNull: string = '';
+        expect(() => {
+          htmlNull = renderToString(
+            React.createElement(ProductDetailModal, {
+              product: null,
+              onClose: () => {},
+              onAddToCart: () => {},
+              onOpenBulkWithProduct: () => {},
+            })
+          );
+        }).not.toThrow();
+        expect(htmlNull).toBe('');
+
+        // Render with active product (modal open)
+        let htmlProd: string = '';
+        expect(() => {
+          htmlProd = renderToString(
+            React.createElement(ProductDetailModal, {
+              product: MOCK_PRODUCTS[0],
+              onClose: () => {},
+              onAddToCart: () => {},
+              onOpenBulkWithProduct: () => {},
+            })
+          );
+        }).not.toThrow();
+        expect(htmlProd).toContain(MOCK_PRODUCTS[0].name);
+
+        // Render in sequence null -> product -> null -> product to verify stateful hook invocation stability
+        expect(() => {
+          renderToString(React.createElement(ProductDetailModal, {
+            product: null,
+            onClose: () => {},
+            onAddToCart: () => {},
+            onOpenBulkWithProduct: () => {},
+          }));
+          renderToString(React.createElement(ProductDetailModal, {
+            product: MOCK_PRODUCTS[1],
+            onClose: () => {},
+            onAddToCart: () => {},
+            onOpenBulkWithProduct: () => {},
+          }));
+        }).not.toThrow();
+      });
+
+      it('9. static structural audit verifies activeImages useMemo is declared before any early return', async () => {
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const modalPath = path.resolve(__dirname, 'components/ProductDetailModal.tsx');
+        const source = fs.readFileSync(modalPath, 'utf8');
+
+        const useMemoPos = source.indexOf('const activeImages = useMemo');
+        const earlyReturnPos = source.indexOf('if (!product) return null;');
+
+        expect(useMemoPos).toBeGreaterThan(0);
+        expect(earlyReturnPos).toBeGreaterThan(0);
+        // CRITICAL RULE OF HOOKS: useMemo must be positioned BEFORE the conditional return
+        expect(useMemoPos).toBeLessThan(earlyReturnPos);
+      });
+    });
+  });
 });

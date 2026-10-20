@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Product, ProductVariant } from '../types/product.ts';
 import { X, Check, ShoppingBag, Layers, AlertCircle, Plus, Minus, ImageOff } from 'lucide-react';
 
@@ -81,6 +81,33 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     };
   }, [product]);
 
+  // Resolve active gallery images based on selectedColor with graceful fallback
+  // MUST execute unconditionally before any early returns to strictly adhere to the Rules of Hooks
+  const activeImages = useMemo(() => {
+    if (!product) return [];
+
+    // 1. If detailed image metadata is available with color tags:
+    if (product.allImages && product.allImages.length > 0) {
+      if (selectedColor) {
+        const colorSpecific = product.allImages.filter(
+          (img) => img.color && img.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
+        );
+        if (colorSpecific.length > 0) {
+          return colorSpecific.map((img) => img.url);
+        }
+      }
+
+      // 2. Fallback to shared/general images without color tag
+      const sharedImages = product.allImages.filter((img) => !img.color || !img.color.trim());
+      if (sharedImages.length > 0) {
+        return sharedImages.map((img) => img.url);
+      }
+    }
+
+    // 3. Fallback to product.images array
+    return product.images && product.images.length > 0 ? product.images : [];
+  }, [product, selectedColor]);
+
   if (!product) return null;
 
   // Resolve matching variant from authoritative variant list
@@ -115,8 +142,17 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     setTimeout(() => setAddedSuccess(false), 2000);
   };
 
-  const currentImage = product.images && product.images.length > 0
-    ? product.images[selectedImageIndex] || product.images[0]
+  // Color change handler that resets gallery index and clears image errors
+  const handleColorChange = (newColor: string) => {
+    if (newColor !== selectedColor) {
+      setSelectedColor(newColor);
+      setSelectedImageIndex(0);
+      setImageError(false);
+    }
+  };
+
+  const currentImage = activeImages.length > 0
+    ? activeImages[selectedImageIndex] || activeImages[0]
     : '';
 
   return (
@@ -170,11 +206,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </div>
 
             {/* Thumbnail selector */}
-            {product.images && product.images.length > 1 && (
+            {activeImages.length > 1 && (
               <div className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto pb-1" aria-label="Product thumbnail gallery">
-                {product.images.map((img, idx) => (
+                {activeImages.map((img, idx) => (
                   <button
-                    key={idx}
+                    key={`${selectedColor}-${idx}-${img}`}
                     type="button"
                     onClick={() => {
                       setSelectedImageIndex(idx);
@@ -287,7 +323,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                         type="button"
                         role="radio"
                         aria-checked={selectedColor === c.name}
-                        onClick={() => setSelectedColor(c.name)}
+                        onClick={() => handleColorChange(c.name)}
                         title={c.name}
                         className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
                           selectedColor === c.name

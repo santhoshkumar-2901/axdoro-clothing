@@ -16,6 +16,8 @@ interface AdminHeaderProps {
 const tabTitles: Record<AdminTab, string> = {
   metrics: 'Dashboard Metrics & Telemetry',
   products: 'Product Catalogue & Status',
+  categories: 'Category Management & Storefront Routes',
+  collections: 'Homepage Collections & Curated Showcase',
   stock: 'Inventory Reconciliation & Stock',
   orders: 'Customer Orders & Fulfillment',
   enquiries: 'Customer Enquiries & Drive Sync',

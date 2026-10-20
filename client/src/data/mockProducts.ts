@@ -24,6 +24,32 @@ export const MOCK_PRODUCTS: Product[] = [
       'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=800&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800&auto=format&fit=crop&q=80',
     ],
+    allImages: [
+      {
+        id: 'img-001-pb-1',
+        url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
+        altText: 'AXDORO Classic Crewneck T-Shirt Front View',
+        displayOrder: 0,
+        isPrimary: true,
+        color: 'Pitch Black',
+      },
+      {
+        id: 'img-001-pb-2',
+        url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=800&auto=format&fit=crop&q=80',
+        altText: 'AXDORO Classic Crewneck T-Shirt Detail View',
+        displayOrder: 1,
+        isPrimary: false,
+        color: 'Pitch Black',
+      },
+      {
+        id: 'img-001-iw-1',
+        url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800&auto=format&fit=crop&q=80',
+        altText: 'AXDORO Classic Crewneck T-Shirt Back Profile',
+        displayOrder: 2,
+        isPrimary: false,
+        color: 'Ice White',
+      },
+    ],
     sizes: ['S', 'M', 'L', 'XL', 'XXL'],
     colors: [
       { name: 'Pitch Black', hex: '#0f0f14' },
@@ -189,7 +215,6 @@ export const MOCK_PRODUCTS: Product[] = [
     price: 1499,
     originalPrice: 1899,
     images: [
-      'https://images.unsplash.com/photo-1620012253295-c15c429f66bf?w=800&auto=format&fit=crop&q=80',
       'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop&q=80',
     ],
     sizes: ['38 (S)', '40 (M)', '42 (L)', '44 (XL)'],

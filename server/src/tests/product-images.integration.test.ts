@@ -512,5 +512,132 @@ describe('Product Image Management & Cloudinary Integration Tests (axdoro_test)'
         expect(protoRes.body.error).toContain('Unsupported protocol');
       });
     });
+
+    describe('Color Variant Image Association & Validation (Phase 2)', () => {
+      beforeEach(async () => {
+        // Add a second variant with color 'Pitch Black'
+        await testPool.query(
+          `INSERT INTO product_variants (product_id, size, color, sku, price_paise, stock_quantity)
+           VALUES ($1, 'L', 'Pitch Black', 'AX-MIN-TEE-L-PB', 199900, 15);`,
+          [productId]
+        );
+      });
+
+      it('associates an uploaded/direct image with a valid variant color upon creation', async () => {
+        const res = await request(app)
+          .post(`/api/admin/products/${productId}/images`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800',
+            altText: 'Charcoal Tee Front',
+            color: 'Charcoal',
+          });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data.color).toBe('Charcoal');
+
+        // Verify in DB
+        const dbRes = await testPool.query(`SELECT color FROM product_images WHERE id = $1;`, [res.body.data.id]);
+        expect(dbRes.rows[0].color).toBe('Charcoal');
+
+        // Verify in product details GET
+        const detailRes = await request(app)
+          .get(`/api/admin/products/${productId}`)
+          .set('Authorization', `Bearer ${adminToken}`);
+        expect(detailRes.status).toBe(200);
+        const imageFromDetails = detailRes.body.data.images.find((i: any) => i.id === res.body.data.id);
+        expect(imageFromDetails.color).toBe('Charcoal');
+      });
+
+      it('rejects image creation with an invalid variant color not present on the product', async () => {
+        const res = await request(app)
+          .post(`/api/admin/products/${productId}/images`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800',
+            color: 'NonExistentNeonPink',
+          });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toContain('INVALID_COLOR');
+      });
+
+      it('updates an existing image to a different valid variant color via PATCH', async () => {
+        // 1. Create image with color 'Charcoal'
+        const createRes = await request(app)
+          .post(`/api/admin/products/${productId}/images`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800',
+            color: 'Charcoal',
+          });
+        const imageId = createRes.body.data.id;
+
+        // 2. Update to 'Pitch Black'
+        const patchRes = await request(app)
+          .patch(`/api/admin/products/${productId}/images/${imageId}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            color: 'Pitch Black',
+            altText: 'Updated to Pitch Black Tee',
+          });
+
+        expect(patchRes.status).toBe(200);
+        expect(patchRes.body.data.color).toBe('Pitch Black');
+        expect(patchRes.body.data.altText).toBe('Updated to Pitch Black Tee');
+
+        // Verify DB persistence
+        const dbRes = await testPool.query(`SELECT color, alt_text FROM product_images WHERE id = $1;`, [imageId]);
+        expect(dbRes.rows[0].color).toBe('Pitch Black');
+        expect(dbRes.rows[0].alt_text).toBe('Updated to Pitch Black Tee');
+      });
+
+      it('allows clearing the color association to make the image shared/general', async () => {
+        // 1. Create image with color 'Charcoal'
+        const createRes = await request(app)
+          .post(`/api/admin/products/${productId}/images`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800',
+            color: 'Charcoal',
+          });
+        const imageId = createRes.body.data.id;
+
+        // 2. Clear color via null
+        const patchRes = await request(app)
+          .patch(`/api/admin/products/${productId}/images/${imageId}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            color: null,
+          });
+
+        expect(patchRes.status).toBe(200);
+        expect(patchRes.body.data.color).toBeNull();
+
+        // Verify DB
+        const dbRes = await testPool.query(`SELECT color FROM product_images WHERE id = $1;`, [imageId]);
+        expect(dbRes.rows[0].color).toBeNull();
+      });
+
+      it('rejects PATCH color update with an invalid variant color', async () => {
+        const createRes = await request(app)
+          .post(`/api/admin/products/${productId}/images`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800',
+          });
+        const imageId = createRes.body.data.id;
+
+        const patchRes = await request(app)
+          .patch(`/api/admin/products/${productId}/images/${imageId}`)
+          .set('Authorization', `Bearer ${adminToken}`)
+          .send({
+            color: 'InvalidColor123',
+          });
+
+        expect(patchRes.status).toBe(400);
+        expect(patchRes.body.error).toContain('INVALID_COLOR');
+      });
+    });
   });
 });

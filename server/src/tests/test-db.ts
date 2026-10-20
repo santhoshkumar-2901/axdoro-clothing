@@ -103,6 +103,30 @@ export async function truncateTestCatalogue(): Promise<void> {
 }
 
 /**
+ * Safely resets homepage collections inside axdoro_test to default state.
+ */
+export async function truncateTestCollections(): Promise<void> {
+  validateTestDatabaseTarget(testConnectionString);
+  const client = await testPool.connect();
+  try {
+    await client.query('TRUNCATE TABLE homepage_collection_products CASCADE');
+    await client.query(`
+      INSERT INTO homepage_collections (slug, title, description, display_order, is_enabled)
+      VALUES
+        ('best-sellers', 'This Month''s Best Sellers', 'Curated top-performing luxury essentials of the season.', 1, true),
+        ('signature-picks', 'Signature Picks', 'Hand-selected signature pieces defining contemporary elegance.', 2, true)
+      ON CONFLICT (slug) DO UPDATE SET
+        title = EXCLUDED.title,
+        description = EXCLUDED.description,
+        is_enabled = EXCLUDED.is_enabled,
+        display_order = EXCLUDED.display_order;
+    `);
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Safely resets admin tables inside axdoro_test.
  */
 export async function truncateTestAdmin(): Promise<void> {

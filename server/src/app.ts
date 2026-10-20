@@ -15,6 +15,8 @@ import { ordersRouter } from './routes/orders.js';
 import { enquiriesRouter } from './routes/enquiries.js';
 import { adminOrdersRouter } from './routes/admin/orders.js';
 import { adminEnquiriesRouter } from './routes/admin/enquiries.js';
+import { adminCollectionsRouter } from './routes/admin/collections.js';
+import { collectionsRouter } from './routes/collections.js';
 import { csrfProtection } from './middleware/csrf.js';
 
 export function createApp(): Express {
@@ -34,8 +36,10 @@ export function createApp(): Express {
   app.use('/api/health', healthRouter);
   app.use('/api/categories', categoriesRouter);
   app.use('/api/products', productsRouter);
+  app.use('/api/collections', collectionsRouter);
   app.use('/api/catalogue/categories', categoriesRouter);
   app.use('/api/catalogue/products', productsRouter);
+  app.use('/api/catalogue/collections', collectionsRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/enquiries', enquiriesRouter);
 
@@ -44,6 +48,7 @@ export function createApp(): Express {
   app.use('/api/admin/auth', adminAuthRouter);
   app.use('/api/admin/products', adminProductsRouter);
   app.use('/api/admin/categories', adminCategoriesRouter);
+  app.use('/api/admin/collections', adminCollectionsRouter);
   app.use('/api/admin/inventory', adminInventoryRouter);
   app.use('/api/admin/metrics', adminMetricsRouter);
   app.use('/api/admin/audit-logs', adminAuditLogsRouter);

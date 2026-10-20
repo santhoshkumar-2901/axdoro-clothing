@@ -43,4 +43,39 @@ describe('AXDORO Storefront Demo Data & State Logic', () => {
     expect(subtotalPaise).toBe(269700);
     expect(formatPaiseToINR(subtotalPaise)).toBe('₹2,697');
   });
+
+  it('correctly detects category routes and extracts category slug from URL pathnames', () => {
+    function parseCategoryRoute(pathname: string): { isCategoryRoute: boolean; categorySlug: string } {
+      const isCategoryRoute = pathname.startsWith('/category/');
+      const categorySlug = isCategoryRoute
+        ? decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/.*$/, ''))
+        : '';
+      return { isCategoryRoute, categorySlug };
+    }
+
+    expect(parseCategoryRoute('/category/t-shirts')).toEqual({
+      isCategoryRoute: true,
+      categorySlug: 't-shirts',
+    });
+    expect(parseCategoryRoute('/category/shirts')).toEqual({
+      isCategoryRoute: true,
+      categorySlug: 'shirts',
+    });
+    expect(parseCategoryRoute('/category/casual-shorts')).toEqual({
+      isCategoryRoute: true,
+      categorySlug: 'casual-shorts',
+    });
+    expect(parseCategoryRoute('/category/shirts/')).toEqual({
+      isCategoryRoute: true,
+      categorySlug: 'shirts',
+    });
+    expect(parseCategoryRoute('/admin/categories')).toEqual({
+      isCategoryRoute: false,
+      categorySlug: '',
+    });
+    expect(parseCategoryRoute('/')).toEqual({
+      isCategoryRoute: false,
+      categorySlug: '',
+    });
+  });
 });

@@ -21,6 +21,7 @@ import {
   adminGetProductDetails,
   adminGetUploadSignature,
   adminAddProductImage,
+  adminUpdateProductImage,
   adminSetPrimaryProductImage,
   adminReorderProductImages,
   adminDeleteProductImage,
@@ -53,16 +54,22 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   const [altText, setAltText] = useState<string>('');
   const [manualUrl, setManualUrl] = useState<string>('');
   const [useManualUrl, setUseManualUrl] = useState<boolean>(false);
+  const [selectedColor, setSelectedColor] = useState<string>('');
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load product images
+  // Load product images and available variant colors
   const loadImages = async () => {
     try {
       setIsLoading(true);
       setErrorMsg(null);
       const details = await adminGetProductDetails(productId);
       setImages(details.images || []);
+      const uniqueColors = Array.from(
+        new Set((details.variants || []).filter((v) => v.isActive && v.color).map((v) => v.color.trim()))
+      );
+      setAvailableColors(uniqueColors);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to load images');
     } finally {
@@ -121,11 +128,13 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
         await adminAddProductImage(productId, {
           imageUrl: manualUrl.trim(),
           altText: altText.trim() || undefined,
+          color: selectedColor.trim() || undefined,
         });
 
         setSuccessMsg('Product image added successfully.');
         setManualUrl('');
         setAltText('');
+        setSelectedColor('');
         await loadImages();
         onImagesUpdated?.();
         return;
@@ -177,7 +186,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
 
       const cloudData = await cloudRes.json();
 
-      // Step 3: Register image in PostgreSQL with Cloudinary metadata
+      // Step 3: Register image in PostgreSQL with Cloudinary metadata and color association
       await adminAddProductImage(productId, {
         imageUrl: cloudData.secure_url || cloudData.url,
         publicId: cloudData.public_id,
@@ -186,17 +195,37 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
         height: cloudData.height,
         format: cloudData.format,
         bytes: cloudData.bytes,
+        color: selectedColor.trim() || undefined,
       });
 
       setSuccessMsg('Image uploaded and linked successfully.');
       handleClearSelectedFile();
       setAltText('');
+      setSelectedColor('');
       await loadImages();
       onImagesUpdated?.();
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleUpdateImageColor = async (imageId: string, newColor: string) => {
+    setActionInProgressId(imageId);
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      await adminUpdateProductImage(productId, imageId, {
+        color: newColor.trim() || null,
+      });
+      setSuccessMsg('Image color association updated.');
+      await loadImages();
+      onImagesUpdated?.();
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to update image color');
+    } finally {
+      setActionInProgressId(null);
     }
   };
 
@@ -368,6 +397,22 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
                             {img.width && img.height ? ` • ${img.width}x${img.height}` : null}
                             {img.format ? ` • ${img.format.toUpperCase()}` : null}
                           </p>
+                          {/* Color Variant Association */}
+                          <div className="flex items-center gap-1.5 pt-1">
+                            <span className="text-[10px] font-bold uppercase text-axdoro-text-muted">Color:</span>
+                            <select
+                              value={img.color || ''}
+                              disabled={actionInProgressId === img.id}
+                              onChange={(e) => handleUpdateImageColor(img.id, e.target.value)}
+                              className="text-xs h-6 px-1.5 rounded border border-axdoro-border bg-axdoro-surface text-axdoro-charcoal focus:ring-1 focus:ring-axdoro-accent cursor-pointer"
+                              title="Assign image to variant color"
+                            >
+                              <option value="">Shared / All Colors</option>
+                              {availableColors.map((c) => (
+                                <option key={c} value={c}>{c}</option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       </div>
 
@@ -535,6 +580,25 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
                     className="text-xs"
                   />
                 </div>
+
+                {availableColors.length > 0 && (
+                  <div className="space-y-1">
+                    <Label htmlFor="image-color-variant" className="text-xs">
+                      Assign to Color Variant (Optional)
+                    </Label>
+                    <select
+                      id="image-color-variant"
+                      value={selectedColor}
+                      onChange={(e) => setSelectedColor(e.target.value)}
+                      className="w-full text-xs h-9 px-2.5 rounded-md border border-axdoro-border bg-axdoro-surface text-axdoro-charcoal focus:ring-1 focus:ring-axdoro-accent"
+                    >
+                      <option value="">Shared / All Colors</option>
+                      {availableColors.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="flex justify-end pt-1">
                   <Button

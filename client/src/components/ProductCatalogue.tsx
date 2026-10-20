@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Product, ProductCategory, SortOption } from '../types/product.ts';
+import { Product, ProductCategory, Category, SortOption } from '../types/product.ts';
 import { fetchProducts, ProductsResponse } from '../api/catalogue.ts';
 import { ProductCard } from './ProductCard.tsx';
 import { Search, SlidersHorizontal, RotateCcw, AlertTriangle, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
@@ -9,6 +9,7 @@ interface ProductCatalogueProps {
   onSelectCategory: (cat: ProductCategory | 'all') => void;
   onQuickView: (product: Product) => void;
   onAddToCart: (product: Product, size: string, color: string) => void;
+  categories?: Category[];
 }
 
 export const ProductCatalogue: React.FC<ProductCatalogueProps> = ({
@@ -16,6 +17,7 @@ export const ProductCatalogue: React.FC<ProductCatalogueProps> = ({
   onSelectCategory,
   onQuickView,
   onAddToCart,
+  categories = [],
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -141,30 +143,50 @@ export const ProductCatalogue: React.FC<ProductCatalogueProps> = ({
             >
               All Styles
             </button>
-            <button
-              role="tab"
-              aria-selected={selectedCategory === 't-shirts'}
-              onClick={() => onSelectCategory('t-shirts')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
-                selectedCategory === 't-shirts'
-                  ? 'bg-axdoro-charcoal text-white shadow-subtle'
-                  : 'bg-axdoro-surface text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-surface-muted'
-              }`}
-            >
-              T-Shirts (140 GSM)
-            </button>
-            <button
-              role="tab"
-              aria-selected={selectedCategory === 'shirts'}
-              onClick={() => onSelectCategory('shirts')}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
-                selectedCategory === 'shirts'
-                  ? 'bg-axdoro-charcoal text-white shadow-subtle'
-                  : 'bg-axdoro-surface text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-surface-muted'
-              }`}
-            >
-              Shirts
-            </button>
+            {categories.length > 0 ? (
+              categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  role="tab"
+                  aria-selected={selectedCategory === cat.slug}
+                  onClick={() => onSelectCategory(cat.slug)}
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                    selectedCategory === cat.slug
+                      ? 'bg-axdoro-charcoal text-white shadow-subtle'
+                      : 'bg-axdoro-surface text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-surface-muted'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))
+            ) : (
+              <>
+                <button
+                  role="tab"
+                  aria-selected={selectedCategory === 't-shirts'}
+                  onClick={() => onSelectCategory('t-shirts')}
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                    selectedCategory === 't-shirts'
+                      ? 'bg-axdoro-charcoal text-white shadow-subtle'
+                      : 'bg-axdoro-surface text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-surface-muted'
+                  }`}
+                >
+                  T-Shirts
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={selectedCategory === 'shirts'}
+                  onClick={() => onSelectCategory('shirts')}
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                    selectedCategory === 'shirts'
+                      ? 'bg-axdoro-charcoal text-white shadow-subtle'
+                      : 'bg-axdoro-surface text-axdoro-text-muted hover:text-axdoro-charcoal border border-axdoro-border hover:bg-axdoro-surface-muted'
+                  }`}
+                >
+                  Shirts
+                </button>
+              </>
+            )}
           </div>
 
           {/* Search & Sort Controls */}

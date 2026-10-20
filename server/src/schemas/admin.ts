@@ -142,6 +142,7 @@ export const productImageSchema = z.object({
   height: z.coerce.number().int().positive().optional().nullable(),
   format: z.string().trim().max(20).optional().nullable(),
   bytes: z.coerce.number().int().positive().optional().nullable(),
+  color: z.string().trim().max(50).optional().nullable(),
 });
 
 export const productImageAddSchema = z.object({
@@ -165,6 +166,12 @@ export const productImageAddSchema = z.object({
   height: z.coerce.number().int().positive().optional(),
   format: z.string().trim().max(20).optional(),
   bytes: z.coerce.number().int().positive().optional(),
+  color: z.string().trim().max(50).optional().nullable(),
+});
+
+export const productImageUpdateSchema = z.object({
+  color: z.string().trim().max(50).optional().nullable(),
+  altText: z.string().trim().max(255).optional().nullable(),
 });
 
 export const productImageReorderSchema = z.object({
@@ -230,4 +237,15 @@ export const adminProductsQuerySchema = z.object({
   status: z.enum(['draft', 'published', 'archived', 'all']).default('all'),
   categoryId: z.string().uuid().optional(),
   search: z.string().trim().optional(),
+});
+
+export const homepageCollectionUpdateSchema = z.object({
+  title: z.string().trim().min(1, 'Title cannot be empty').max(150, 'Title cannot exceed 150 characters').optional(),
+  description: z.string().trim().max(1000).optional().nullable(),
+  isEnabled: z.boolean().optional(),
+  displayOrder: z.coerce.number().int().optional(),
+});
+
+export const collectionProductsUpdateSchema = z.object({
+  productIds: z.array(z.string().uuid('Invalid product ID')),
 });

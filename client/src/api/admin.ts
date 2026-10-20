@@ -217,6 +217,51 @@ export async function adminGetCategories(): Promise<AdminCategory[]> {
   return json.data || json.categories || [];
 }
 
+export interface CreateCategoryPayload {
+  slug: string;
+  name: string;
+  description?: string;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export interface UpdateCategoryPayload {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+  displayOrder?: number;
+  isActive?: boolean;
+}
+
+export async function adminCreateCategory(
+  payload: CreateCategoryPayload
+): Promise<AdminCategory> {
+  const res = await fetch('/api/admin/categories', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to create category');
+  return json.data || json.category;
+}
+
+export async function adminUpdateCategory(
+  id: string,
+  payload: UpdateCategoryPayload
+): Promise<void> {
+  const res = await fetch(`/api/admin/categories/${id}`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to update category');
+}
+
+
 export interface CreateProductVariantPayload {
   size: string;
   color: string;
@@ -238,6 +283,7 @@ export interface CreateProductImagePayload {
   height?: number | null;
   format?: string | null;
   bytes?: number | null;
+  color?: string | null;
 }
 
 export interface CreateProductPayload {
@@ -512,6 +558,7 @@ export interface ProductImage {
   height?: number | null;
   format?: string | null;
   bytes?: number | null;
+  color?: string | null;
   createdAt?: string;
 }
 
@@ -578,6 +625,7 @@ export async function adminAddProductImage(
     height?: number;
     format?: string;
     bytes?: number;
+    color?: string | null;
   }
 ): Promise<ProductImage> {
   const res = await fetch(`/api/admin/products/${productId}/images`, {
@@ -588,6 +636,25 @@ export async function adminAddProductImage(
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.error || json.message || 'Failed to add product image');
+  return json.data;
+}
+
+export async function adminUpdateProductImage(
+  productId: string,
+  imageId: string,
+  data: {
+    color?: string | null;
+    altText?: string | null;
+  }
+): Promise<ProductImage> {
+  const res = await fetch(`/api/admin/products/${productId}/images/${imageId}`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.error || json.message || 'Failed to update product image');
   return json.data;
 }
 
@@ -629,4 +696,51 @@ export async function adminDeleteProductImage(
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to delete product image');
+}
+
+export interface UpdateHomepageCollectionPayload {
+  title?: string;
+  description?: string | null;
+  isEnabled?: boolean;
+  displayOrder?: number;
+}
+
+export async function adminGetHomepageCollections(): Promise<import('../types/product.js').AdminHomepageCollection[]> {
+  const res = await fetch('/api/admin/collections', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch homepage collections');
+  return json.data || json.collections || [];
+}
+
+export async function adminUpdateHomepageCollection(
+  id: string,
+  payload: UpdateHomepageCollectionPayload
+): Promise<import('../types/product.js').AdminHomepageCollection> {
+  const res = await fetch(`/api/admin/collections/${id}`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to update homepage collection');
+  return json.data || json.collection;
+}
+
+export async function adminUpdateCollectionProducts(
+  collectionId: string,
+  productIds: string[]
+): Promise<import('../types/product.js').AdminHomepageCollection> {
+  const res = await fetch(`/api/admin/collections/${collectionId}/products`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ productIds }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to update collection products');
+  return json.data || json.collection;
 }

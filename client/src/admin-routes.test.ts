@@ -18,6 +18,7 @@ describe('Admin Portal Route Isolation & UI Helpers (Phase 2)', () => {
   it('correctly maps URL pathnames to supported Admin tabs', () => {
     function getTabFromPath(pathname: string): string {
       const normalized = pathname.replace(/\/+$/, '');
+      if (normalized.endsWith('/categories')) return 'categories';
       if (normalized.endsWith('/products')) return 'products';
       if (normalized.endsWith('/stock')) return 'stock';
       if (normalized.endsWith('/orders')) return 'orders';
@@ -29,6 +30,7 @@ describe('Admin Portal Route Isolation & UI Helpers (Phase 2)', () => {
     expect(getTabFromPath('/admin')).toBe('metrics');
     expect(getTabFromPath('/admin/')).toBe('metrics');
     expect(getTabFromPath('/admin/metrics')).toBe('metrics');
+    expect(getTabFromPath('/admin/categories')).toBe('categories');
     expect(getTabFromPath('/admin/products')).toBe('products');
     expect(getTabFromPath('/admin/stock')).toBe('stock');
     expect(getTabFromPath('/admin/orders')).toBe('orders');

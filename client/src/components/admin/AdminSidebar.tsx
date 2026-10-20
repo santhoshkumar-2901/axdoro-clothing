@@ -2,6 +2,8 @@ import React from 'react';
 import {
   BarChart3,
   Package,
+  FolderTree,
+  Sparkles,
   Sliders,
   ShoppingBag,
   Inbox,
@@ -14,7 +16,7 @@ import {
 import { AdminUser } from '../../api/admin.ts';
 import { Badge } from '../ui/badge.tsx';
 
-export type AdminTab = 'metrics' | 'products' | 'stock' | 'orders' | 'enquiries' | 'audit';
+export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'stock' | 'orders' | 'enquiries' | 'audit';
 
 interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -38,6 +40,8 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   const navItems: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'metrics', label: 'Dashboard Metrics', icon: BarChart3 },
     { id: 'products', label: 'Product Catalogue', icon: Package },
+    { id: 'categories', label: 'Categories', icon: FolderTree },
+    { id: 'collections', label: 'Collections', icon: Sparkles },
     { id: 'stock', label: 'Inventory & Stock', icon: Sliders },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'enquiries', label: 'Enquiries & Drive Sync', icon: Inbox },

@@ -12,12 +12,17 @@ import {
   adminReorderProductImages,
   adminDeleteProductImage,
   adminGetCategories,
+  adminCreateCategory,
+  adminUpdateCategory,
   adminCreateProduct,
   adminGetProductDetails,
   adminUpdateProduct,
   adminCreateVariant,
   adminUpdateVariant,
   adminDeleteProduct,
+  adminGetHomepageCollections,
+  adminUpdateHomepageCollection,
+  adminUpdateCollectionProducts,
   getCsrfToken,
   setCsrfToken,
 } from './admin.ts';
@@ -353,6 +358,67 @@ describe('Admin API Client Session Security & CSRF (Phase 3C)', () => {
       await expect(adminGetCategories()).rejects.toThrow('Database connection failed');
     });
 
+    it('adminCreateCategory sends POST /api/admin/categories with CSRF header and payload', async () => {
+      setCsrfToken('csrf-token-cat-123');
+      const mockPayload = {
+        name: 'Shorts',
+        slug: 'shorts',
+        description: 'Tailored casual shorts',
+        displayOrder: 3,
+        isActive: true,
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          data: { id: 'cat-3', ...mockPayload, productCount: 0, createdAt: '2026-10-20T00:00:00Z' },
+        }),
+      } as any);
+
+      const created = await adminCreateCategory(mockPayload);
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': 'csrf-token-cat-123',
+        },
+        credentials: 'include',
+        body: JSON.stringify(mockPayload),
+      });
+      expect(created.id).toBe('cat-3');
+      expect(created.name).toBe('Shorts');
+    });
+
+    it('adminUpdateCategory sends PUT /api/admin/categories/:id with CSRF header and payload', async () => {
+      setCsrfToken('csrf-token-cat-update');
+      const updatePayload = {
+        name: 'Casual Shorts',
+        displayOrder: 4,
+        isActive: true,
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'success', message: 'Category updated successfully' }),
+      } as any);
+
+      await adminUpdateCategory('cat-3', updatePayload);
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/categories/cat-3', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-Token': 'csrf-token-cat-update',
+        },
+        credentials: 'include',
+        body: JSON.stringify(updatePayload),
+      });
+    });
+
     it('adminCreateProduct sends POST /api/admin/products with CSRF token and payload', async () => {
       setCsrfToken('csrf-token-xyz');
 
@@ -671,6 +737,100 @@ describe('Admin API Client Session Security & CSRF (Phase 3C)', () => {
       } as any);
 
       await expect(adminDeleteProduct('prod-nonexistent')).rejects.toThrow('Product not found');
+    });
+  });
+
+  describe('Homepage Collections API (Phase 2)', () => {
+    it('adminGetHomepageCollections fetches collections with credentials', async () => {
+      const mockCollections = [
+        {
+          id: 'col-1',
+          slug: 'best-sellers',
+          title: "This Month's Best Sellers",
+          description: 'Top picks',
+          isEnabled: true,
+          displayOrder: 1,
+          products: [],
+        },
+      ];
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'success', data: mockCollections }),
+      } as any);
+
+      const res = await adminGetHomepageCollections();
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/collections', {
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      });
+      expect(res).toEqual(mockCollections);
+    });
+
+    it('adminUpdateHomepageCollection sends PUT with CSRF and updates title and visibility', async () => {
+      setCsrfToken('csrf-token-abc');
+
+      const mockUpdated = {
+        id: 'col-1',
+        slug: 'best-sellers',
+        title: 'New Best Sellers',
+        isEnabled: false,
+        products: [],
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'success', data: mockUpdated }),
+      } as any);
+
+      const res = await adminUpdateHomepageCollection('col-1', {
+        title: 'New Best Sellers',
+        isEnabled: false,
+      });
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/collections/col-1', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-Token': 'csrf-token-abc',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ title: 'New Best Sellers', isEnabled: false }),
+      });
+      expect(res).toEqual(mockUpdated);
+    });
+
+    it('adminUpdateCollectionProducts sends PUT with ordered productIds', async () => {
+      setCsrfToken('csrf-token-xyz');
+
+      const mockUpdated = {
+        id: 'col-2',
+        slug: 'signature-picks',
+        title: 'Signature Picks',
+        isEnabled: true,
+        products: [{ id: 'prod-1' }, { id: 'prod-2' }],
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: 'success', data: mockUpdated }),
+      } as any);
+
+      const res = await adminUpdateCollectionProducts('col-2', ['prod-1', 'prod-2']);
+
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/collections/col-2/products', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-Token': 'csrf-token-xyz',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ productIds: ['prod-1', 'prod-2'] }),
+      });
+      expect(res).toEqual(mockUpdated);
     });
   });
 });

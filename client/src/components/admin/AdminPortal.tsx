@@ -38,6 +38,8 @@ import { AdminHeader } from './AdminHeader.tsx';
 import { AdminLoginView } from './AdminLoginView.tsx';
 import { StockAdjustmentDialog } from './StockAdjustmentDialog.tsx';
 import { ProductImageModal } from './ProductImageModal.tsx';
+import { CategoryManagementView } from './CategoryManagementView.tsx';
+import { CollectionManagementView } from './CollectionManagementView.tsx';
 import { ProductCreateDialog } from './ProductCreateDialog.tsx';
 import { ProductEditDialog } from './ProductEditDialog.tsx';
 import {
@@ -59,6 +61,8 @@ interface AdminPortalProps {
 
 function getTabFromPath(pathname: string): AdminTab {
   const normalized = pathname.replace(/\/+$/, '');
+  if (normalized.endsWith('/categories')) return 'categories';
+  if (normalized.endsWith('/collections')) return 'collections';
   if (normalized.endsWith('/products')) return 'products';
   if (normalized.endsWith('/stock')) return 'stock';
   if (normalized.endsWith('/orders')) return 'orders';
@@ -680,6 +684,22 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </TableBody>
               </Table>
             </div>
+          ) : activeTab === 'categories' ? (
+            /* 2.5. Category Management Tab */
+            <CategoryManagementView
+              onCategoryMutated={() => {
+                loadTabData();
+                onCatalogueMutated?.();
+              }}
+            />
+          ) : activeTab === 'collections' ? (
+            /* 2.6. Homepage Collections Tab */
+            <CollectionManagementView
+              onCollectionMutated={() => {
+                loadTabData();
+                onCatalogueMutated?.();
+              }}
+            />
           ) : activeTab === 'stock' ? (
             /* 3. Stock Adjustment Tab */
             <div className="space-y-4">

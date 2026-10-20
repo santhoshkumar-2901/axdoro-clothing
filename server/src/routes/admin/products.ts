@@ -7,6 +7,7 @@ import {
   productVariantSchema,
   productVariantUpdateSchema,
   productImageAddSchema,
+  productImageUpdateSchema,
   productImageReorderSchema,
 } from '../../schemas/admin.js';
 import {
@@ -20,6 +21,7 @@ import {
   adminCreateVariant,
   adminUpdateVariant,
   adminAddProductImage,
+  adminUpdateProductImage,
   adminSetPrimaryImage,
   adminReorderProductImages,
   adminDeleteProductImage,
@@ -385,6 +387,57 @@ adminProductsRouter.post('/:id/images', async (req: Request, res: Response, next
         status: 'error',
         error: 'Product not found',
         message: 'Product not found',
+      });
+      return;
+    }
+    if (msg.includes('INVALID_COLOR')) {
+      res.status(400).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
+    next(err);
+  }
+});
+
+// PATCH /api/admin/products/:id/images/:imageId
+adminProductsRouter.patch('/:id/images/:imageId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parseResult = productImageUpdateSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid image update payload: ' + parseResult.error.errors.map((e) => e.message).join(', '),
+        message: 'Invalid image update payload',
+        errors: parseResult.error.errors,
+      });
+      return;
+    }
+
+    const updated = await adminUpdateProductImage(req.params.id, req.params.imageId, parseResult.data, req.admin!);
+    if (!updated) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Image not found for this product',
+        message: 'Image not found for this product',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: updated,
+      message: 'Product image updated successfully',
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('INVALID_COLOR')) {
+      res.status(400).json({
+        status: 'error',
+        error: msg,
+        message: msg,
       });
       return;
     }

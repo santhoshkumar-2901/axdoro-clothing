@@ -135,16 +135,19 @@ export async function seedLocalCatalogue(): Promise<void> {
             url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800&auto=format&fit=crop&q=80',
             alt: 'AXDORO Classic Crewneck T-Shirt Front View',
             isPrimary: true,
+            color: 'Pitch Black',
           },
           {
             url: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=800&auto=format&fit=crop&q=80',
             alt: 'AXDORO Classic Crewneck T-Shirt Detail View',
             isPrimary: false,
+            color: 'Pitch Black',
           },
           {
             url: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=800&auto=format&fit=crop&q=80',
             alt: 'AXDORO Classic Crewneck T-Shirt Back Profile',
             isPrimary: false,
+            color: 'Ice White',
           },
         ],
         variants: [
@@ -315,14 +318,9 @@ export async function seedLocalCatalogue(): Promise<void> {
         isNewArrival: false,
         images: [
           {
-            url: 'https://images.unsplash.com/photo-1620012253295-c15c429f66bf?w=800&auto=format&fit=crop&q=80',
+            url: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop&q=80',
             alt: 'Precision Fine Twill Formal Shirt Front',
             isPrimary: true,
-          },
-          {
-            url: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&auto=format&fit=crop&q=80',
-            alt: 'Precision Fine Twill Cuff Detail',
-            isPrimary: false,
           },
         ],
         variants: [
@@ -400,12 +398,12 @@ export async function seedLocalCatalogue(): Promise<void> {
 
       // Insert images
       for (let idx = 0; idx < p.images.length; idx++) {
-        const img = p.images[idx];
+        const img = p.images[idx] as { url: string; alt: string; isPrimary: boolean; color?: string };
         await client.query(
           `INSERT INTO product_images
-           (product_id, image_url, alt_text, display_order, is_primary)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [productId, img.url, img.alt, idx, img.isPrimary]
+           (product_id, image_url, alt_text, display_order, is_primary, color)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [productId, img.url, img.alt, idx, img.isPrimary, img.color || null]
         );
       }
     }
