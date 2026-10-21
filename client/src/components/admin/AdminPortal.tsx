@@ -543,7 +543,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
                       Total Stock Units
                     </CardDescription>
-                    <CardTitle className="text-3xl font-black text-axdoro-accent tracking-tight">
+                    <CardTitle className="text-3xl font-black text-axdoro-charcoal tracking-tight">
                       {metrics.variants.totalStockUnits}
                     </CardTitle>
                   </CardHeader>
@@ -554,12 +554,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </CardContent>
                 </Card>
 
-                <Card className={metrics.inventoryAlerts.lowStockCount > 0 ? 'border-amber-300 bg-amber-50/60 shadow-sm' : 'border-axdoro-border bg-axdoro-surface shadow-sm'}>
+                <Card className={`border bg-axdoro-surface shadow-sm ${metrics.inventoryAlerts.lowStockCount > 0 ? 'border-amber-500/40' : 'border-axdoro-border'}`}>
                   <CardHeader className="pb-2">
                     <CardDescription className="font-mono uppercase text-[10px] text-axdoro-text-muted">
                       Low Stock Alerts
                     </CardDescription>
-                    <CardTitle className={`text-3xl font-black tracking-tight ${metrics.inventoryAlerts.lowStockCount > 0 ? 'text-amber-800' : 'text-axdoro-charcoal'}`}>
+                    <CardTitle className={`text-3xl font-black tracking-tight ${metrics.inventoryAlerts.lowStockCount > 0 ? 'text-amber-400' : 'text-axdoro-charcoal'}`}>
                       {metrics.inventoryAlerts.lowStockCount}
                     </CardTitle>
                   </CardHeader>
@@ -573,20 +573,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
 
               {/* Critical Low Stock Warning Panel */}
               {metrics.inventoryAlerts.criticalVariants.length > 0 && (
-                <Card className="border-amber-300 bg-amber-50/70 shadow-sm">
+                <Card className="border border-amber-500/30 bg-axdoro-surface shadow-sm">
                   <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-700" />
-                      <CardTitle className="text-sm font-bold text-amber-950">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      <CardTitle className="text-sm font-bold text-axdoro-charcoal">
                         Critical Low Stock Items ({metrics.inventoryAlerts.lowStockCount})
                       </CardTitle>
                     </div>
-                    <CardDescription className="text-amber-800/80 text-xs">
+                    <CardDescription className="text-axdoro-text-muted text-xs">
                       Variants requiring physical warehouse review and inventory replenishment.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="divide-y divide-amber-200/60">
+                    <div className="divide-y divide-axdoro-border">
                       {metrics.inventoryAlerts.criticalVariants.map((crit) => (
                         <div
                           key={crit.variantId}
