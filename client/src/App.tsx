@@ -4,8 +4,7 @@ import { fetchProductBySlug, fetchCategories } from './api/catalogue.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
 import { CategoryShowcase } from './components/CategoryShowcase.tsx';
-import { HomepageCollections } from './components/HomepageCollections.tsx';
-import { ProductCatalogue } from './components/ProductCatalogue.tsx';
+import { HomepageCollectionSection } from './components/HomepageCollections.tsx';
 import { CategoryPage } from './components/CategoryPage.tsx';
 import { EditorialSection } from './components/EditorialSection.tsx';
 import { Newsletter } from './components/Newsletter.tsx';
@@ -128,7 +127,7 @@ export default function App(): React.JSX.Element {
   };
 
   const handleScrollToShop = () => {
-    const el = document.getElementById('shop-section');
+    const el = document.getElementById('category-showcase') || document.getElementById('collection-best-sellers');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth' });
     }
@@ -215,9 +214,11 @@ export default function App(): React.JSX.Element {
               onNavigate={navigate}
             />
 
-            {/* 4.5. Admin-Curated Homepage Collections */}
-            <HomepageCollections
-              key={`collections-${catalogueVersion}`}
+            {/* 4.5. This Month's Best Sellers (Admin-Curated Section) */}
+            <HomepageCollectionSection
+              key={`best-sellers-${catalogueVersion}`}
+              slug="best-sellers"
+              badgeText="Top Sellers"
               onQuickView={handleQuickView}
               onAddToCart={handleAddToCart}
               onNavigateCategory={(cat) => {
@@ -226,17 +227,21 @@ export default function App(): React.JSX.Element {
               }}
             />
 
-            {/* 5. Product Catalogue & Filters */}
-            <ProductCatalogue
-              key={catalogueVersion}
-              selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
+            {/* 4.6. Signature Picks (Admin-Curated Section) */}
+            <HomepageCollectionSection
+              key={`signature-picks-${catalogueVersion}`}
+              slug="signature-picks"
+              badgeText="Curated Selection"
+              variant="alternate"
               onQuickView={handleQuickView}
               onAddToCart={handleAddToCart}
-              categories={categories}
+              onNavigateCategory={(cat) => {
+                setSelectedCategory(cat);
+                handleScrollToShop();
+              }}
             />
 
-            {/* 6. Editorial Brand Story & Pillars */}
+            {/* 5. Editorial Brand Story & Pillars */}
             <EditorialSection onOpenBulk={handleOpenGeneralBulk} />
 
             {/* 7. Newsletter Signup (Demo UI) */}

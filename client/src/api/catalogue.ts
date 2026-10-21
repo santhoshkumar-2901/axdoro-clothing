@@ -138,3 +138,34 @@ export async function fetchHomepageCollections(): Promise<HomepageCollection[]> 
     })),
   }));
 }
+
+export async function fetchHomepageCollectionBySlug(
+  slug: string
+): Promise<HomepageCollection | null> {
+  const response = await fetch(`/api/collections/${encodeURIComponent(slug)}`, {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Failed to fetch collection '${slug}' (HTTP ${response.status})`);
+  }
+
+  const json = await response.json();
+  const rawCol: HomepageCollection | undefined = json.data || json.collection;
+  if (!rawCol) return null;
+
+  return {
+    ...rawCol,
+    products: (rawCol.products || []).map((p: Product) => ({
+      ...p,
+      categoryLabel: p.category?.name || 'AXDORO Collection',
+    })),
+  };
+}

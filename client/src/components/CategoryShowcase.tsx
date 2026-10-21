@@ -26,7 +26,7 @@ export const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({
   onNavigate,
 }) => {
   return (
-    <section className="py-16 border-b border-axdoro-border bg-axdoro-bg">
+    <section id="category-showcase" className="py-16 border-b border-axdoro-border bg-axdoro-bg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-10 gap-4">
           <div>
