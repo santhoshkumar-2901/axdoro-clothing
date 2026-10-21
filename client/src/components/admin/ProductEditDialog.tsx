@@ -25,6 +25,7 @@ import {
   UpdateProductVariantPayload,
 } from '../../api/admin.ts';
 import { ProductImageModal } from './ProductImageModal.tsx';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 interface ProductEditDialogProps {
   productId: string | null;
@@ -73,6 +74,9 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // Global reference-counted scroll lock while product editing dialog is open
+  useScrollLock(isOpen && Boolean(productId));
+
   // Categories and loading state
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -377,14 +381,14 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
   return (
     <>
       <div
-        className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in"
+        className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-product-dialog-title"
       >
-        <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden text-axdoro-charcoal">
+        <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-4xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden text-axdoro-charcoal">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-bg/50">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-axdoro-accent/10 border border-axdoro-accent/20 flex items-center justify-center text-axdoro-accent">
                 <Layers className="w-5 h-5" />
@@ -406,7 +410,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
 
             <button
               onClick={onClose}
-              className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-bg transition-colors"
+              className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-bg transition-colors cursor-pointer"
               aria-label="Close dialog"
             >
               <X className="w-5 h-5" />
@@ -435,7 +439,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
               </div>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+            <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-6">
               {/* Error banner */}
               {formError && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 text-xs text-red-900 flex items-start gap-2.5 animate-in slide-in-from-top-2">
@@ -875,7 +879,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
           )}
 
           {/* Footer */}
-          <div className="flex items-center justify-between px-6 py-4 border-t border-axdoro-border bg-axdoro-bg/50">
+          <div className="flex items-center justify-between px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
             <Button variant="outline" size="sm" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>

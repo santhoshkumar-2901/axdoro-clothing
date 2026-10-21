@@ -266,7 +266,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 onSelectCategory('all');
               }}
-              className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
             >
               Home
             </button>
@@ -281,7 +281,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onScrollToShop();
                 }
               }}
-              className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
             >
               All Collection
             </button>
@@ -298,7 +298,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                       onScrollToShop();
                     }
                   }}
-                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                 >
                   {cat.name}
                 </button>
@@ -311,7 +311,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     if (onNavigate) onNavigate('/category/t-shirts');
                     else { onSelectCategory('t-shirts'); onScrollToShop(); }
                   }}
-                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                 >
                   T-Shirts (140 GSM)
                 </button>
@@ -321,7 +321,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     if (onNavigate) onNavigate('/category/shirts');
                     else { onSelectCategory('shirts'); onScrollToShop(); }
                   }}
-                  className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                 >
                   Shirts Collection
                 </button>
@@ -332,7 +332,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setMobileMenuOpen(false);
                 onOpenBulk();
               }}
-              className="text-left text-axdoro-accent-muted hover:text-axdoro-accent py-2.5 px-2 rounded min-h-[44px] flex items-center gap-2 font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="text-left text-axdoro-accent-muted hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center gap-2 font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
             >
               <Layers className="w-4 h-4" />
               <span>Bulk Clothing Orders</span>
@@ -342,7 +342,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setMobileMenuOpen(false);
                 onScrollToAbout();
               }}
-              className="text-left text-axdoro-text hover:text-black py-2.5 px-2 rounded min-h-[44px] flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
             >
               About AXDORO
             </button>

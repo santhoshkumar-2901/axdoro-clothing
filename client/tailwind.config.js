@@ -18,6 +18,7 @@ export default {
           border: 'var(--axdoro-border)',
           'border-strong': 'var(--axdoro-border-strong)',
           ring: 'var(--axdoro-ring)',
+          purple: 'var(--axdoro-purple)',
         },
       },
       boxShadow: {

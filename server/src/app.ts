@@ -17,6 +17,7 @@ import { adminOrdersRouter } from './routes/admin/orders.js';
 import { adminEnquiriesRouter } from './routes/admin/enquiries.js';
 import { adminCollectionsRouter } from './routes/admin/collections.js';
 import { collectionsRouter } from './routes/collections.js';
+import { adminNotificationsRouter } from './routes/admin/notifications.js';
 import { csrfProtection } from './middleware/csrf.js';
 
 export function createApp(): Express {
@@ -54,6 +55,7 @@ export function createApp(): Express {
   app.use('/api/admin/audit-logs', adminAuditLogsRouter);
   app.use('/api/admin/orders', adminOrdersRouter);
   app.use('/api/admin/enquiries', adminEnquiriesRouter);
+  app.use('/api/admin/notifications', adminNotificationsRouter);
 
   // 4. Fallback for unhandled 404 routes
   app.use((req: Request, res: Response) => {

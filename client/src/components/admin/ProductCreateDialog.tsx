@@ -22,6 +22,7 @@ import {
   CreateProductVariantPayload,
   CreateProductImagePayload,
 } from '../../api/admin.ts';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 interface ProductCreateDialogProps {
   isOpen: boolean;
@@ -73,6 +74,9 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // Global reference-counted scroll lock while product creation dialog is open
+  useScrollLock(isOpen);
+
   // Categories state
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
@@ -403,18 +407,18 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-in fade-in"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-product-dialog-title"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-6 flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-auto flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface sticky top-0 z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0 z-10">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-axdoro-charcoal text-white">
               <Plus className="w-5 h-5" />
@@ -431,7 +435,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
           <button
             onClick={onClose}
             disabled={isSubmitting}
-            className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg border border-axdoro-border hover:bg-axdoro-surface-muted transition-colors"
+            className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg border border-axdoro-border hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
@@ -439,7 +443,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
         </div>
 
         {/* Form Body Scrollable Container */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
           {/* Error Alert */}
           {errorMsg && (
             <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-red-900 animate-in fade-in">

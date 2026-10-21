@@ -65,7 +65,7 @@ export const EditorialSection: React.FC<EditorialSectionProps> = ({ onOpenBulk }
               key={idx}
               className="p-5 rounded-xl border border-axdoro-border bg-axdoro-surface hover:border-axdoro-border-strong transition-all shadow-subtle group text-center"
             >
-              <div className="w-10 h-10 rounded-lg bg-axdoro-surface-muted border border-axdoro-border text-axdoro-charcoal font-black text-base flex items-center justify-center mx-auto mb-3 group-hover:bg-axdoro-charcoal group-hover:text-white transition-colors">
+              <div className="w-10 h-10 rounded-lg bg-axdoro-surface-muted border border-axdoro-border text-axdoro-charcoal font-black text-base flex items-center justify-center mx-auto mb-3 group-hover:bg-axdoro-purple group-hover:text-white group-hover:border-axdoro-border-strong transition-colors">
                 {item.letter}
               </div>
               <h3 className="font-bold text-xs text-axdoro-charcoal mb-1">{item.word}</h3>

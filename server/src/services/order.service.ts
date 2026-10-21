@@ -44,6 +44,7 @@ export interface OrderRecord {
   updatedAt: string;
   cancelledAt: string | null;
   deliveredAt: string | null;
+  acknowledgedAt: string | null;
   items?: OrderItemSnapshot[];
   isReplay?: boolean;
 }
@@ -433,6 +434,7 @@ export async function createOrder(
         updatedAt: orderRes.rows[0].updated_at.toISOString(),
         cancelledAt: null,
         deliveredAt: null,
+        acknowledgedAt: null,
         items: createdItems,
       };
     });
@@ -703,10 +705,11 @@ export async function updateOrderStatus(
       }
     }
 
-    // 4. Update order record
+    // 4. Update order record (also marks order acknowledged if not already)
     await client.query(
       `UPDATE orders
-       SET order_status = $1, payment_status = $2, cancelled_at = $3, delivered_at = $4
+       SET order_status = $1, payment_status = $2, cancelled_at = $3, delivered_at = $4,
+           acknowledged_at = COALESCE(acknowledged_at, CURRENT_TIMESTAMP)
        WHERE id = $5`,
       [nextStatus, paymentStatus, cancelledAt, deliveredAt, orderId]
     );
@@ -730,6 +733,65 @@ export async function updateOrderStatus(
 
     return (await getOrderById(orderId, client))!;
   });
+}
+
+/**
+ * Explicitly acknowledges an order.
+ * Idempotent: does not change timestamp if already acknowledged.
+ * Does not mutate fulfillment or payment status.
+ */
+export async function acknowledgeOrder(
+  orderId: string,
+  actor: AdminUserDTO
+): Promise<OrderRecord> {
+  return await withTransaction(async (client) => {
+    const orderRes = await client.query<any>(
+      `SELECT * FROM orders WHERE id = $1 FOR UPDATE`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+
+    const order = orderRes.rows[0];
+
+    if (!order.acknowledged_at) {
+      await client.query(
+        `UPDATE orders SET acknowledged_at = CURRENT_TIMESTAMP WHERE id = $1`,
+        [orderId]
+      );
+
+      await createAuditLog({
+        adminId: actor.id,
+        adminEmail: actor.email,
+        action: 'ORDER_ACKNOWLEDGED',
+        entityType: 'order',
+        entityId: orderId,
+        details: {
+          orderNumber: order.order_number,
+          orderStatus: order.order_status,
+        },
+        client,
+      });
+    }
+
+    return (await getOrderById(orderId, client))!;
+  });
+}
+
+/**
+ * Returns count of unacknowledged orders requiring admin attention.
+ * Eligible orders: acknowledged_at IS NULL AND order_status NOT IN ('CANCELLED', 'DELIVERED').
+ */
+export async function getUnacknowledgedOrdersCount(): Promise<number> {
+  const res = await query<{ count: string }>(
+    `SELECT COUNT(*)::text as count
+     FROM orders
+     WHERE acknowledged_at IS NULL
+       AND order_status NOT IN ('CANCELLED', 'DELIVERED');`
+  );
+  return parseInt(res.rows[0]?.count || '0', 10);
 }
 
 function mapOrderRow(row: any, itemsRows: any[] = []): OrderRecord {
@@ -757,6 +819,7 @@ function mapOrderRow(row: any, itemsRows: any[] = []): OrderRecord {
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
     cancelledAt: row.cancelled_at ? new Date(row.cancelled_at).toISOString() : null,
     deliveredAt: row.delivered_at ? new Date(row.delivered_at).toISOString() : null,
+    acknowledgedAt: row.acknowledged_at ? new Date(row.acknowledged_at).toISOString() : null,
     items: itemsRows.map((it) => ({
       id: it.id,
       orderId: it.order_id,

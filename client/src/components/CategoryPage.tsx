@@ -117,7 +117,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
         </p>
         <Button
           onClick={() => onNavigate('/')}
-          className="flex items-center gap-2 bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90 px-6 py-2.5 text-xs font-semibold"
+          className="flex items-center gap-2 px-6 py-2.5 text-xs font-semibold"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Storefront</span>
@@ -257,7 +257,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
               <Button
                 onClick={() => onNavigate('/')}
                 size="sm"
-                className="bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90 text-xs"
+                className="text-xs"
               >
                 Explore Other Collections
               </Button>
@@ -294,7 +294,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
           </div>
           <Button
             onClick={onOpenBulk}
-            className="bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90 text-xs font-semibold px-5 py-2.5 flex-shrink-0"
+            className="text-xs font-semibold px-5 py-2.5 flex-shrink-0"
           >
             Submit Bulk Enquiry
           </Button>

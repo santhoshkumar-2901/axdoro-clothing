@@ -18,6 +18,8 @@ import {
   adminGetAuditLogs,
   adminGetOrders,
   adminUpdateOrderStatus,
+  adminAcknowledgeOrder,
+  adminGetBadgeCounts,
   adminGetEnquiries,
   adminGetDriveSyncStatus,
   adminTriggerDriveSync,
@@ -32,7 +34,10 @@ import {
   Trash2,
   Loader2,
   X,
+  MessageSquare,
 } from 'lucide-react';
+import { getOrderWhatsAppNotification } from '../../utils/whatsapp.ts';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 import { AdminSidebar, AdminTab } from './AdminSidebar.tsx';
 import { AdminHeader } from './AdminHeader.tsx';
 import { AdminLoginView } from './AdminLoginView.tsx';
@@ -99,8 +104,15 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   } | null>(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [acknowledgingOrderId, setAcknowledgingOrderId] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Dynamic notification badge counts for sidebar
+  const [badgeCounts, setBadgeCounts] = useState<{ orders: number; stock: number }>({
+    orders: 0,
+    stock: 0,
+  });
 
   // Stock adjustment popup state
   const [adjustingVariant, setAdjustingVariant] = useState<{
@@ -116,6 +128,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<AdminProduct | null>(null);
   const [productToDelete, setProductToDelete] = useState<AdminProduct | null>(null);
+
+  // Global reference-counted scroll lock while product deletion dialog is open
+  useScrollLock(Boolean(productToDelete));
+
   const [isDeletingProduct, setIsDeletingProduct] = useState(false);
   const [deleteProductError, setDeleteProductError] = useState<{
     message: string;
@@ -140,6 +156,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
+  // Fetch authoritative sidebar notification badge counts
+  const fetchBadgeCounts = useCallback(async () => {
+    try {
+      const counts = await adminGetBadgeCounts();
+      setBadgeCounts({
+        orders: counts.orders.unacknowledgedCount,
+        stock: counts.inventory.lowStockProductCount,
+      });
+    } catch {
+      // Fail gracefully: retain previous valid counts if network or background poll fails
+    }
+  }, []);
+
   // Check existing session on mount
   useEffect(() => {
     let isMounted = true;
@@ -162,6 +191,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const loadTabData = useCallback(async () => {
     setIsLoadingData(true);
     try {
+      fetchBadgeCounts();
       if (activeTab === 'metrics' || activeTab === 'stock') {
         const m = await adminGetMetrics();
         setMetrics(m);
@@ -191,13 +221,41 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     } finally {
       setIsLoadingData(false);
     }
-  }, [activeTab]);
+  }, [activeTab, fetchBadgeCounts]);
 
   useEffect(() => {
     if (currentUser) {
       loadTabData();
     }
   }, [currentUser, loadTabData]);
+
+  // Periodic 30s polling and focus/visibility-based refresh for badge counts
+  useEffect(() => {
+    if (!currentUser) return;
+
+    fetchBadgeCounts();
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchBadgeCounts();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchBadgeCounts();
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+      clearInterval(interval);
+    };
+  }, [currentUser, fetchBadgeCounts]);
 
   const handleLogin = async (email: string, pass: string) => {
     setLoginError(null);
@@ -310,9 +368,26 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setActionSuccess('Inventory stock updated and audit log recorded.');
       setTimeout(() => setActionSuccess(null), 3500);
       loadTabData();
+      fetchBadgeCounts();
       onCatalogueMutated?.();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update stock');
+    }
+  };
+
+  const handleAcknowledgeOrder = async (orderId: string) => {
+    setAcknowledgingOrderId(orderId);
+    try {
+      await adminAcknowledgeOrder(orderId);
+      setActionSuccess('Order acknowledged successfully.');
+      setTimeout(() => setActionSuccess(null), 3000);
+      const o = await adminGetOrders();
+      setOrders(o);
+      fetchBadgeCounts();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to acknowledge order');
+    } finally {
+      setAcknowledgingOrderId(null);
     }
   };
 
@@ -324,11 +399,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setTimeout(() => setActionSuccess(null), 3500);
       const o = await adminGetOrders();
       setOrders(o);
+      fetchBadgeCounts();
       onCatalogueMutated?.();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update order status');
     } finally {
       setUpdatingOrderId(null);
+    }
+  };
+
+  const handleNotifyCustomerWhatsApp = (order: AdminOrder) => {
+    const notification = getOrderWhatsAppNotification(order);
+    if (notification.isEligible && notification.url) {
+      window.open(notification.url, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -382,6 +465,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
         onNavigateHome={onNavigateHome}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
+        badgeCounts={badgeCounts}
       />
 
       {/* Main Administrative Dashboard Canvas */}
@@ -722,7 +806,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               Size: {item.size} &bull; Color: {item.color} &bull; SKU: {item.sku}
                             </CardDescription>
                           </div>
-                          <Badge variant="warning">{item.stockQuantity} in stock</Badge>
+                          {item.stockQuantity === 0 ? (
+                            <Badge variant="destructive" className="bg-red-600 text-white font-bold">
+                              Out of Stock
+                            </Badge>
+                          ) : (
+                            <Badge variant="warning">{item.stockQuantity} in stock</Badge>
+                          )}
                         </div>
                       </CardHeader>
                       <CardFooter className="pt-2 flex justify-end">
@@ -783,7 +873,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     {orders.map((order) => (
                       <TableRow key={order.id}>
                         <TableCell className="font-mono font-bold text-axdoro-charcoal">
-                          {order.orderNumber}
+                          <div className="flex items-center gap-2">
+                            <span>{order.orderNumber}</span>
+                            {!order.acknowledgedAt &&
+                              order.orderStatus !== 'CANCELLED' &&
+                              order.orderStatus !== 'DELIVERED' && (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-xs"
+                                  title="Unacknowledged new order"
+                                  data-testid={`new-badge-${order.id}`}
+                                >
+                                  NEW
+                                </span>
+                              )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="font-semibold text-axdoro-charcoal">{order.customerName}</div>
@@ -802,19 +905,71 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <select
-                            disabled={updatingOrderId === order.id}
-                            value={order.orderStatus}
-                            onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
-                            className="bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs rounded-lg px-2.5 py-1 font-semibold focus:outline-none focus:ring-1 focus:ring-axdoro-accent disabled:opacity-50 cursor-pointer shadow-sm"
-                          >
-                            <option value="PENDING">PENDING</option>
-                            <option value="CONFIRMED">CONFIRMED</option>
-                            <option value="PROCESSING">PROCESSING</option>
-                            <option value="SHIPPED">SHIPPED</option>
-                            <option value="DELIVERED">DELIVERED</option>
-                            <option value="CANCELLED">CANCELLED</option>
-                          </select>
+                          {(() => {
+                            const notification = getOrderWhatsAppNotification(order);
+                            const isUnacknowledged =
+                              !order.acknowledgedAt &&
+                              order.orderStatus !== 'CANCELLED' &&
+                              order.orderStatus !== 'DELIVERED';
+
+                            return (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  disabled={updatingOrderId === order.id}
+                                  value={order.orderStatus}
+                                  onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
+                                  className="bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs rounded-lg px-2.5 py-1 font-semibold focus:outline-none focus:ring-1 focus:ring-axdoro-accent disabled:opacity-50 cursor-pointer shadow-sm"
+                                >
+                                  <option value="PENDING">PENDING</option>
+                                  <option value="CONFIRMED">CONFIRMED</option>
+                                  <option value="PROCESSING">PROCESSING</option>
+                                  <option value="SHIPPED">SHIPPED</option>
+                                  <option value="DELIVERED">DELIVERED</option>
+                                  <option value="CANCELLED">CANCELLED</option>
+                                </select>
+
+                                {isUnacknowledged && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={acknowledgingOrderId === order.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleAcknowledgeOrder(order.id);
+                                    }}
+                                    className="text-xs h-7 px-2 border-red-500/30 text-red-600 hover:bg-red-50 cursor-pointer shrink-0 font-semibold"
+                                    title="Mark order as acknowledged"
+                                    data-testid={`acknowledge-btn-${order.id}`}
+                                  >
+                                    {acknowledgingOrderId === order.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      'Acknowledge'
+                                    )}
+                                  </Button>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleNotifyCustomerWhatsApp(order);
+                                  }}
+                                  disabled={!notification.isEligible}
+                                  title={notification.tooltip}
+                                  aria-label={`Notify ${order.customerName} on WhatsApp for order ${order.orderNumber}`}
+                                  className={`p-1.5 rounded-lg border transition-all inline-flex items-center justify-center ${
+                                    notification.isEligible
+                                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-500/60 cursor-pointer shadow-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                      : 'border-axdoro-border/40 bg-axdoro-surface-muted/30 text-axdoro-text-muted/40 cursor-not-allowed opacity-40'
+                                  }`}
+                                >
+                                  <MessageSquare className="w-4 h-4" />
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
                           {new Date(order.createdAt).toLocaleDateString()}
@@ -1013,16 +1168,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* Product Deletion Dialog (Phase 4 Safe Permanent Deletion) */}
       {productToDelete && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-product-dialog-title"
         >
-          <div className="bg-axdoro-surface border border-red-200 rounded-xl shadow-elevated max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-axdoro-border pb-3">
-              <div className="flex items-center gap-2 text-red-700">
+          <div className="bg-axdoro-surface border border-red-200/80 rounded-2xl shadow-elevated max-w-md w-full overflow-hidden my-auto flex flex-col">
+            <div className="flex items-center justify-between border-b border-axdoro-border px-6 py-4 shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2 text-red-600">
                 <Trash2 className="w-5 h-5 flex-shrink-0" />
-                <h3 id="delete-product-dialog-title" className="text-base font-bold">
+                <h3 id="delete-product-dialog-title" className="text-base font-bold text-axdoro-charcoal">
                   Delete Product Permanently
                 </h3>
               </div>
@@ -1032,56 +1187,58 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   setProductToDelete(null);
                   setDeleteProductError(null);
                 }}
-                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1 rounded-md disabled:opacity-40"
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-surface-muted transition-colors disabled:opacity-40 cursor-pointer"
                 aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-axdoro-charcoal leading-relaxed">
-                Are you sure you want to permanently delete <strong className="font-bold text-axdoro-charcoal">{productToDelete.name}</strong>?
-              </p>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-900 space-y-1.5 leading-relaxed">
-                <div className="flex items-center gap-1.5 font-bold text-red-800">
-                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                  <span>Permanent Deletion Cannot Be Undone</span>
-                </div>
-                <p>
-                  This action removes the product, its variants, inventory tracking, and hosted image records permanently.
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-3 text-xs">
+                <p className="text-axdoro-charcoal leading-relaxed">
+                  Are you sure you want to permanently delete <strong className="font-bold text-axdoro-charcoal">{productToDelete.name}</strong>?
                 </p>
-              </div>
-
-              {deleteProductError && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
-                    <p className="font-medium text-xs leading-relaxed">
-                      {deleteProductError.message}
-                    </p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-900 space-y-1.5 leading-relaxed">
+                  <div className="flex items-center gap-1.5 font-bold text-red-800">
+                    <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                    <span>Permanent Deletion Cannot Be Undone</span>
                   </div>
-                  {deleteProductError.canArchive && (
-                    <div className="pt-2 border-t border-amber-200 flex items-center justify-between gap-2">
-                      <span className="text-[11px] text-amber-800 font-medium">
-                        Recommended safe alternative:
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleArchiveInstead}
-                        className="bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-900 font-semibold text-xs h-7 px-2.5"
-                      >
-                        Archive Product Instead
-                      </Button>
-                    </div>
-                  )}
+                  <p>
+                    This action removes the product, its variants, inventory tracking, and hosted image records permanently.
+                  </p>
                 </div>
-              )}
+
+                {deleteProductError && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                      <p className="font-medium text-xs leading-relaxed">
+                        {deleteProductError.message}
+                      </p>
+                    </div>
+                    {deleteProductError.canArchive && (
+                      <div className="pt-2 border-t border-amber-200 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-amber-800 font-medium">
+                          Recommended safe alternative:
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleArchiveInstead}
+                          className="bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-900 font-semibold text-xs h-7 px-2.5"
+                        >
+                          Archive Product Instead
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-axdoro-border">
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
@@ -1098,7 +1255,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 size="sm"
                 disabled={isDeletingProduct}
                 onClick={handleDeleteProductConfirm}
-                className="font-semibold"
+                className="font-semibold cursor-pointer"
                 aria-busy={isDeletingProduct}
               >
                 {isDeletingProduct ? (

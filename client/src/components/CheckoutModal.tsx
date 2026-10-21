@@ -7,6 +7,7 @@ import {
   getOrGenerateIdempotencyKey,
   clearIdempotencySession,
 } from '../utils/idempotency.ts';
+import { useScrollLock } from '../utils/scrollLock.ts';
 import { X, CheckCircle2, AlertTriangle, Loader2, ShieldCheck, Truck, ShoppingBag, ArrowLeft } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -22,6 +23,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   cartItems,
   onOrderSuccess,
 }) => {
+  // Global reference-counted scroll lock while checkout modal is open
+  useScrollLock(isOpen);
+
   // Form fields
   const [customerName, setCustomerName] = useState('');
   const [customerEmail, setCustomerEmail] = useState('');

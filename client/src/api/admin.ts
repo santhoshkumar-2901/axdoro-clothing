@@ -465,6 +465,16 @@ export interface AdminOrder {
   paymentStatus: string;
   orderStatus: string;
   createdAt: string;
+  acknowledgedAt?: string | null;
+}
+
+export interface AdminBadgeCounts {
+  orders: {
+    unacknowledgedCount: number;
+  };
+  inventory: {
+    lowStockProductCount: number;
+  };
 }
 
 export interface AdminEnquiry {
@@ -501,6 +511,27 @@ export async function adminUpdateOrderStatus(orderId: string, status: string, re
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to update order status');
+  return json.data;
+}
+
+export async function adminAcknowledgeOrder(orderId: string): Promise<AdminOrder> {
+  const res = await fetch(`/api/admin/orders/${orderId}/acknowledge`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to acknowledge order');
+  return json.data;
+}
+
+export async function adminGetBadgeCounts(): Promise<AdminBadgeCounts> {
+  const res = await fetch('/api/admin/notifications/badge-counts', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to fetch notification badge counts');
   return json.data;
 }
 

@@ -26,6 +26,7 @@ import {
   adminReorderProductImages,
   adminDeleteProductImage,
 } from '../../api/admin.ts';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 interface ProductImageModalProps {
   productId: string;
@@ -40,6 +41,9 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   onClose,
   onImagesUpdated,
 }) => {
+  // Global reference-counted scroll lock while image modal is open
+  useScrollLock(true);
+
   const [images, setImages] = useState<ProductImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -287,10 +291,10 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
-        <Card className="border-axdoro-border bg-axdoro-surface shadow-elevated rounded-2xl flex flex-col max-h-[90vh] overflow-hidden">
-          <CardHeader className="flex flex-row items-start justify-between pb-3 border-b border-axdoro-border/60">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in">
+      <div className="w-full max-w-2xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+        <Card className="border-axdoro-border bg-axdoro-surface shadow-elevated rounded-2xl flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] overflow-hidden">
+          <CardHeader className="flex flex-row items-start justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <ImageIcon className="w-5 h-5 text-axdoro-accent" />
@@ -311,7 +315,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
             </button>
           </CardHeader>
 
-          <CardContent className="overflow-y-auto p-4 space-y-4">
+          <CardContent className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
             {/* Feedback messages */}
             {errorMsg && (
               <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-lg">
@@ -624,7 +628,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
             </div>
           </CardContent>
 
-          <CardFooter className="flex justify-end border-t border-axdoro-border/60 py-3 px-4">
+          <CardFooter className="flex justify-end border-t border-axdoro-border px-6 py-4 bg-axdoro-surface-muted/30 shrink-0">
             <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
               Close
             </Button>

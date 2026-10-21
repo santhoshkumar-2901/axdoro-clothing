@@ -30,6 +30,7 @@ import {
   TableHead,
   TableCell,
 } from '../ui/table.tsx';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 interface CategoryManagementViewProps {
   onCategoryMutated?: () => void;
@@ -74,6 +75,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const [editIsActive, setEditIsActive] = useState<boolean>(true);
   const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Global reference-counted scroll lock while add or edit category dialog is open
+  useScrollLock(isAddOpen || Boolean(editingCategory));
 
   // Quick toggle loading state
   const [togglingCategoryId, setTogglingCategoryId] = useState<string | null>(null);
@@ -246,7 +250,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
         <Button
           onClick={handleOpenAddModal}
-          className="flex items-center gap-2 bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90 text-xs font-semibold py-2 px-4 shadow-sm"
+          className="flex items-center gap-2 text-xs font-semibold py-2 px-4 shadow-sm"
         >
           <Plus className="w-4 h-4" />
           <span>Add Category</span>
@@ -395,22 +399,23 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
       {/* Add Category Dialog Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-axdoro-surface border border-axdoro-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-axdoro-border flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+          <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
+            <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
               <div className="flex items-center gap-2">
                 <FolderTree className="w-5 h-5 text-axdoro-accent" />
                 <h3 className="text-sm font-bold text-axdoro-charcoal">Create New Category</h3>
               </div>
               <button
                 onClick={() => setIsAddOpen(false)}
-                className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal rounded-lg hover:bg-axdoro-surface-muted transition-colors"
+                className="p-1.5 text-axdoro-text-muted hover:text-axdoro-charcoal rounded-lg hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateCategory} className="p-5 space-y-4">
+            <form onSubmit={handleCreateCategory} className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
               {addError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
@@ -524,7 +529,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                   type="submit"
                   size="sm"
                   disabled={isSubmittingAdd}
-                  className="bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90"
+                  className="shadow-sm"
                 >
                   {isSubmittingAdd ? (
                     <>
@@ -543,9 +548,9 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
       {/* Edit Category Dialog Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-axdoro-surface border border-axdoro-border rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="p-5 border-b border-axdoro-border flex items-center justify-between">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+          <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
+            <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
               <div className="flex items-center gap-2">
                 <Edit2 className="w-5 h-5 text-axdoro-accent" />
                 <h3 className="text-sm font-bold text-axdoro-charcoal">
@@ -554,13 +559,14 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
               </div>
               <button
                 onClick={() => setEditingCategory(null)}
-                className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal rounded-lg hover:bg-axdoro-surface-muted transition-colors"
+                className="p-1.5 text-axdoro-text-muted hover:text-axdoro-charcoal rounded-lg hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close dialog"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdateCategory} className="p-5 space-y-4">
+            <form onSubmit={handleUpdateCategory} className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
               {editError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
@@ -661,7 +667,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                   type="submit"
                   size="sm"
                   disabled={isSubmittingEdit}
-                  className="bg-axdoro-charcoal text-white hover:bg-axdoro-charcoal/90"
+                  className="shadow-sm"
                 >
                   {isSubmittingEdit ? (
                     <>

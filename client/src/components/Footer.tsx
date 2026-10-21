@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProductCategory, Category } from '../types/product.ts';
 import { MessageSquare, Mail, Phone } from 'lucide-react';
+import { useScrollLock } from '../utils/scrollLock.ts';
 
 interface FooterProps {
   onSelectCategory: (category: ProductCategory | 'all') => void;
@@ -20,6 +21,9 @@ export const Footer: React.FC<FooterProps> = ({
   onNavigate,
 }) => {
   const [activePolicyModal, setActivePolicyModal] = useState<string | null>(null);
+
+  // Global reference-counted scroll lock while policy dialog is open
+  useScrollLock(Boolean(activePolicyModal));
 
   useEffect(() => {
     if (!activePolicyModal) return;

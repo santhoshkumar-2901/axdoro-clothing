@@ -15,10 +15,11 @@ import {
 } from 'lucide-react';
 import { AdminUser } from '../../api/admin.ts';
 import { Badge } from '../ui/badge.tsx';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'stock' | 'orders' | 'enquiries' | 'audit';
 
-interface AdminSidebarProps {
+export interface AdminSidebarProps {
   activeTab: AdminTab;
   onSelectTab: (tab: AdminTab) => void;
   currentUser: AdminUser | null;
@@ -26,6 +27,16 @@ interface AdminSidebarProps {
   onNavigateHome?: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  badgeCounts?: {
+    orders: number;
+    stock: number;
+  };
+}
+
+export function formatBadgeCount(count: number): string | null {
+  if (!count || count <= 0) return null;
+  if (count > 99) return '99+';
+  return String(count);
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({
@@ -36,7 +47,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   onNavigateHome,
   isMobileOpen,
   onCloseMobile,
+  badgeCounts,
 }) => {
+  // Global reference-counted scroll lock while mobile admin drawer is open
+  useScrollLock(isMobileOpen);
+
   const navItems: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'metrics', label: 'Dashboard Metrics', icon: BarChart3 },
     { id: 'products', label: 'Product Catalogue', icon: Package },
@@ -91,6 +106,20 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
+            const count =
+              item.id === 'orders'
+                ? badgeCounts?.orders ?? 0
+                : item.id === 'stock'
+                ? badgeCounts?.stock ?? 0
+                : 0;
+            const formattedBadge = formatBadgeCount(count);
+            const badgeAriaLabel =
+              item.id === 'orders'
+                ? `${count} unacknowledged orders requiring attention`
+                : item.id === 'stock'
+                ? `${count} products requiring stock attention`
+                : undefined;
+
             return (
               <button
                 key={item.id}
@@ -98,14 +127,25 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
                   onSelectTab(item.id);
                   onCloseMobile();
                 }}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
                   isActive
                     ? 'bg-axdoro-charcoal text-white shadow-subtle'
                     : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-axdoro-surface-muted'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-axdoro-accent' : 'text-axdoro-text-muted'}`} />
-                <span>{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-axdoro-accent' : 'text-axdoro-text-muted'}`} />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {formattedBadge && (
+                  <span
+                    className="ml-auto inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold leading-none bg-red-600 text-white rounded-full shadow-sm min-w-[18px] shrink-0"
+                    aria-label={badgeAriaLabel}
+                    data-testid={`badge-${item.id}`}
+                  >
+                    {formattedBadge}
+                  </span>
+                )}
               </button>
             );
           })}

@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { CartItem, formatPaiseToINR } from '../types/product.ts';
 import { X, Trash2, Plus, Minus, ShoppingBag, ShieldCheck, ImageOff, ArrowRight } from 'lucide-react';
+import { useScrollLock } from '../utils/scrollLock.ts';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -21,6 +22,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onClearCart,
   onProceedToCheckout,
 }) => {
+  // Global reference-counted scroll lock while drawer is open
+  useScrollLock(isOpen);
+
   // Dismiss on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

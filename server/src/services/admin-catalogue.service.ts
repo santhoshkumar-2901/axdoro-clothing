@@ -986,6 +986,23 @@ export async function adminGetDashboardMetrics(): Promise<AdminDashboardMetrics>
   };
 }
 
+/**
+ * Returns count of distinct published products having at least one active variant with stock_quantity < threshold.
+ * Excludes archived and draft products.
+ */
+export async function getDistinctLowStockProductsCount(threshold = 10): Promise<number> {
+  const res = await query<{ count: string }>(
+    `SELECT COUNT(DISTINCT p.id)::text as count
+     FROM products p
+     JOIN product_variants pv ON pv.product_id = p.id
+     WHERE pv.stock_quantity < $1
+       AND pv.is_active = true
+       AND p.status = 'published';`,
+    [threshold]
+  );
+  return parseInt(res.rows[0]?.count || '0', 10);
+}
+
 // -------------------------------------------------------------
 // Product Image Management
 // -------------------------------------------------------------

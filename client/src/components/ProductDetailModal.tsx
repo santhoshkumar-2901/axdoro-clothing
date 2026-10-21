@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Product, ProductVariant } from '../types/product.ts';
 import { X, Check, ShoppingBag, Layers, AlertCircle, Plus, Minus, ImageOff } from 'lucide-react';
+import { useScrollLock } from '../utils/scrollLock.ts';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -54,14 +55,13 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [product, onClose]);
 
-  // Lock background document scrolling while modal is open, and safely restore on close/unmount
+  // Global reference-counted scroll lock while modal is open
+  useScrollLock(Boolean(product));
+
+  // Prevent touch gestures directly on the backdrop from dragging/scrolling the background
   useEffect(() => {
     if (!product) return;
 
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    // Prevent touch gestures directly on the backdrop from dragging/scrolling the background
     const overlay = overlayRef.current;
     const handleTouchMove = (e: TouchEvent) => {
       if (e.target === overlay) {
@@ -74,7 +74,6 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     }
 
     return () => {
-      document.body.style.overflow = originalOverflow;
       if (overlay) {
         overlay.removeEventListener('touchmove', handleTouchMove);
       }
@@ -452,7 +451,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     onClose();
                     onOpenBulkWithProduct(product);
                   }}
-                  className="px-3 py-1.5 rounded-md bg-axdoro-surface border border-axdoro-border hover:bg-axdoro-charcoal hover:text-white text-axdoro-charcoal text-xs font-semibold transition-colors flex-shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                  className="px-3 py-1.5 rounded-md bg-axdoro-surface border border-axdoro-border hover:bg-axdoro-purple hover:text-white hover:border-axdoro-border-strong text-axdoro-charcoal text-xs font-semibold transition-colors flex-shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                 >
                   Bulk Enquiry
                 </button>

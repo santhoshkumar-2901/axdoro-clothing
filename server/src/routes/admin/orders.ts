@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAdmin } from '../../middleware/adminAuth.js';
 import { orderStatusUpdateSchema } from '../../schemas/orders.js';
-import { listOrders, getOrderById, updateOrderStatus } from '../../services/order.service.js';
+import { listOrders, getOrderById, updateOrderStatus, acknowledgeOrder } from '../../services/order.service.js';
 
 export const adminOrdersRouter = Router();
 
@@ -92,3 +92,30 @@ adminOrdersRouter.patch('/:id/status', async (req: Request, res: Response, next:
     next(err);
   }
 });
+
+// POST & PATCH /api/admin/orders/:id/acknowledge - Idempotently acknowledge order without altering fulfillment status
+const handleAcknowledge = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const order = await acknowledgeOrder(req.params.id, req.admin!);
+    res.json({
+      status: 'success',
+      message: 'Order acknowledged successfully',
+      data: order,
+      order,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Order not found')) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Order not found',
+        message: 'Order not found',
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+adminOrdersRouter.post('/:id/acknowledge', handleAcknowledge);
+adminOrdersRouter.patch('/:id/acknowledge', handleAcknowledge);

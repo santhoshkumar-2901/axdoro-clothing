@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product } from '../types/product.ts';
 import { X, Layers, MessageSquare, CheckCircle2 } from 'lucide-react';
 import { normalizeAndValidatePhone } from '../utils/idempotency.ts';
+import { useScrollLock } from '../utils/scrollLock.ts';
 
 interface BulkEnquiryModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
   onClose,
   prefilledProduct,
 }) => {
+  // Global reference-counted scroll lock while bulk enquiry modal is open
+  useScrollLock(isOpen);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');

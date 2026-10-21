@@ -31,6 +31,7 @@
   background-color: #553E92;
 }
 
+
 /* Hover and dark-canvas text contrast adaptations */
 .hover\:text-black:hover {
   color: var(--axdoro-accent) !important;
@@ -78,4 +79,9 @@ body {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Global Modal Background Scroll Lock Guard */
+body[data-scroll-locked='true'] {
+  overflow: hidden !important;
 }

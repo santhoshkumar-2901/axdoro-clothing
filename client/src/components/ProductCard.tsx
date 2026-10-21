@@ -227,7 +227,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
               onQuickView(product);
             }}
             aria-label={`Quick view ${product.name}`}
-            className="flex-1 py-2 px-3 rounded-lg bg-axdoro-surface/95 backdrop-blur-md border border-axdoro-border text-axdoro-charcoal text-xs font-semibold hover:bg-axdoro-charcoal hover:text-white transition-colors flex items-center justify-center gap-1.5 shadow-subtle cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+            className="flex-1 py-2 px-3 rounded-lg bg-axdoro-surface/95 backdrop-blur-md border border-axdoro-border text-axdoro-charcoal text-xs font-semibold hover:bg-axdoro-purple hover:text-white hover:border-axdoro-border-strong transition-colors flex items-center justify-center gap-1.5 shadow-subtle cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
           >
             <Eye className="w-3.5 h-3.5" />
             <span>Quick View</span>

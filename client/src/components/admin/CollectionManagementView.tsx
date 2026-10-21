@@ -20,6 +20,7 @@ import {
   adminGetProducts,
   AdminProduct,
 } from '../../api/admin.ts';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 import {
   AdminHomepageCollection,
   formatPaiseToINR,
@@ -59,6 +60,9 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   const [catalogProducts, setCatalogProducts] = useState<AdminProduct[]>([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Global reference-counted scroll lock while add products modal is open
+  useScrollLock(isAddModalOpen);
 
   const loadCollections = useCallback(async () => {
     try {

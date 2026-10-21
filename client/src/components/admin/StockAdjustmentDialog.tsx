@@ -3,6 +3,7 @@ import { Sliders, X } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../ui/card.tsx';
 import { Button } from '../ui/button.tsx';
 import { Input, Label } from '../ui/input.tsx';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 interface StockAdjustmentDialogProps {
   variantId: string;
@@ -24,6 +25,9 @@ export const StockAdjustmentDialog: React.FC<StockAdjustmentDialogProps> = ({
   onSave,
   onClose,
 }) => {
+  // Global reference-counted scroll lock while stock adjustment dialog is open
+  useScrollLock(true);
+
   const [quantity, setQuantity] = useState<number>(currentStock);
   const [reason, setReason] = useState<string>('Physical warehouse count reconciliation');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,10 +43,10 @@ export const StockAdjustmentDialog: React.FC<StockAdjustmentDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md animate-in fade-in zoom-in-95 duration-150">
-        <Card className="border-axdoro-border bg-axdoro-surface shadow-elevated rounded-2xl">
-          <CardHeader className="flex flex-row items-start justify-between pb-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in">
+      <div className="w-full max-w-md my-auto animate-in fade-in zoom-in-95 duration-150">
+        <Card className="border-axdoro-border bg-axdoro-surface shadow-elevated rounded-2xl overflow-hidden">
+          <CardHeader className="flex flex-row items-start justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface">
             <div className="space-y-1">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-axdoro-accent-muted" />
@@ -61,7 +65,7 @@ export const StockAdjustmentDialog: React.FC<StockAdjustmentDialogProps> = ({
             </button>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent className="p-6 space-y-4">
             <div className="p-3.5 rounded-xl bg-axdoro-bg border border-axdoro-border text-xs space-y-1">
               <div className="font-bold text-axdoro-charcoal text-sm">{productName}</div>
               <div className="text-axdoro-text-muted font-mono text-[11px]">
@@ -103,7 +107,7 @@ export const StockAdjustmentDialog: React.FC<StockAdjustmentDialogProps> = ({
             </form>
           </CardContent>
 
-          <CardFooter className="flex justify-end gap-2 border-t border-axdoro-border pt-4">
+          <CardFooter className="flex justify-end gap-2 border-t border-axdoro-border px-6 py-4 bg-axdoro-surface-muted/30">
             <Button
               type="button"
               variant="outline"

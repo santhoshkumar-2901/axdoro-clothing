@@ -1,5 +1,6 @@
 import React from 'react';
 import { AdminPortal } from './AdminPortal.tsx';
+import { useScrollLock } from '../../utils/scrollLock.ts';
 
 export interface AdminPortalModalProps {
   isOpen: boolean;
@@ -16,6 +17,9 @@ export const AdminPortalModal: React.FC<AdminPortalModalProps> = ({
   onClose,
   onCatalogueMutated,
 }) => {
+  // Global reference-counted scroll lock while modal is open
+  useScrollLock(isOpen);
+
   if (!isOpen) return null;
 
   return (
