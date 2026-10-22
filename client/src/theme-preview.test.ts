@@ -129,33 +129,33 @@ describe('AXDORO Permanent Theme — Deep Purple Verification', () => {
   });
 
   describe('Storefront and Admin Visual Consistency', () => {
-    it('verifies white logo asset exists and is used across both storefront and admin views', () => {
-      const logoWhitePath = path.join(clientDir, 'public', 'logo-white.png');
-      expect(fs.existsSync(logoWhitePath)).toBe(true);
+    it('verifies transparent logo asset exists and is used across both storefront and admin views', () => {
+      const logoTransparentPath = path.join(clientDir, 'public', 'logo-transparent.png');
+      expect(fs.existsSync(logoTransparentPath)).toBe(true);
 
       const navbarContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'Navbar.tsx'),
         'utf-8'
       );
-      expect(navbarContent).toContain('src="/logo-white.png"');
+      expect(navbarContent).toContain('src="/logo-transparent.png"');
 
       const footerContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'Footer.tsx'),
         'utf-8'
       );
-      expect(footerContent).toContain('src="/logo-white.png"');
+      expect(footerContent).toContain('src="/logo-transparent.png"');
 
       const adminLoginContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'admin', 'AdminLoginView.tsx'),
         'utf-8'
       );
-      expect(adminLoginContent).toContain('src="/logo-white.png"');
+      expect(adminLoginContent).toContain('src="/logo-transparent.png"');
 
       const adminSidebarContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'admin', 'AdminSidebar.tsx'),
         'utf-8'
       );
-      expect(adminSidebarContent).toContain('src="/logo-white.png"');
+      expect(adminSidebarContent).toContain('src="/logo-transparent.png"');
     });
 
     it('verifies product photography integrity rules remain strictly enforced', () => {

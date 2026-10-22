@@ -68,7 +68,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-label="AXDORO Home"
             >
               <img
-                src="/logo-white.png"
+                src="/logo-transparent.png"
                 alt="AXDORO"
                 width={144}
                 height={36}

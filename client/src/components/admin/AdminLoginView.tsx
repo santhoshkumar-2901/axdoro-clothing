@@ -42,7 +42,7 @@ export const AdminLoginView: React.FC<AdminLoginViewProps> = ({
 
         <div className="flex justify-center mb-6">
           <img
-            src="/logo-white.png"
+            src="/logo-transparent.png"
             alt="AXDORO"
             width={144}
             height={36}

@@ -59,7 +59,7 @@ export const Footer: React.FC<FooterProps> = ({
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center">
               <img
-                src="/logo-white.png"
+                src="/logo-transparent.png"
                 alt="AXDORO"
                 width={128}
                 height={32}
@@ -201,9 +201,6 @@ export const Footer: React.FC<FooterProps> = ({
                   Janavvagj@gmail.com
                 </a>
               </div>
-              <p className="text-[11px] text-stone-500 pt-2 border-t border-axdoro-border">
-                Business Address &amp; GSTIN pending formal client release.
-              </p>
             </div>
           </div>
         </div>
@@ -212,10 +209,6 @@ export const Footer: React.FC<FooterProps> = ({
         <div className="border-t border-axdoro-border mt-12 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-stone-500">
           <div>
             &copy; {new Date().getFullYear()} AXDORO. All rights reserved. Premium Clothing Platform.
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-axdoro-charcoal font-medium">Minimal Luxury Storefront</span>
-            <span>Local Verified PERN Foundation</span>
           </div>
         </div>
       </div>
