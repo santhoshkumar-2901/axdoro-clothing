@@ -143,8 +143,10 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
     );
   }
 
-  // Cover image fallback: primary product image of first product, or generic brand banner
-  const coverImage = products.length > 0 && products[0].images && products[0].images[0]
+  // Cover image: category image, falling back to primary product image of first product, or generic brand banner
+  const coverImage = category?.imageUrl
+    ? category.imageUrl
+    : products.length > 0 && products[0].images && products[0].images[0]
     ? products[0].images[0]
     : 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&auto=format&fit=crop&q=80';
 
@@ -173,6 +175,12 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
           <img
             src={coverImage}
             alt={category?.name || 'Category'}
+            onError={(e) => {
+              const fallback = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&auto=format&fit=crop&q=80';
+              if (e.currentTarget.src !== fallback) {
+                e.currentTarget.src = fallback;
+              }
+            }}
             className="w-full h-full object-cover object-center opacity-30 filter blur-sm scale-105 transition-all duration-700"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-axdoro-charcoal via-axdoro-charcoal/80 to-axdoro-charcoal/60" />

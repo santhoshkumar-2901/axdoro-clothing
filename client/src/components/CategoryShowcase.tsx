@@ -140,7 +140,7 @@ export const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({
           ) : (
             categories.map((cat) => {
               const isSelected = activeCategory === cat.slug;
-              const bgImage = DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+              const bgImage = cat.imageUrl || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
 
               return (
                 <button
@@ -174,6 +174,12 @@ export const CategoryShowcase: React.FC<CategoryShowcaseProps> = ({
                     width={800}
                     height={600}
                     loading="lazy"
+                    onError={(e) => {
+                      const fallback = DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                      if (e.currentTarget.src !== fallback) {
+                        e.currentTarget.src = fallback;
+                      }
+                    }}
                     className="absolute inset-0 w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 opacity-60 group-hover:opacity-75"
                   />
                   <div className="relative z-20">

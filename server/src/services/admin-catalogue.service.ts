@@ -24,6 +24,8 @@ export interface AdminCategoryRow {
   isActive: boolean;
   productCount: number;
   createdAt: string;
+  imageUrl?: string | null;
+  publicId?: string | null;
 }
 
 export interface AdminProductSummary {
@@ -104,6 +106,8 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
       c.description,
       c.display_order,
       c.is_active,
+      c.image_url,
+      c.public_id,
       c.created_at,
       COUNT(p.id)::int AS product_count
     FROM categories c
@@ -118,6 +122,8 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
     description: string | null;
     display_order: number;
     is_active: boolean;
+    image_url: string | null;
+    public_id: string | null;
     created_at: Date;
     product_count: number;
   }>(sql);
@@ -131,6 +137,8 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
     isActive: row.is_active,
     productCount: row.product_count,
     createdAt: row.created_at.toISOString(),
+    imageUrl: row.image_url || null,
+    publicId: row.public_id || null,
   }));
 }
 
@@ -144,13 +152,23 @@ export async function adminCreateCategory(
   description: string | null;
   displayOrder: number;
   isActive: boolean;
+  imageUrl?: string | null;
+  publicId?: string | null;
 }> {
   return await withTransaction(async (client) => {
     const res = await client.query<{ id: string }>(
-      `INSERT INTO categories (slug, name, description, display_order, is_active)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO categories (slug, name, description, display_order, is_active, image_url, public_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id;`,
-      [data.slug, data.name, data.description || null, data.displayOrder, data.isActive]
+      [
+        data.slug,
+        data.name,
+        data.description || null,
+        data.displayOrder,
+        data.isActive,
+        data.imageUrl || null,
+        data.publicId || null,
+      ]
     );
 
     const categoryId = res.rows[0].id;
@@ -161,7 +179,7 @@ export async function adminCreateCategory(
       action: 'CATEGORY_CREATE',
       entityType: 'category',
       entityId: categoryId,
-      details: { name: data.name, slug: data.slug },
+      details: { name: data.name, slug: data.slug, imageUrl: data.imageUrl, publicId: data.publicId },
       client,
     });
 
@@ -172,6 +190,8 @@ export async function adminCreateCategory(
       description: data.description || null,
       displayOrder: data.displayOrder,
       isActive: data.isActive,
+      imageUrl: data.imageUrl || null,
+      publicId: data.publicId || null,
     };
   });
 }
@@ -204,13 +224,34 @@ export async function adminUpdateCategory(
     params.push(data.isActive);
     setClauses.push(`is_active = $${params.length}`);
   }
+  if (data.imageUrl !== undefined) {
+    params.push(data.imageUrl || null);
+    setClauses.push(`image_url = $${params.length}`);
+  }
+  if (data.publicId !== undefined) {
+    params.push(data.publicId || null);
+    setClauses.push(`public_id = $${params.length}`);
+  }
 
   if (setClauses.length === 0) return;
 
-  return await withTransaction(async (client) => {
+  let oldPublicId: string | null = null;
+
+  await withTransaction(async (client) => {
+    // 1. Lock existing category row and capture previous publicId for safe post-commit cleanup
+    const existingRes = await client.query<{ public_id: string | null }>(
+      `SELECT public_id FROM categories WHERE id = $1 FOR UPDATE;`,
+      [id]
+    );
+    if (existingRes.rows.length > 0) {
+      oldPublicId = existingRes.rows[0].public_id;
+    }
+
+    // 2. Perform atomic update
     const sql = `UPDATE categories SET ${setClauses.join(', ')} WHERE id = $1;`;
     await client.query(sql, params);
 
+    // 3. Record audit log
     await createAuditLog({
       adminId: actor.id,
       adminEmail: actor.email,
@@ -221,6 +262,19 @@ export async function adminUpdateCategory(
       client,
     });
   });
+
+  // 4. Safe post-commit Cloudinary deletion if a previous hosted asset was replaced
+  if (
+    oldPublicId &&
+    data.publicId !== undefined &&
+    data.publicId !== oldPublicId
+  ) {
+    try {
+      await deleteCloudinaryAsset(oldPublicId);
+    } catch (err: unknown) {
+      console.warn(`[Cloudinary] Asset deletion warning for category asset '${oldPublicId}':`, err);
+    }
+  }
 }
 
 // -------------------------------------------------------------

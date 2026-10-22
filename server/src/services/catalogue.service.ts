@@ -7,6 +7,7 @@ export interface CategoryDTO {
   name: string;
   description: string | null;
   displayOrder: number;
+  imageUrl?: string | null;
 }
 
 export interface ProductSummaryDTO {
@@ -85,7 +86,7 @@ export interface PaginatedResult<T> {
 
 export async function getActiveCategories(): Promise<CategoryDTO[]> {
   const sql = `
-    SELECT id, slug, name, description, display_order
+    SELECT id, slug, name, description, display_order, image_url
     FROM categories
     WHERE is_active = true
     ORDER BY display_order ASC, name ASC;
@@ -96,6 +97,7 @@ export async function getActiveCategories(): Promise<CategoryDTO[]> {
     name: string;
     description: string | null;
     display_order: number;
+    image_url: string | null;
   }>(sql);
 
   return result.rows.map((row) => ({
@@ -104,6 +106,7 @@ export async function getActiveCategories(): Promise<CategoryDTO[]> {
     name: row.name,
     description: row.description,
     displayOrder: row.display_order,
+    imageUrl: row.image_url || null,
   }));
 }
 
@@ -111,7 +114,7 @@ export async function getCategoryBySlug(
   slug: string
 ): Promise<CategoryDTO | null> {
   const sql = `
-    SELECT id, slug, name, description, display_order
+    SELECT id, slug, name, description, display_order, image_url
     FROM categories
     WHERE slug = $1 AND is_active = true;
   `;
@@ -121,6 +124,7 @@ export async function getCategoryBySlug(
     name: string;
     description: string | null;
     display_order: number;
+    image_url: string | null;
   }>(sql, [slug]);
 
   if (result.rows.length === 0) {
@@ -134,6 +138,7 @@ export async function getCategoryBySlug(
     name: row.name,
     description: row.description,
     displayOrder: row.display_order,
+    imageUrl: row.image_url || null,
   };
 }
 

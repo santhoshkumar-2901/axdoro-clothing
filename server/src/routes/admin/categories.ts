@@ -6,6 +6,10 @@ import {
   adminCreateCategory,
   adminUpdateCategory,
 } from '../../services/admin-catalogue.service.js';
+import {
+  isCloudinaryConfigured,
+  generateUploadSignature,
+} from '../../services/cloudinary.service.js';
 
 export const adminCategoriesRouter = Router();
 
@@ -76,6 +80,59 @@ adminCategoriesRouter.put('/:id', async (req: Request, res: Response, next: Next
     res.json({
       status: 'success',
       message: 'Category updated successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/categories/upload-signature — Signed Cloudinary upload params for categories
+adminCategoriesRouter.post('/upload-signature', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({
+        status: 'error',
+        code: 'CLOUDINARY_NOT_CONFIGURED',
+        error: 'Cloudinary credentials are not configured on this server',
+        message: 'Cloudinary credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) must be set in server environment variables.',
+      });
+      return;
+    }
+
+    const config = generateUploadSignature({
+      folder: 'axdoro/categories',
+    });
+
+    res.json({
+      status: 'success',
+      data: config,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/categories/:id/images/signature — Category-specific signed Cloudinary upload params
+adminCategoriesRouter.post('/:id/images/signature', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({
+        status: 'error',
+        code: 'CLOUDINARY_NOT_CONFIGURED',
+        error: 'Cloudinary credentials are not configured on this server',
+        message: 'Cloudinary credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) must be set in server environment variables.',
+      });
+      return;
+    }
+
+    const config = generateUploadSignature({
+      categoryId: req.params.id,
+      folder: 'axdoro/categories',
+    });
+
+    res.json({
+      status: 'success',
+      data: config,
     });
   } catch (err) {
     next(err);

@@ -2,7 +2,9 @@ import crypto from 'crypto';
 import { env } from '../config/env.js';
 
 export interface CloudinaryUploadParams {
-  productId: string;
+  productId?: string;
+  categoryId?: string;
+  hero?: boolean;
   timestamp?: number;
   folder?: string;
   publicId?: string;
@@ -66,9 +68,19 @@ export function generateUploadSignature(
   const apiSecret = env.CLOUDINARY_API_SECRET!;
 
   const timestamp = options.timestamp || Math.floor(Date.now() / 1000);
-  const folder = options.folder || `axdoro/products/${options.productId}`;
+  const targetId = options.hero
+    ? 'hero'
+    : options.categoryId
+    ? `cat_${options.categoryId}`
+    : (options.productId || 'asset');
+  const defaultFolder = options.hero
+    ? 'axdoro/hero'
+    : options.categoryId
+    ? 'axdoro/categories'
+    : `axdoro/products/${options.productId || 'general'}`;
+  const folder = options.folder || defaultFolder;
   const randomSuffix = crypto.randomBytes(4).toString('hex');
-  const publicId = options.publicId || `${options.productId}_${timestamp}_${randomSuffix}`;
+  const publicId = options.publicId || `${targetId}_${timestamp}_${randomSuffix}`;
 
   const paramsToSign: Record<string, string | number> = {
     folder,

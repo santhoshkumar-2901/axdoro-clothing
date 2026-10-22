@@ -8,6 +8,7 @@ export interface Category {
   name: string;
   description: string | null;
   displayOrder: number;
+  imageUrl?: string | null;
 }
 
 export interface ProductVariant {
@@ -117,4 +118,10 @@ export interface AdminHomepageCollection {
   products: AdminHomepageCollectionProduct[];
   createdAt: string;
   updatedAt: string;
+}
+
+export interface HomepageHeroSetting {
+  imageUrl: string | null;
+  publicId?: string | null;
+  updatedAt?: string;
 }

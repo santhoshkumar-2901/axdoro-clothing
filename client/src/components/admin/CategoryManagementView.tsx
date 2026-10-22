@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FolderTree,
   Plus,
@@ -10,12 +10,17 @@ import {
   X,
   ArrowUpDown,
   ShoppingBag,
+  Image as ImageIcon,
+  Upload,
+  Link as LinkIcon,
+  Trash2,
 } from 'lucide-react';
 import {
   AdminCategory,
   adminGetCategories,
   adminCreateCategory,
   adminUpdateCategory,
+  adminGetCategoryUploadSignature,
   CreateCategoryPayload,
   UpdateCategoryPayload,
 } from '../../api/admin.ts';
@@ -63,6 +68,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const [addDescription, setAddDescription] = useState<string>('');
   const [addDisplayOrder, setAddDisplayOrder] = useState<number>(0);
   const [addIsActive, setAddIsActive] = useState<boolean>(true);
+  const [addImageUrl, setAddImageUrl] = useState<string>('');
   const [isSubmittingAdd, setIsSubmittingAdd] = useState<boolean>(false);
   const [addError, setAddError] = useState<string | null>(null);
 
@@ -73,14 +79,36 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const [editDescription, setEditDescription] = useState<string>('');
   const [editDisplayOrder, setEditDisplayOrder] = useState<number>(0);
   const [editIsActive, setEditIsActive] = useState<boolean>(true);
+  const [editImageUrl, setEditImageUrl] = useState<string>('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState<boolean>(false);
   const [editError, setEditError] = useState<string | null>(null);
 
+  // Category Image modal state
+  const [imageModalCategory, setImageModalCategory] = useState<AdminCategory | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [manualUrl, setManualUrl] = useState<string>('');
+  const [useManualUrl, setUseManualUrl] = useState<boolean>(false);
+  const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [imageModalError, setImageModalError] = useState<string | null>(null);
+  const [imageModalSuccess, setImageModalSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Global reference-counted scroll lock while add or edit category dialog is open
   useScrollLock(isAddOpen || Boolean(editingCategory));
+  useScrollLock(Boolean(imageModalCategory));
 
   // Quick toggle loading state
   const [togglingCategoryId, setTogglingCategoryId] = useState<string | null>(null);
+
+  // Clean up object preview URL
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
 
   const loadCategories = useCallback(async () => {
     setIsLoading(true);
@@ -99,12 +127,181 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
     loadCategories();
   }, [loadCategories]);
 
+  // Image Modal Handlers
+  const handleOpenImageModal = (cat: AdminCategory) => {
+    setImageModalCategory(cat);
+    setSelectedFile(null);
+    setPreviewUrl(cat.imageUrl || null);
+    setManualUrl(cat.imageUrl || '');
+    setUseManualUrl(false);
+    setImageModalError(null);
+    setImageModalSuccess(null);
+  };
+
+  const handleCloseImageModal = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setImageModalCategory(null);
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setManualUrl('');
+    setUseManualUrl(false);
+    setImageModalError(null);
+    setImageModalSuccess(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setSelectedFile(file);
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      setImageModalError(null);
+    }
+  };
+
+  const handleClearSelectedFile = () => {
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setSelectedFile(null);
+    setPreviewUrl(imageModalCategory?.imageUrl || null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveCategoryImage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!imageModalCategory) return;
+    setImageModalError(null);
+    setImageModalSuccess(null);
+    setIsUploadingImage(true);
+
+    try {
+      if (useManualUrl) {
+        const cleanUrl = manualUrl.trim();
+        if (!cleanUrl) {
+          setImageModalError('Please enter a valid image URL');
+          setIsUploadingImage(false);
+          return;
+        }
+
+        await adminUpdateCategory(imageModalCategory.id, {
+          imageUrl: cleanUrl,
+          publicId: null,
+        });
+
+        setImageModalSuccess('Category image updated successfully.');
+        await loadCategories();
+        onCategoryMutated?.();
+        setTimeout(() => {
+          handleCloseImageModal();
+        }, 1200);
+        return;
+      }
+
+      if (!selectedFile) {
+        setImageModalError('Please select an image file to upload.');
+        setIsUploadingImage(false);
+        return;
+      }
+
+      // 1. Request signature from backend
+      let signatureConfig;
+      try {
+        signatureConfig = await adminGetCategoryUploadSignature(imageModalCategory.id);
+      } catch (err: any) {
+        if (err.code === 'CLOUDINARY_NOT_CONFIGURED') {
+          setUseManualUrl(true);
+          setImageModalError(
+            'Cloudinary credentials are not configured on this server. Switched to direct image URL mode.'
+          );
+          setIsUploadingImage(false);
+          return;
+        }
+        throw err;
+      }
+
+      // 2. Direct-to-Cloudinary upload
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('api_key', signatureConfig.apiKey);
+      formData.append('timestamp', String(signatureConfig.timestamp));
+      formData.append('signature', signatureConfig.signature);
+      formData.append('folder', signatureConfig.folder);
+      formData.append('public_id', signatureConfig.publicId);
+
+      const cloudRes = await fetch(signatureConfig.uploadUrl, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!cloudRes.ok) {
+        const cloudErr = await cloudRes.json().catch(() => ({}));
+        throw new Error(
+          cloudErr?.error?.message || `Cloudinary upload failed with status ${cloudRes.status}`
+        );
+      }
+
+      const cloudData = await cloudRes.json();
+
+      // 3. Persist new image URL and public_id in PostgreSQL
+      await adminUpdateCategory(imageModalCategory.id, {
+        imageUrl: cloudData.secure_url || cloudData.url,
+        publicId: cloudData.public_id,
+      });
+
+      setImageModalSuccess('Category image uploaded and saved successfully.');
+      await loadCategories();
+      onCategoryMutated?.();
+      setTimeout(() => {
+        handleCloseImageModal();
+      }, 1200);
+    } catch (err: unknown) {
+      setImageModalError(err instanceof Error ? err.message : 'Failed to update category image');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const handleRemoveCurrentImage = async () => {
+    if (!imageModalCategory) return;
+    setImageModalError(null);
+    setImageModalSuccess(null);
+    setIsUploadingImage(true);
+    try {
+      await adminUpdateCategory(imageModalCategory.id, {
+        imageUrl: null,
+        publicId: null,
+      });
+      setImageModalSuccess('Category image removed.');
+      await loadCategories();
+      onCategoryMutated?.();
+      setTimeout(() => {
+        handleCloseImageModal();
+      }, 1200);
+    } catch (err: unknown) {
+      setImageModalError(err instanceof Error ? err.message : 'Failed to remove category image');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   // Handle open Add Modal
   const handleOpenAddModal = () => {
     setAddName('');
     setAddSlug('');
     setIsAddSlugManual(false);
     setAddDescription('');
+    setAddImageUrl('');
     // Propose next display order
     const nextOrder = categories.length > 0
       ? Math.max(...categories.map((c) => c.displayOrder)) + 1
@@ -144,6 +341,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         description: addDescription.trim() || undefined,
         displayOrder: Number(addDisplayOrder) || 0,
         isActive: addIsActive,
+        imageUrl: addImageUrl.trim() || undefined,
       };
 
       await adminCreateCategory(payload);
@@ -166,6 +364,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
     setEditDescription(cat.description || '');
     setEditDisplayOrder(cat.displayOrder);
     setEditIsActive(cat.isActive);
+    setEditImageUrl(cat.imageUrl || '');
     setEditError(null);
   };
 
@@ -199,6 +398,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
         description: editDescription.trim() || null,
         displayOrder: Number(editDisplayOrder) || 0,
         isActive: editIsActive,
+        imageUrl: editImageUrl.trim() || null,
       };
 
       await adminUpdateCategory(editingCategory.id, payload);
@@ -309,6 +509,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
               <TableHeader>
                 <TableRow className="border-b border-axdoro-border bg-axdoro-surface-muted/50">
                   <TableHead className="w-16 text-center font-mono text-[11px]">Order</TableHead>
+                  <TableHead className="w-16 text-center font-semibold text-xs">Image</TableHead>
                   <TableHead className="font-semibold text-xs">Name</TableHead>
                   <TableHead className="font-mono text-[11px]">Slug / Route</TableHead>
                   <TableHead className="font-semibold text-xs">Description</TableHead>
@@ -327,6 +528,34 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                     >
                       <TableCell className="text-center font-mono text-xs text-axdoro-text-muted font-bold">
                         {cat.displayOrder}
+                      </TableCell>
+                      <TableCell className="text-center p-2">
+                        {cat.imageUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenImageModal(cat)}
+                            className="group relative block w-10 h-10 rounded-lg overflow-hidden border border-axdoro-border mx-auto cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent shadow-xs"
+                            title="Click to view/change image"
+                          >
+                            <img
+                              src={cat.imageUrl}
+                              alt={cat.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <Upload className="w-3.5 h-3.5 text-white" />
+                            </div>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenImageModal(cat)}
+                            className="w-10 h-10 rounded-lg bg-axdoro-surface-muted border border-dashed border-axdoro-border flex items-center justify-center text-axdoro-text-muted hover:text-axdoro-accent hover:border-axdoro-accent/50 transition-colors mx-auto cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                            title="Upload category image"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                          </button>
+                        )}
                       </TableCell>
                       <TableCell className="font-semibold text-xs text-axdoro-charcoal">
                         {cat.name}
@@ -356,6 +585,16 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                       </TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleOpenImageModal(cat)}
+                            className="h-8 text-xs font-semibold px-2.5 text-axdoro-accent hover:text-axdoro-accent hover:bg-axdoro-purple/10 border-axdoro-border"
+                            title="Upload or Change Category Image"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5 mr-1" /> Image
+                          </Button>
+
                           <Button
                             variant="outline"
                             size="sm"
@@ -467,6 +706,23 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                 />
                 <p className="text-[11px] text-axdoro-text-muted">
                   Used in storefront URLs. Only lowercase alphanumeric characters and hyphens allowed.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="add-image-url" className="text-xs font-semibold">
+                  Category Image URL <span className="text-axdoro-text-muted font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="add-image-url"
+                  type="url"
+                  placeholder="https://images.unsplash.com/... or Cloudinary URL"
+                  value={addImageUrl}
+                  onChange={(e) => setAddImageUrl(e.target.value)}
+                  className="text-xs font-mono"
+                />
+                <p className="text-[11px] text-axdoro-text-muted">
+                  Direct image URL. You can also upload hosted files using the Image button after creation.
                 </p>
               </div>
 
@@ -611,6 +867,35 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
               </div>
 
               <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="edit-image-url" className="text-xs font-semibold">
+                    Category Image URL <span className="text-axdoro-text-muted font-normal">(optional)</span>
+                  </Label>
+                  {editingCategory.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetCat = editingCategory;
+                        setEditingCategory(null);
+                        handleOpenImageModal(targetCat);
+                      }}
+                      className="text-[11px] text-axdoro-accent hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Upload className="w-3 h-3" /> Upload / Replace
+                    </button>
+                  )}
+                </div>
+                <Input
+                  id="edit-image-url"
+                  type="url"
+                  value={editImageUrl}
+                  placeholder="https://..."
+                  onChange={(e) => setEditImageUrl(e.target.value)}
+                  className="text-xs font-mono"
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="edit-description" className="text-xs font-semibold">
                   Description <span className="text-axdoro-text-muted font-normal">(optional)</span>
                 </Label>
@@ -678,6 +963,223 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                     'Save Changes'
                   )}
                 </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Image Management Dialog Modal */}
+      {imageModalCategory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+          <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
+            <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-axdoro-accent" />
+                <div>
+                  <h3 className="text-sm font-bold text-axdoro-charcoal">
+                    Manage Image: {imageModalCategory.name}
+                  </h3>
+                  <span className="text-[11px] font-mono text-axdoro-text-muted">
+                    /category/{imageModalCategory.slug}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseImageModal}
+                disabled={isUploadingImage}
+                className="p-1.5 text-axdoro-text-muted hover:text-axdoro-charcoal rounded-lg hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCategoryImage} className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
+              {imageModalSuccess && (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <span>{imageModalSuccess}</span>
+                </div>
+              )}
+
+              {imageModalError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <span>{imageModalError}</span>
+                </div>
+              )}
+
+              {/* Upload mode tabs */}
+              <div className="flex items-center gap-2 border-b border-axdoro-border pb-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!useManualUrl ? 'default' : 'outline'}
+                  onClick={() => {
+                    setUseManualUrl(false);
+                    setImageModalError(null);
+                  }}
+                  className="text-xs h-8"
+                >
+                  <Upload className="w-3.5 h-3.5 mr-1.5" />
+                  Upload File
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={useManualUrl ? 'default' : 'outline'}
+                  onClick={() => {
+                    setUseManualUrl(true);
+                    setImageModalError(null);
+                  }}
+                  className="text-xs h-8"
+                >
+                  <LinkIcon className="w-3.5 h-3.5 mr-1.5" />
+                  Direct URL
+                </Button>
+              </div>
+
+              {!useManualUrl ? (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Select Replacement File</Label>
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      className="border-2 border-dashed border-axdoro-border hover:border-axdoro-accent rounded-xl p-4 text-center cursor-pointer transition-colors bg-axdoro-surface-muted/30 hover:bg-axdoro-surface-muted/60"
+                    >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/jpg,image/webp,image/avif,image/svg+xml,image/gif"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <Upload className="w-6 h-6 mx-auto mb-2 text-axdoro-text-muted" />
+                      <p className="text-xs font-semibold text-axdoro-charcoal">
+                        {selectedFile ? selectedFile.name : 'Click to select category image'}
+                      </p>
+                      <p className="text-[11px] text-axdoro-text-muted mt-1">
+                        Supports WebP, PNG, JPG, AVIF, SVG (max 10MB)
+                      </p>
+                    </div>
+                  </div>
+
+                  {selectedFile && (
+                    <div className="flex items-center justify-between text-xs bg-axdoro-surface-muted p-2.5 rounded-lg border border-axdoro-border">
+                      <span className="truncate max-w-[280px] font-mono text-[11px] text-axdoro-charcoal">
+                        {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedFile}
+                        className="text-red-500 hover:text-red-700 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                      >
+                        <X className="w-3.5 h-3.5" /> Clear
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="category-manual-url" className="text-xs font-semibold">
+                    Direct Image URL
+                  </Label>
+                  <Input
+                    id="category-manual-url"
+                    type="url"
+                    placeholder="https://images.unsplash.com/... or hosted CDN URL"
+                    value={manualUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setManualUrl(val);
+                      setPreviewUrl(val.trim() || null);
+                    }}
+                    className="text-xs font-mono"
+                  />
+                  <p className="text-[11px] text-axdoro-text-muted">
+                    Must be a valid HTTP/HTTPS image URL ending in a supported format or hosted on Cloudinary/Unsplash/Pexels.
+                  </p>
+                </div>
+              )}
+
+              {/* Preview Section */}
+              <div className="space-y-1.5 pt-2">
+                <Label className="text-xs font-semibold">Image Preview</Label>
+                <div className="relative rounded-xl overflow-hidden border border-axdoro-border bg-axdoro-surface-muted h-48 flex items-center justify-center">
+                  {previewUrl ? (
+                    <>
+                      <img
+                        src={previewUrl}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10 flex flex-col justify-end p-4 pointer-events-none">
+                        <span className="text-[10px] font-mono uppercase text-white/70 font-semibold tracking-wider">
+                          Storefront Preview
+                        </span>
+                        <h4 className="text-lg font-bold text-white tracking-tight">
+                          {imageModalCategory.name}
+                        </h4>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-axdoro-text-muted/60 p-4">
+                      <ImageIcon className="w-8 h-8 mx-auto mb-1.5 opacity-50" />
+                      <p className="text-xs font-medium">No image selected or assigned</p>
+                      <p className="text-[10px]">Select a file above or provide an image URL</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="pt-4 border-t border-axdoro-border flex items-center justify-between gap-3">
+                {imageModalCategory.imageUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveCurrentImage}
+                    disabled={isUploadingImage}
+                    className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                    Remove Image
+                  </Button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCloseImageModal}
+                    disabled={isUploadingImage}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isUploadingImage || (!useManualUrl && !selectedFile && !manualUrl)}
+                    className="shadow-sm"
+                  >
+                    {isUploadingImage ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                        Saving Image...
+                      </>
+                    ) : (
+                      'Save Image'
+                    )}
+                  </Button>
+                </div>
               </div>
             </form>
           </div>

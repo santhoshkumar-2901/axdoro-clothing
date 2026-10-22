@@ -16,6 +16,22 @@ export const categoryCreateSchema = z.object({
   description: z.string().trim().max(1000).optional(),
   displayOrder: z.coerce.number().int().default(0),
   isActive: z.boolean().default(true),
+  imageUrl: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid image URL',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+  publicId: z.string().trim().max(255).optional().nullable(),
 });
 
 export const categoryUpdateSchema = categoryCreateSchema.partial();
@@ -248,4 +264,23 @@ export const homepageCollectionUpdateSchema = z.object({
 
 export const collectionProductsUpdateSchema = z.object({
   productIds: z.array(z.string().uuid('Invalid product ID')),
+});
+
+export const homepageHeroUpdateSchema = z.object({
+  imageUrl: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid hero image URL',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+  publicId: z.string().trim().max(255).optional().nullable(),
 });

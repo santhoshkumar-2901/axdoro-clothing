@@ -205,6 +205,8 @@ export interface AdminCategory {
   isActive: boolean;
   productCount: number;
   createdAt: string;
+  imageUrl?: string | null;
+  publicId?: string | null;
 }
 
 export async function adminGetCategories(): Promise<AdminCategory[]> {
@@ -223,6 +225,8 @@ export interface CreateCategoryPayload {
   description?: string;
   displayOrder?: number;
   isActive?: boolean;
+  imageUrl?: string | null;
+  publicId?: string | null;
 }
 
 export interface UpdateCategoryPayload {
@@ -231,6 +235,8 @@ export interface UpdateCategoryPayload {
   description?: string | null;
   displayOrder?: number;
   isActive?: boolean;
+  imageUrl?: string | null;
+  publicId?: string | null;
 }
 
 export async function adminCreateCategory(
@@ -644,6 +650,24 @@ export async function adminGetUploadSignature(productId: string): Promise<Cloudi
   return json.data;
 }
 
+export async function adminGetCategoryUploadSignature(categoryId?: string): Promise<CloudinarySignature> {
+  const endpoint = categoryId
+    ? `/api/admin/categories/${categoryId}/images/signature`
+    : '/api/admin/categories/upload-signature';
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const err = new Error(json.message || 'Failed to generate category image upload signature');
+    (err as any).code = json.code;
+    throw err;
+  }
+  return json.data;
+}
+
 export async function adminAddProductImage(
   productId: string,
   imageData: {
@@ -774,4 +798,48 @@ export async function adminUpdateCollectionProducts(
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || json.error || 'Failed to update collection products');
   return json.data || json.collection;
+}
+
+// -------------------------------------------------------------
+// Homepage Hero Banner Management Client APIs
+// -------------------------------------------------------------
+
+export interface UpdateHomepageHeroPayload {
+  imageUrl?: string | null;
+  publicId?: string | null;
+}
+
+export async function adminGetHomepageHero(): Promise<import('../types/product.js').HomepageHeroSetting> {
+  const res = await fetch('/api/admin/homepage/hero', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch homepage hero configuration');
+  return json.data;
+}
+
+export async function adminGetHeroUploadSignature(): Promise<CloudinarySignature> {
+  const res = await fetch('/api/admin/homepage/hero/upload-signature', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to get hero upload signature');
+  return json.data;
+}
+
+export async function adminUpdateHomepageHero(
+  payload: UpdateHomepageHeroPayload
+): Promise<import('../types/product.js').HomepageHeroSetting> {
+  const res = await fetch('/api/admin/homepage/hero', {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to update homepage hero image');
+  return json.data;
 }
