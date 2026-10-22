@@ -8,16 +8,124 @@ interface CartDrawerProps {
   onClose: () => void;
   cartItems: CartItem[];
   onUpdateQuantity: (itemId: string, delta: number) => void;
+  onSetQuantity?: (itemId: string, newQuantity: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearCart: () => void;
   onProceedToCheckout: () => void;
 }
+
+interface CartItemQuantityControlProps {
+  item: CartItem;
+  onUpdateQuantity: (itemId: string, delta: number) => void;
+  onSetQuantity?: (itemId: string, newQuantity: number) => void;
+}
+
+const CartItemQuantityControl: React.FC<CartItemQuantityControlProps> = ({
+  item,
+  onUpdateQuantity,
+  onSetQuantity,
+}) => {
+  const [localVal, setLocalVal] = React.useState(String(item.quantity));
+
+  // Sync localVal whenever item.quantity changes from props
+  React.useEffect(() => {
+    setLocalVal(String(item.quantity));
+  }, [item.quantity]);
+
+  // Determine available stock: variant stock if variantId is set, else product stockCount
+  const variant = item.variantId
+    ? item.product.variants?.find((v) => v.id === item.variantId)
+    : item.product.variants?.find(
+        (v) => v.size === item.selectedSize && (!item.selectedColor || v.color === item.selectedColor)
+      );
+  const rawStock = variant ? variant.stock : item.product.stockCount;
+  const maxStock = Math.max(1, Math.min(typeof rawStock === 'number' && rawStock > 0 ? rawStock : 20, 20));
+
+  const commitValue = (valToCommit: string) => {
+    const parsed = parseInt(valToCommit.replace(/[^0-9]/g, ''), 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setLocalVal(String(item.quantity));
+    } else {
+      const clamped = Math.max(1, Math.min(maxStock, parsed));
+      setLocalVal(String(clamped));
+      if (clamped !== item.quantity) {
+        if (onSetQuantity) {
+          onSetQuantity(item.id, clamped);
+        } else {
+          onUpdateQuantity(item.id, clamped - item.quantity);
+        }
+      }
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const clean = e.target.value.replace(/[^0-9]/g, '');
+    setLocalVal(clean);
+  };
+
+  const handleStep = (delta: number) => {
+    const next = item.quantity + delta;
+    if (next < 1) {
+      // Minimum is 1; do not decrement below 1 (removal is handled by trash icon)
+      return;
+    }
+    const clamped = Math.min(maxStock, next);
+    if (clamped !== item.quantity) {
+      if (onSetQuantity) {
+        onSetQuantity(item.id, clamped);
+      } else {
+        onUpdateQuantity(item.id, delta);
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center rounded border border-axdoro-border bg-axdoro-surface">
+      <button
+        type="button"
+        onClick={() => handleStep(-1)}
+        disabled={item.quantity <= 1}
+        className="px-2 py-1 text-axdoro-text-muted hover:text-axdoro-charcoal text-xs cursor-pointer disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
+        aria-label="Decrease quantity"
+      >
+        <Minus className="w-3 h-3" />
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={localVal}
+        onChange={handleChange}
+        onBlur={() => commitValue(localVal)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commitValue(localVal);
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className="w-8 text-center text-xs font-bold text-axdoro-charcoal bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-axdoro-accent rounded py-0.5"
+        aria-label={`Quantity for ${item.product.name}`}
+      />
+      <button
+        type="button"
+        onClick={() => handleStep(1)}
+        disabled={item.quantity >= maxStock}
+        className="px-2 py-1 text-axdoro-text-muted hover:text-axdoro-charcoal text-xs cursor-pointer disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
+        aria-label="Increase quantity"
+      >
+        <Plus className="w-3 h-3" />
+      </button>
+    </div>
+  );
+};
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
   isOpen,
   onClose,
   cartItems,
   onUpdateQuantity,
+  onSetQuantity,
   onRemoveItem,
   onClearCart,
   onProceedToCheckout,
@@ -127,25 +235,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      <div className="flex items-center rounded border border-axdoro-border bg-axdoro-surface">
-                        <button
-                          onClick={() => onUpdateQuantity(item.id, -1)}
-                          className="px-2 py-1 text-axdoro-text-muted hover:text-axdoro-charcoal text-xs cursor-pointer disabled:opacity-30 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-6 text-center text-xs font-bold text-axdoro-charcoal">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => onUpdateQuantity(item.id, 1)}
-                          className="px-2 py-1 text-axdoro-text-muted hover:text-axdoro-charcoal text-xs cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
-                      </div>
+                      <CartItemQuantityControl
+                        item={item}
+                        onUpdateQuantity={onUpdateQuantity}
+                        onSetQuantity={onSetQuantity}
+                      />
                     </div>
                   </div>
                 );

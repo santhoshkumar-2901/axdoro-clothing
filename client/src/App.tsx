@@ -129,6 +129,18 @@ export default function App(): React.JSX.Element {
     );
   };
 
+  const handleSetQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    setCartItems((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          return { ...item, quantity: newQuantity };
+        }
+        return item;
+      })
+    );
+  };
+
   const handleRemoveItem = (itemId: string) => {
     setCartItems((prev) => prev.filter((item) => item.id !== itemId));
   };
@@ -291,6 +303,7 @@ export default function App(): React.JSX.Element {
         onClose={() => setIsCartOpen(false)}
         cartItems={cartItems}
         onUpdateQuantity={handleUpdateQuantity}
+        onSetQuantity={handleSetQuantity}
         onRemoveItem={handleRemoveItem}
         onClearCart={handleClearCart}
         onProceedToCheckout={() => setIsCheckoutOpen(true)}

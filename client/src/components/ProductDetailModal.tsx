@@ -27,6 +27,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
+  const [quantityInput, setQuantityInput] = useState('1');
   const [sizeError, setSizeError] = useState(false);
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -38,6 +39,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       setSelectedSize('');
       setSelectedColor(product.colors[0]?.name || 'Standard');
       setQuantity(1);
+      setQuantityInput('1');
       setSizeError(false);
       setAddedSuccess(false);
       setImageError(false);
@@ -125,6 +127,38 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const isEntirelyOutOfStock = product.stockStatus === 'out-of-stock' || product.stockCount <= 0;
   const isSelectedVariantOutOfStock = matchingVariant !== undefined && (matchingVariant.stock <= 0 || !matchingVariant.isActive);
   const maxAvailableQuantity = matchingVariant ? matchingVariant.stock : product.stockCount;
+  const effectiveMaxQuantity = Math.max(1, Math.min(maxAvailableQuantity > 0 ? maxAvailableQuantity : 20, 20));
+
+  const handleCommitQuantity = (valToCommit: string) => {
+    const cleanDigits = valToCommit.replace(/[^0-9]/g, '');
+    const parsed = parseInt(cleanDigits, 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setQuantity(1);
+      setQuantityInput('1');
+    } else {
+      const clamped = Math.min(effectiveMaxQuantity, Math.max(1, parsed));
+      setQuantity(clamped);
+      setQuantityInput(String(clamped));
+    }
+  };
+
+  const handleQuantityInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    const cleanDigits = raw.replace(/[^0-9]/g, '');
+    setQuantityInput(cleanDigits);
+    if (cleanDigits !== '') {
+      const parsed = parseInt(cleanDigits, 10);
+      if (!isNaN(parsed) && parsed >= 1) {
+        setQuantity(Math.min(effectiveMaxQuantity, parsed));
+      }
+    }
+  };
+
+  const handleStepQuantity = (delta: number) => {
+    const next = Math.max(1, Math.min(effectiveMaxQuantity, quantity + delta));
+    setQuantity(next);
+    setQuantityInput(String(next));
+  };
 
   const handleAddToCart = () => {
     if (!selectedSize && product.sizes.length > 0) {
@@ -368,35 +402,50 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               {/* Quantity Controls */}
               {!isEntirelyOutOfStock && !isSelectedVariantOutOfStock && (
                 <div className="mt-5 flex items-center gap-4">
-                  <label className="text-xs font-bold text-axdoro-charcoal uppercase tracking-wider">
+                  <label htmlFor="product-quantity-input" className="text-xs font-bold text-axdoro-charcoal uppercase tracking-wider">
                     Quantity
                   </label>
                   <div className="flex items-center rounded-lg border border-axdoro-border bg-axdoro-bg">
                     <button
                       type="button"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      onClick={() => handleStepQuantity(-1)}
                       disabled={quantity <= 1}
                       className="p-2 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
                       aria-label="Decrease quantity"
                     >
                       <Minus className="w-3.5 h-3.5" />
                     </button>
-                    <span className="w-10 text-center font-bold text-xs text-axdoro-charcoal">
-                      {quantity}
-                    </span>
+                    <input
+                      id="product-quantity-input"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={quantityInput}
+                      onChange={handleQuantityInputChange}
+                      onBlur={() => handleCommitQuantity(quantityInput)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleCommitQuantity(quantityInput);
+                          (e.target as HTMLInputElement).blur();
+                        }
+                      }}
+                      className="w-12 text-center font-bold text-xs text-axdoro-charcoal bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-axdoro-accent rounded py-1"
+                      aria-label="Product quantity"
+                    />
                     <button
                       type="button"
-                      onClick={() => setQuantity(Math.min(maxAvailableQuantity, quantity + 1))}
-                      disabled={quantity >= maxAvailableQuantity}
+                      onClick={() => handleStepQuantity(1)}
+                      disabled={quantity >= effectiveMaxQuantity}
                       className="p-2 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-axdoro-accent"
                       aria-label="Increase quantity"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  {maxAvailableQuantity < 10 && (
+                  {effectiveMaxQuantity < 10 && (
                     <span className="text-[11px] text-axdoro-text-muted">
-                      (Max {maxAvailableQuantity} available)
+                      (Max {effectiveMaxQuantity} available)
                     </span>
                   )}
                 </div>
