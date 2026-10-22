@@ -141,7 +141,9 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-2xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated p-6 sm:p-8 my-8"
+        className={`relative w-full ${
+          submitted ? 'max-w-lg' : 'max-w-2xl'
+        } max-h-[90vh] overflow-y-auto bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated p-6 sm:p-8 my-auto transition-all`}
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -165,14 +167,16 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
         </p>
 
         {submitted ? (
-          <div className="my-8 p-6 rounded-xl border border-emerald-500/40 bg-emerald-50 text-center space-y-3">
-            <CheckCircle2 className="w-12 h-12 text-emerald-600 mx-auto" />
-            <h3 className="text-lg font-bold text-axdoro-charcoal">Bulk Enquiry Received</h3>
-            <p className="text-xs text-axdoro-text-muted max-w-md mx-auto">
+          <div className="mt-5 p-6 rounded-2xl border border-emerald-500/30 bg-axdoro-bg/80 text-center space-y-3 shadow-subtle">
+            <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto mb-1">
+              <CheckCircle2 className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold text-axdoro-charcoal tracking-tight">Bulk Enquiry Received</h3>
+            <p className="text-xs text-axdoro-text-muted max-w-sm mx-auto leading-relaxed">
               Thank you for reaching out. Your enquiry has been recorded in our system.
               Our team will review your specifications and contact you shortly.
             </p>
-            <div className="pt-4 flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="pt-3 flex flex-col sm:flex-row gap-2.5 justify-center">
               <button
                 onClick={handleWhatsAppShare}
                 className="px-5 py-2.5 rounded-lg bg-[#25D366] hover:bg-[#20ba5a] text-black font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
@@ -185,7 +189,7 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
                   setSubmitted(false);
                   onClose();
                 }}
-                className="px-5 py-2.5 rounded-lg bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs font-semibold hover:bg-axdoro-bg transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                className="px-5 py-2.5 rounded-lg bg-axdoro-surface-muted hover:bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
               >
                 Close Window
               </button>

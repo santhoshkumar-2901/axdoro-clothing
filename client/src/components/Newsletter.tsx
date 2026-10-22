@@ -62,10 +62,6 @@ export const Newsletter: React.FC = () => {
             </button>
           </form>
         )}
-
-        <p className="text-[11px] text-axdoro-text-muted">
-          Demo storefront UI &bull; No marketing tracking &bull; Privacy respected
-        </p>
       </div>
     </section>
   );
