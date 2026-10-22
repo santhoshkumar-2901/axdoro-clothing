@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sparkles,
   Save,
@@ -12,17 +12,25 @@ import {
   X,
   Search,
   ShoppingBag,
+  Image as ImageIcon,
+  Upload,
+  Link as LinkIcon,
+  RotateCcw,
 } from 'lucide-react';
 import {
   adminGetHomepageCollections,
   adminUpdateHomepageCollection,
   adminUpdateCollectionProducts,
   adminGetProducts,
+  adminGetHomepageHero,
+  adminGetHeroUploadSignature,
+  adminUpdateHomepageHero,
   AdminProduct,
 } from '../../api/admin.ts';
 import { useScrollLock } from '../../utils/scrollLock.ts';
 import {
   AdminHomepageCollection,
+  HomepageHeroSetting,
   formatPaiseToINR,
 } from '../../types/product.ts';
 import { Button } from '../ui/button.tsx';
@@ -63,6 +71,167 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
 
   // Global reference-counted scroll lock while add products modal is open
   useScrollLock(isAddModalOpen);
+
+  // Hero banner state
+  const [heroSetting, setHeroSetting] = useState<HomepageHeroSetting | null>(null);
+  const [isLoadingHero, setIsLoadingHero] = useState<boolean>(true);
+  const [isHeroModalOpen, setIsHeroModalOpen] = useState<boolean>(false);
+  const [heroFile, setHeroFile] = useState<File | null>(null);
+  const [heroPreviewUrl, setHeroPreviewUrl] = useState<string | null>(null);
+  const [heroManualUrl, setHeroManualUrl] = useState<string>('');
+  const [useHeroManualUrl, setUseHeroManualUrl] = useState<boolean>(false);
+  const [isSavingHero, setIsSavingHero] = useState<boolean>(false);
+  const [heroModalError, setHeroModalError] = useState<string | null>(null);
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Global reference-counted scroll lock for hero image modal
+  useScrollLock(isHeroModalOpen);
+
+  const loadHero = useCallback(async () => {
+    try {
+      setIsLoadingHero(true);
+      const hero = await adminGetHomepageHero();
+      setHeroSetting(hero);
+    } catch (err) {
+      console.warn('[CollectionManagementView] Failed to load homepage hero:', err);
+    } finally {
+      setIsLoadingHero(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHero();
+  }, [loadHero]);
+
+  // Clean up object preview URL
+  useEffect(() => {
+    return () => {
+      if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(heroPreviewUrl);
+      }
+    };
+  }, [heroPreviewUrl]);
+
+  const handleOpenHeroModal = () => {
+    setHeroFile(null);
+    setHeroPreviewUrl(heroSetting?.imageUrl || null);
+    setHeroManualUrl(heroSetting?.imageUrl || '');
+    setUseHeroManualUrl(false);
+    setHeroModalError(null);
+    setIsHeroModalOpen(true);
+  };
+
+  const handleCloseHeroModal = () => {
+    if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(heroPreviewUrl);
+    }
+    setHeroFile(null);
+    setHeroPreviewUrl(null);
+    setHeroManualUrl('');
+    setHeroModalError(null);
+    setIsHeroModalOpen(false);
+  };
+
+  const handleHeroFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(heroPreviewUrl);
+      }
+      setHeroFile(file);
+      setHeroPreviewUrl(URL.createObjectURL(file));
+      setHeroModalError(null);
+    }
+  };
+
+  const handleClearHeroSelectedFile = () => {
+    if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(heroPreviewUrl);
+    }
+    setHeroFile(null);
+    setHeroPreviewUrl(heroSetting?.imageUrl || null);
+    if (heroFileInputRef.current) {
+      heroFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveHero = async () => {
+    try {
+      setIsSavingHero(true);
+      setHeroModalError(null);
+
+      let finalImageUrl: string | null = null;
+      let finalPublicId: string | null = null;
+
+      if (useHeroManualUrl) {
+        if (!heroManualUrl.trim()) {
+          setHeroModalError('Please enter an image URL or choose a file.');
+          setIsSavingHero(false);
+          return;
+        }
+        finalImageUrl = heroManualUrl.trim();
+        finalPublicId = null;
+      } else if (heroFile) {
+        const sig = await adminGetHeroUploadSignature();
+        const formData = new FormData();
+        formData.append('file', heroFile);
+        formData.append('api_key', sig.apiKey);
+        formData.append('timestamp', String(sig.timestamp));
+        formData.append('signature', sig.signature);
+        formData.append('folder', sig.folder);
+        formData.append('public_id', sig.publicId);
+
+        const uploadRes = await fetch(sig.uploadUrl, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error(`Cloudinary upload failed with HTTP ${uploadRes.status}`);
+        }
+
+        const uploadData = (await uploadRes.json()) as { secure_url: string; public_id: string };
+        finalImageUrl = uploadData.secure_url;
+        finalPublicId = uploadData.public_id;
+      } else {
+        setHeroModalError('Please select a file or enter an image URL.');
+        setIsSavingHero(false);
+        return;
+      }
+
+      const updated = await adminUpdateHomepageHero({
+        imageUrl: finalImageUrl,
+        publicId: finalPublicId,
+      });
+
+      setHeroSetting(updated);
+      setSuccessMessage('Homepage hero banner updated successfully.');
+      handleCloseHeroModal();
+      onCollectionMutated?.();
+    } catch (err) {
+      setHeroModalError(err instanceof Error ? err.message : 'Failed to update homepage hero');
+    } finally {
+      setIsSavingHero(false);
+    }
+  };
+
+  const handleResetHeroToDefault = async () => {
+    try {
+      setIsSavingHero(true);
+      setError(null);
+      const updated = await adminUpdateHomepageHero({
+        imageUrl: null,
+        publicId: null,
+      });
+      setHeroSetting(updated);
+      setSuccessMessage('Homepage hero banner restored to default asset (/hero-bg.jpg).');
+      onCollectionMutated?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset hero banner');
+    } finally {
+      setIsSavingHero(false);
+    }
+  };
 
   const loadCollections = useCallback(async () => {
     try {
@@ -249,13 +418,110 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
         <div>
           <h2 className="text-xl font-serif text-axdoro-text flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-axdoro-purple" />
-            Homepage Collections
+            Homepage Content
           </h2>
           <p className="text-xs text-axdoro-muted mt-1">
-            Curate and reorder products displayed in featured sections on the storefront homepage.
+            Manage your storefront hero banner and curate featured product collections.
           </p>
         </div>
       </div>
+
+      {/* 1. Homepage Hero Banner Management Section */}
+      <Card className="border-axdoro-border bg-axdoro-surface shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b border-axdoro-border/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold text-axdoro-charcoal flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-axdoro-accent" />
+                Storefront Hero Lifestyle Banner
+              </CardTitle>
+              <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
+                The primary full-width background lifestyle image displayed in the homepage hero campaign section.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              {heroSetting?.imageUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetHeroToDefault}
+                  disabled={isSavingHero}
+                  className="h-8 text-xs font-semibold text-axdoro-text-muted hover:text-red-400 hover:border-red-400/40"
+                  title="Reset to default /hero-bg.jpg"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset Default
+                </Button>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleOpenHeroModal}
+                disabled={isLoadingHero}
+                className="h-8 text-xs font-semibold px-3 shadow-xs flex items-center gap-1.5"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>{heroSetting?.imageUrl ? 'Change Hero Image' : 'Upload Hero Image'}</span>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex flex-col md:flex-row items-center gap-6">
+            {/* Banner Preview Thumbnail */}
+            <div className="relative w-full md:w-80 h-36 rounded-lg overflow-hidden border border-axdoro-border bg-black/40 flex-shrink-0 group">
+              <img
+                src={heroSetting?.imageUrl || '/hero-bg.jpg'}
+                alt="Current Hero Banner"
+                className="w-full h-full object-cover object-[75%_center]"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/hero-bg.jpg';
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
+              <div className="absolute top-2 left-2">
+                {heroSetting?.imageUrl ? (
+                  <Badge variant="default" className="text-[10px] bg-axdoro-accent text-black font-semibold">
+                    Custom Image
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px] bg-black/60 text-stone-200 border-white/20">
+                    Default Asset (/hero-bg.jpg)
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {/* Banner Meta & Instructions */}
+            <div className="space-y-2 text-xs text-axdoro-text-muted flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
+                <div>
+                  <span className="text-axdoro-text-muted/60">Status: </span>
+                  <span className="text-axdoro-charcoal font-semibold">
+                    {heroSetting?.imageUrl ? 'Active (Custom)' : 'Active (Default System Asset)'}
+                  </span>
+                </div>
+                {heroSetting?.updatedAt && (
+                  <div>
+                    <span className="text-axdoro-text-muted/60">Updated: </span>
+                    <span className="text-axdoro-charcoal font-semibold">
+                      {new Date(heroSetting.updatedAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="leading-relaxed">
+                Recommended aspect ratio: <strong className="text-axdoro-charcoal font-semibold">16:9 or 21:9</strong> landscape. The image uses right-focused alignment with a soft atmospheric gradient overlay to preserve optimal contrast for headline text on the left.
+              </p>
+              {heroSetting?.imageUrl && (
+                <p className="font-mono text-[10px] text-axdoro-accent-muted truncate max-w-lg">
+                  {heroSetting.imageUrl}
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Alerts */}
       {error && (
@@ -641,6 +907,197 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
               </Button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Hero Image Modal Dialog */}
+      {isHeroModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg border-axdoro-border bg-axdoro-surface text-axdoro-charcoal shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-axdoro-border">
+              <div>
+                <CardTitle className="text-base font-bold text-axdoro-charcoal flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-axdoro-accent" />
+                  Manage Homepage Hero Image
+                </CardTitle>
+                <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
+                  Upload a high-resolution banner via Cloudinary or enter an image URL.
+                </CardDescription>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseHeroModal}
+                disabled={isSavingHero}
+                className="p-1 rounded-md text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </CardHeader>
+
+            <CardContent className="space-y-4 pt-4">
+              {heroModalError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                  <span>{heroModalError}</span>
+                </div>
+              )}
+
+              {/* Live Preview Container */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-axdoro-charcoal">Live Banner Preview</Label>
+                <div className="relative w-full h-44 rounded-lg overflow-hidden border border-axdoro-border bg-black/60 flex items-center justify-center">
+                  <img
+                    src={heroPreviewUrl || heroSetting?.imageUrl || '/hero-bg.jpg'}
+                    alt="Hero Preview"
+                    className="w-full h-full object-cover object-[75%_center]"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/hero-bg.jpg';
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/80 to-transparent pointer-events-none" />
+                  <div className="absolute bottom-3 left-4 pointer-events-none text-left">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5B842] font-bold">Preview</span>
+                    <p className="text-xs font-bold text-white leading-tight">Headline Contrast Overlay Simulation</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Mode Toggle: File Upload vs Direct URL */}
+              <div className="flex items-center gap-2 border-b border-axdoro-border pb-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setUseHeroManualUrl(false)}
+                  className={`text-xs font-semibold pb-1.5 px-2 border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    !useHeroManualUrl
+                      ? 'border-axdoro-accent text-axdoro-accent'
+                      : 'border-transparent text-axdoro-text-muted hover:text-axdoro-charcoal'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" /> File Upload (Cloudinary)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseHeroManualUrl(true)}
+                  className={`text-xs font-semibold pb-1.5 px-2 border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    useHeroManualUrl
+                      ? 'border-axdoro-accent text-axdoro-accent'
+                      : 'border-transparent text-axdoro-text-muted hover:text-axdoro-charcoal'
+                  }`}
+                >
+                  <LinkIcon className="w-3.5 h-3.5" /> Direct URL
+                </button>
+              </div>
+
+              {!useHeroManualUrl ? (
+                /* Cloudinary File Upload Mode */
+                <div className="space-y-2">
+                  <input
+                    ref={heroFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/avif"
+                    onChange={handleHeroFileChange}
+                    className="hidden"
+                    id="hero-file-upload-input"
+                  />
+                  <label
+                    htmlFor="hero-file-upload-input"
+                    className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-axdoro-border rounded-lg bg-axdoro-surface-muted/40 hover:bg-axdoro-surface-muted/80 hover:border-axdoro-accent/50 transition-colors cursor-pointer text-center"
+                  >
+                    <Upload className="w-8 h-8 text-axdoro-text-muted/60 mb-2" />
+                    <span className="text-xs font-semibold text-axdoro-charcoal">
+                      {heroFile ? heroFile.name : 'Click to select banner image'}
+                    </span>
+                    <span className="text-[11px] text-axdoro-text-muted mt-1">
+                      JPEG, PNG, WebP or AVIF up to 10MB
+                    </span>
+                  </label>
+                  {heroFile && (
+                    <div className="flex items-center justify-between text-xs px-2 text-axdoro-accent">
+                      <span>Selected: {heroFile.name} ({(heroFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                      <button
+                        type="button"
+                        onClick={handleClearHeroSelectedFile}
+                        className="text-red-400 hover:text-red-300 font-semibold"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Direct URL Mode */
+                <div className="space-y-2">
+                  <Label htmlFor="hero-manual-url" className="text-xs font-semibold text-axdoro-charcoal">
+                    Image Web Address (HTTPS)
+                  </Label>
+                  <Input
+                    id="hero-manual-url"
+                    type="url"
+                    value={heroManualUrl}
+                    onChange={(e) => {
+                      setHeroManualUrl(e.target.value);
+                      setHeroPreviewUrl(e.target.value);
+                      setHeroModalError(null);
+                    }}
+                    placeholder="https://images.unsplash.com/... or https://res.cloudinary.com/..."
+                    className="text-xs"
+                  />
+                  <p className="text-[11px] text-axdoro-text-muted">
+                    Must begin with http:// or https:// and link directly to an image asset.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+
+            <div className="p-4 border-t border-axdoro-border flex items-center justify-between">
+              {heroSetting?.imageUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    await handleResetHeroToDefault();
+                    setIsHeroModalOpen(false);
+                  }}
+                  disabled={isSavingHero}
+                  className="text-xs text-red-400 hover:text-red-300 hover:border-red-400/40"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset to Default
+                </Button>
+              )}
+              <div className="flex items-center gap-2 ml-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCloseHeroModal}
+                  disabled={isSavingHero}
+                  className="text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveHero}
+                  disabled={isSavingHero || (!heroFile && (!heroManualUrl.trim() || heroManualUrl.trim() === heroSetting?.imageUrl))}
+                  className="text-xs font-semibold flex items-center gap-1.5"
+                >
+                  {isSavingHero ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Hero Image</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
     </div>

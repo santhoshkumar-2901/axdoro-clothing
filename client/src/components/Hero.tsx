@@ -4,18 +4,26 @@ import { ArrowRight, Layers, CheckCircle2 } from 'lucide-react';
 interface HeroProps {
   onExplore: () => void;
   onOpenBulk: () => void;
+  heroImageUrl?: string | null;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onExplore, onOpenBulk }) => {
+export const Hero: React.FC<HeroProps> = ({ onExplore, onOpenBulk, heroImageUrl }) => {
+  const [imageSrc, setImageSrc] = React.useState<string>(heroImageUrl || '/hero-bg.jpg');
+
+  React.useEffect(() => {
+    setImageSrc(heroImageUrl || '/hero-bg.jpg');
+  }, [heroImageUrl]);
+
   return (
     <section className="relative overflow-hidden pt-12 pb-20 md:pt-20 md:pb-28 border-b border-axdoro-border bg-[#0D0B14]">
       {/* Background Picture & Atmospheric Gradient Overlays */}
       <div className="absolute inset-0 z-0">
         <img
-          src="/hero-bg.jpg"
+          src={imageSrc}
           alt="AXDORO Contemporary Apparel Lifestyle"
           className="w-full h-full object-cover object-[75%_center] lg:object-right"
           loading="eager"
+          onError={() => setImageSrc('/hero-bg.jpg')}
         />
         {/* Deep purple gradient vignette: dark on the left for text contrast, transparent on the right for models */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/90 to-transparent lg:via-[#0D0B14]/75 lg:to-transparent" />

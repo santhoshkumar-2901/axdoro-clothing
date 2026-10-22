@@ -169,3 +169,25 @@ export async function fetchHomepageCollectionBySlug(
     })),
   };
 }
+
+export async function fetchHomepageHero(): Promise<{ imageUrl: string | null }> {
+  try {
+    const response = await fetch('/api/homepage/hero', {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      return { imageUrl: null };
+    }
+
+    const json = await response.json();
+    return {
+      imageUrl: json.data?.imageUrl || null,
+    };
+  } catch {
+    // Fail safely with default fallback
+    return { imageUrl: null };
+  }
+}

@@ -56,7 +56,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'metrics', label: 'Dashboard Metrics', icon: BarChart3 },
     { id: 'products', label: 'Product Catalogue', icon: Package },
     { id: 'categories', label: 'Categories', icon: FolderTree },
-    { id: 'collections', label: 'Collections', icon: Sparkles },
+    { id: 'collections', label: 'Homepage Content', icon: Sparkles },
     { id: 'stock', label: 'Inventory & Stock', icon: Sliders },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'enquiries', label: 'Enquiries & Drive Sync', icon: Inbox },
@@ -71,7 +71,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <img
-                src="/logo-white.png"
+                src="/logo-transparent.png"
                 alt="AXDORO"
                 width={128}
                 height={32}

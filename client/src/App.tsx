@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, ProductCategory, Category, CartItem, ProductVariant } from './types/product.ts';
-import { fetchProductBySlug, fetchCategories } from './api/catalogue.ts';
+import { fetchProductBySlug, fetchCategories, fetchHomepageHero } from './api/catalogue.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
 import { CategoryShowcase } from './components/CategoryShowcase.tsx';
@@ -27,6 +27,7 @@ export default function App(): React.JSX.Element {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [prefilledBulkProduct, setPrefilledBulkProduct] = useState<Product | null>(null);
   const [catalogueVersion, setCatalogueVersion] = useState(0);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
 
   // Sync route path on browser back/forward navigation
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch active categories on mount and when catalogue mutates
+  // Fetch active categories and homepage hero on mount and when catalogue mutates
   useEffect(() => {
     let isCurrent = true;
     fetchCategories()
@@ -48,6 +49,16 @@ export default function App(): React.JSX.Element {
       })
       .catch(() => {
         // Handled gracefully with fallback
+      });
+
+    fetchHomepageHero()
+      .then((res) => {
+        if (isCurrent) {
+          setHeroImageUrl(res.imageUrl || null);
+        }
+      })
+      .catch(() => {
+        // Handled gracefully with default
       });
 
     return () => {
@@ -203,6 +214,7 @@ export default function App(): React.JSX.Element {
             <Hero
               onExplore={handleScrollToShop}
               onOpenBulk={handleOpenGeneralBulk}
+              heroImageUrl={heroImageUrl}
             />
 
             {/* 4. Category Showcase Cards */}

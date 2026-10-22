@@ -18,6 +18,8 @@ import { adminEnquiriesRouter } from './routes/admin/enquiries.js';
 import { adminCollectionsRouter } from './routes/admin/collections.js';
 import { collectionsRouter } from './routes/collections.js';
 import { adminNotificationsRouter } from './routes/admin/notifications.js';
+import { homepageRouter } from './routes/homepage.js';
+import { adminHomepageRouter } from './routes/admin/homepage.js';
 import { csrfProtection } from './middleware/csrf.js';
 
 export function createApp(): Express {
@@ -43,6 +45,7 @@ export function createApp(): Express {
   app.use('/api/catalogue/collections', collectionsRouter);
   app.use('/api/orders', ordersRouter);
   app.use('/api/enquiries', enquiriesRouter);
+  app.use('/api/homepage', homepageRouter);
 
   // 4. Admin Protected Routes with CSRF Protection
   app.use('/api/admin', csrfProtection);
@@ -50,6 +53,7 @@ export function createApp(): Express {
   app.use('/api/admin/products', adminProductsRouter);
   app.use('/api/admin/categories', adminCategoriesRouter);
   app.use('/api/admin/collections', adminCollectionsRouter);
+  app.use('/api/admin/homepage', adminHomepageRouter);
   app.use('/api/admin/inventory', adminInventoryRouter);
   app.use('/api/admin/metrics', adminMetricsRouter);
   app.use('/api/admin/audit-logs', adminAuditLogsRouter);
