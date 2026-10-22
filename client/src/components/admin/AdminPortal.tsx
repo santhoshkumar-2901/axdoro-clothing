@@ -626,22 +626,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </Card>
               )}
 
-              {/* Verified Architecture Notice */}
-              <Card className="border-axdoro-border bg-axdoro-surface shadow-sm">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs uppercase font-mono tracking-wider text-axdoro-text-muted font-bold">
-                    Database Telemetry &amp; Isolation
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="text-xs text-axdoro-text-muted space-y-1.5 leading-relaxed">
-                  <p>
-                    All dashboard metrics, products, and variant figures represent live data queried from the local PostgreSQL instance (<code className="font-mono text-axdoro-charcoal font-semibold bg-axdoro-surface-muted px-1.5 py-0.5 rounded border border-axdoro-border">axdoro_dev</code>).
-                  </p>
-                  <p>
-                    Orders and enquiries feature transactional synchronization, atomic row claiming, and tamper-evident audit logging.
-                  </p>
-                </CardContent>
-              </Card>
             </div>
           ) : activeTab === 'products' ? (
             /* 2. Products Tab */
@@ -1096,26 +1080,29 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Timestamp</TableHead>
-                    <TableHead>Actor</TableHead>
-                    <TableHead>Action</TableHead>
-                    <TableHead>Entity</TableHead>
-                    <TableHead>Details</TableHead>
+                    <TableHead className="w-[30%]">Timestamp</TableHead>
+                    <TableHead className="w-[45%]">Actor</TableHead>
+                    <TableHead className="w-[25%]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {auditLogs.map((log) => (
                     <TableRow key={log.id}>
-                      <TableCell className="text-[11px] font-mono text-axdoro-text-muted whitespace-nowrap">
+                      <TableCell className="w-[30%] text-[11px] font-mono text-axdoro-text-muted whitespace-nowrap">
                         {new Date(log.createdAt).toLocaleTimeString()} {new Date(log.createdAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="font-semibold text-axdoro-charcoal">{log.adminEmail}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">{log.action}</Badge>
+                      <TableCell className="w-[45%] max-w-0">
+                        <span
+                          className="block truncate font-semibold text-axdoro-charcoal"
+                          title={log.adminEmail}
+                        >
+                          {log.adminEmail}
+                        </span>
                       </TableCell>
-                      <TableCell className="text-axdoro-text-muted font-mono text-xs">{log.entityType}</TableCell>
-                      <TableCell className="text-[11px] font-mono text-axdoro-text-muted max-w-xs truncate">
-                        {JSON.stringify(log.details)}
+                      <TableCell className="w-[25%]">
+                        <Badge variant="secondary" className="inline-flex">
+                          {log.action}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   ))}
