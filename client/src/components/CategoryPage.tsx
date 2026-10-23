@@ -170,7 +170,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
       </div>
 
       {/* Editorial Category Hero Banner */}
-      <div className="relative border-b border-axdoro-border overflow-hidden bg-axdoro-charcoal text-white">
+      <div className="relative border-b border-axdoro-border overflow-hidden bg-[#0D0B14] text-white">
         <div className="absolute inset-0 z-0">
           <img
             src={coverImage}
@@ -183,23 +183,25 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
             }}
             className="w-full h-full object-cover object-center opacity-30 filter blur-sm scale-105 transition-all duration-700"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-axdoro-charcoal via-axdoro-charcoal/80 to-axdoro-charcoal/60" />
+          {/* Dark dual-gradient overlay: directional left-to-right protects text area, subtle bottom gradient grounds banner */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/85 to-[#0D0B14]/40" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0D0B14] via-transparent to-transparent opacity-80" />
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
           <div className="max-w-2xl space-y-3">
             <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-mono tracking-widest text-axdoro-accent uppercase font-bold px-2 py-0.5 rounded bg-white/10 backdrop-blur-md border border-white/10">
+              <span className="text-[10px] font-mono tracking-widest text-axdoro-accent uppercase font-bold px-2 py-0.5 rounded bg-black/50 backdrop-blur-md border border-white/10">
                 Collection
               </span>
-              <Badge variant="secondary" className="bg-white/20 text-white font-mono text-[11px] border-none">
+              <Badge variant="secondary" className="bg-black/50 text-zinc-200 font-mono text-[11px] border border-white/10 backdrop-blur-md">
                 {products.length} {products.length === 1 ? 'Style' : 'Styles'} Available
               </Badge>
             </div>
             <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white">
               {category?.name}
             </h1>
-            <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed max-w-xl">
+            <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed max-w-xl">
               {category?.description ||
                 `Explore AXDORO's curated collection of premium ${category?.name.toLowerCase()}. Precision-crafted textiles engineered for individual comfort and bulk durability.`}
             </p>
