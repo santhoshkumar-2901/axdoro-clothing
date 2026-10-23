@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PHONE_REGEX = /^[+]?[0-9]{10,15}$/;
 
 export const enquiryCreateSchema = z

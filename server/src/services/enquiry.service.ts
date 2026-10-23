@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import pg from 'pg';
 import { withTransaction, query } from '../config/db.js';
-import { EnquiryCreateInput, EnquiryQueryInput } from '../schemas/enquiries.js';
+import { UUID_REGEX, EnquiryCreateInput, EnquiryQueryInput } from '../schemas/enquiries.js';
+import { AdminUserDTO } from './admin-auth.service.js';
+import { createAuditLog } from './audit-log.service.js';
 
 export interface EnquiryRecord {
   id: string;
@@ -238,6 +240,158 @@ export function generateWhatsAppShareUrl(enquiry: {
   if (enquiry.message) text += `Details: ${enquiry.message.slice(0, 150)}\n`;
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+
+export interface DeleteEnquiryResult {
+  status: 'success' | 'not_found' | 'conflict';
+  message: string;
+}
+
+/**
+ * Derives a deterministic 64-bit signed integer key from an enquiry UUID
+ * for PostgreSQL transaction-level advisory locking (pg_try_advisory_xact_lock).
+ * Uses SHA-256 with a domain namespace prefix to prevent key collision with any other advisory locks.
+ */
+export function getEnquirySyncAdvisoryLockKey(enquiryId: string): string {
+  const hash = crypto
+    .createHash('sha256')
+    .update(`axdoro:enquiry-sync-guard:${enquiryId.toLowerCase().trim()}`)
+    .digest();
+  // Read first 8 bytes as a signed 64-bit BigInt
+  const lockKey = hash.readBigInt64BE(0);
+  return lockKey.toString();
+}
+
+/**
+ * Permanently deletes an enquiry from PostgreSQL within an atomic transaction.
+ *
+ * Concurrency & Integrity Protocol:
+ * 1. Checks UUID validity.
+ * 2. Begins transaction.
+ * 3. Acquires transaction-level advisory lock (pg_try_advisory_xact_lock) for this enquiry.
+ *    If a worker is actively appending or synchronizing this enquiry, aborts immediately with 'conflict' (409).
+ * 4. Locks any associated drive_sync_jobs first (FOR UPDATE) to maintain deterministic lock ordering
+ *    and ensure sync workers using FOR UPDATE SKIP LOCKED skip this job while deletion is in flight.
+ * 5. Locks the enquiry row (FOR UPDATE).
+ * 6. If enquiry does not exist, aborts with 'not_found'.
+ * 7. Checks if any associated drive_sync_jobs has status = 'PROCESSING' with an active lease
+ *    (claimed_at >= CURRENT_TIMESTAMP - INTERVAL '5 minutes'). If active, aborts with 'conflict'.
+ * 8. Records an immutable administrative audit log entry in admin_audit_logs using the same transaction client.
+ * 9. Permanently deletes the enquiry, triggering foreign-key CASCADE on dependent drive_sync_jobs rows.
+ * 10. Commits the transaction (automatically releasing the advisory lock and row locks).
+ */
+export async function adminDeleteEnquiry(
+  id: string,
+  actor: AdminUserDTO,
+  ipAddress?: string | null
+): Promise<DeleteEnquiryResult> {
+  if (!UUID_REGEX.test(id)) {
+    return { status: 'not_found', message: 'Enquiry not found' };
+  }
+
+  const lockKey = getEnquirySyncAdvisoryLockKey(id);
+
+  return await withTransaction(async (client) => {
+    // 1. Acquire transaction-level advisory guard non-blockingly
+    const guardRes = await client.query<{ acquired: boolean }>(
+      `SELECT pg_try_advisory_xact_lock($1::bigint) as acquired;`,
+      [lockKey]
+    );
+
+    if (!guardRes.rows[0]?.acquired) {
+      return {
+        status: 'conflict',
+        message: 'Enquiry is currently synchronizing with Google Drive. Please retry after synchronization completes.',
+      };
+    }
+
+    // 2. Lock associated drive_sync_jobs first to maintain deterministic lock ordering
+    const syncJobRes = await client.query<{
+      id: string;
+      status: string;
+      claimed_at: Date | null;
+      claim_token: string | null;
+    }>(
+      `SELECT id, status, claimed_at, claim_token
+       FROM drive_sync_jobs
+       WHERE enquiry_id = $1
+       FOR UPDATE;`,
+      [id]
+    );
+
+    // 2. Lock enquiry row
+    const enquiryRes = await client.query<{
+      id: string;
+      enquiry_type: string;
+      name: string;
+      email: string;
+      source: string;
+      drive_sync_status: string;
+      created_at: Date;
+      product_id: string | null;
+      product_name: string | null;
+      quantity: number | null;
+    }>(
+      `SELECT id, enquiry_type, name, email, source, drive_sync_status, created_at,
+              product_id, product_name, quantity
+       FROM enquiries
+       WHERE id = $1
+       FOR UPDATE;`,
+      [id]
+    );
+
+    if (enquiryRes.rows.length === 0) {
+      return { status: 'not_found', message: 'Enquiry not found' };
+    }
+
+    const enquiry = enquiryRes.rows[0];
+
+    // 3. Concurrency check: verify if an active worker claim is currently in progress
+    // A job is actively claimed if status is 'PROCESSING' and the lease has not expired (within 5 minutes)
+    const hasActiveClaim = syncJobRes.rows.some((job) => {
+      if (job.status !== 'PROCESSING') return false;
+      if (!job.claimed_at) return false;
+      const claimedTime = new Date(job.claimed_at).getTime();
+      const leaseThreshold = Date.now() - 5 * 60 * 1000;
+      return claimedTime >= leaseThreshold;
+    });
+
+    if (hasActiveClaim) {
+      return {
+        status: 'conflict',
+        message: 'Enquiry is currently synchronizing with Google Drive. Please retry after synchronization completes.',
+      };
+    }
+
+    // 4. Record immutable audit log entry in the SAME transaction
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'ENQUIRY_DELETE',
+      entityType: 'enquiry',
+      entityId: id,
+      details: {
+        enquiryId: enquiry.id,
+        enquiryType: enquiry.enquiry_type,
+        source: enquiry.source,
+        driveSyncStatus: enquiry.drive_sync_status,
+        enquiryCreatedAt: enquiry.created_at.toISOString(),
+        deletedAt: new Date().toISOString(),
+        hasProductReference: Boolean(enquiry.product_id || enquiry.product_name),
+        hasBulkQuantity: Boolean(enquiry.quantity),
+      },
+      ipAddress: ipAddress || null,
+      client,
+    });
+
+    // 5. Permanently delete the enquiry (cascades to drive_sync_jobs)
+    await client.query('DELETE FROM enquiries WHERE id = $1;', [id]);
+
+    return {
+      status: 'success',
+      message: 'Enquiry deleted successfully',
+    };
+  });
 }
 
 function mapEnquiryRow(row: any): EnquiryRecord {

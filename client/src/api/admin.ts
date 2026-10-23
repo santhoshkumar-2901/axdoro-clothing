@@ -579,6 +579,26 @@ export async function adminTriggerDriveSync(): Promise<{ synced: number; failed:
   return json.data;
 }
 
+export interface DeleteEnquiryResponse {
+  status: 'success' | 'error';
+  message: string;
+}
+
+export async function adminDeleteEnquiry(id: string): Promise<DeleteEnquiryResponse> {
+  const res = await fetch(`/api/admin/enquiries/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error: any = new Error(json.error || json.message || 'Failed to delete enquiry');
+    error.status = res.status;
+    throw error;
+  }
+  return json;
+}
+
 // -------------------------------------------------------------
 // Product Image Management Client APIs
 // -------------------------------------------------------------

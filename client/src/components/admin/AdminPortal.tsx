@@ -21,6 +21,7 @@ import {
   adminAcknowledgeOrder,
   adminGetBadgeCounts,
   adminGetEnquiries,
+  adminDeleteEnquiry,
   adminGetDriveSyncStatus,
   adminTriggerDriveSync,
 } from '../../api/admin.ts';
@@ -138,6 +139,16 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     canArchive?: boolean;
   } | null>(null);
   const [selectedProductForImages, setSelectedProductForImages] = useState<AdminProduct | null>(null);
+
+  // Enquiry deletion states (Phase 3 Safe Permanent Deletion)
+  const [enquiryToDelete, setEnquiryToDelete] = useState<AdminEnquiry | null>(null);
+  useScrollLock(Boolean(enquiryToDelete));
+  const [isDeletingEnquiry, setIsDeletingEnquiry] = useState(false);
+  const [deleteEnquiryError, setDeleteEnquiryError] = useState<{
+    message: string;
+    isConflict?: boolean;
+    isNotFound?: boolean;
+  } | null>(null);
 
   // Sync tab with browser URL history (popstate)
   useEffect(() => {
@@ -357,6 +368,53 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       onCatalogueMutated?.();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to archive product');
+    }
+  };
+
+  const handleDeleteEnquiryConfirm = async () => {
+    if (!enquiryToDelete || isDeletingEnquiry) return;
+    const targetEnquiry = enquiryToDelete;
+    setIsDeletingEnquiry(true);
+    setDeleteEnquiryError(null);
+
+    try {
+      await adminDeleteEnquiry(targetEnquiry.id);
+      setActionSuccess(`Enquiry from "${targetEnquiry.name}" was permanently deleted.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      setEnquiries((prev) => prev.filter((e) => e.id !== targetEnquiry.id));
+      setEnquiryToDelete(null);
+      setDeleteEnquiryError(null);
+      // Reconcile sync status count in background
+      adminGetDriveSyncStatus().then(setDriveSyncStatus).catch(() => null);
+    } catch (err: any) {
+      const status = err?.status;
+      if (status === 409) {
+        setDeleteEnquiryError({
+          message: 'This enquiry is currently being synchronized. Please try again shortly.',
+          isConflict: true,
+        });
+      } else if (status === 404) {
+        setDeleteEnquiryError({
+          message: 'This enquiry was not found on the server. Reconciling enquiries list...',
+          isNotFound: true,
+        });
+        try {
+          const fresh = await adminGetEnquiries();
+          setEnquiries(fresh);
+        } catch {
+          setEnquiries((prev) => prev.filter((e) => e.id !== targetEnquiry.id));
+        }
+      } else if (status === 401 || status === 403) {
+        setDeleteEnquiryError({
+          message: 'Administrative authorization or security token expired. Please refresh your session.',
+        });
+      } else {
+        setDeleteEnquiryError({
+          message: err instanceof Error ? err.message : 'An unexpected error occurred while deleting the enquiry.',
+        });
+      }
+    } finally {
+      setIsDeletingEnquiry(false);
     }
   };
 
@@ -1022,6 +1080,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <TableHead>Message</TableHead>
                       <TableHead>Drive Sync</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead className="text-right">ACTIONS</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1062,6 +1121,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </TableCell>
                         <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
                           {new Date(enq.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDeleteEnquiryError(null);
+                              setEnquiryToDelete(enq);
+                            }}
+                            title={`Delete enquiry from ${enq.name}`}
+                            className="text-red-700 hover:text-red-800 hover:bg-red-50 border-red-200"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1 text-red-600" />
+                            Delete
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1252,6 +1326,108 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   </>
                 ) : (
                   'Delete Permanently'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enquiry Deletion Dialog (Phase 3 Safe Permanent Deletion) */}
+      {enquiryToDelete && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-enquiry-dialog-title"
+        >
+          <div className="bg-axdoro-surface border border-red-200/80 rounded-2xl shadow-elevated max-w-md w-full overflow-hidden my-auto flex flex-col">
+            <div className="flex items-center justify-between border-b border-axdoro-border px-6 py-4 shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5 flex-shrink-0" />
+                <h3 id="delete-enquiry-dialog-title" className="text-base font-bold text-axdoro-charcoal">
+                  Permanently delete this enquiry?
+                </h3>
+              </div>
+              <button
+                disabled={isDeletingEnquiry}
+                onClick={() => {
+                  setEnquiryToDelete(null);
+                  setDeleteEnquiryError(null);
+                }}
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-surface-muted transition-colors disabled:opacity-40 cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-3 text-xs">
+                <p className="text-axdoro-charcoal leading-relaxed">
+                  This will permanently remove the enquiry from AXDORO. Its Google Sheets record will be retained. This action cannot be undone.
+                </p>
+
+                <div className="p-3.5 rounded-xl bg-axdoro-bg border border-axdoro-border text-xs space-y-1">
+                  <div className="font-bold text-axdoro-charcoal text-sm">{enquiryToDelete.name}</div>
+                  <div className="text-axdoro-text-muted font-mono text-[11px]">
+                    {enquiryToDelete.email} {enquiryToDelete.phone ? `• ${enquiryToDelete.phone}` : ''}
+                  </div>
+                  <div className="text-[11px] text-axdoro-text-muted pt-1">
+                    Type: <span className="font-semibold text-axdoro-charcoal">{enquiryToDelete.enquiryType}</span> &bull; Sync Status: <span className="font-semibold text-axdoro-charcoal">{enquiryToDelete.driveSyncStatus}</span>
+                  </div>
+                </div>
+
+                {deleteEnquiryError && (
+                  <div
+                    className={`rounded-lg p-3 space-y-1.5 text-xs ${
+                      deleteEnquiryError.isConflict
+                        ? 'bg-amber-50 border border-amber-200 text-amber-900'
+                        : 'bg-red-50 border border-red-200 text-red-900'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle
+                        className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                          deleteEnquiryError.isConflict ? 'text-amber-600' : 'text-red-600'
+                        }`}
+                      />
+                      <p className="font-medium leading-relaxed">
+                        {deleteEnquiryError.message}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isDeletingEnquiry}
+                onClick={() => {
+                  setEnquiryToDelete(null);
+                  setDeleteEnquiryError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={isDeletingEnquiry}
+                onClick={handleDeleteEnquiryConfirm}
+                className="font-semibold cursor-pointer"
+                aria-busy={isDeletingEnquiry}
+              >
+                {isDeletingEnquiry ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Permanently Delete'
                 )}
               </Button>
             </div>

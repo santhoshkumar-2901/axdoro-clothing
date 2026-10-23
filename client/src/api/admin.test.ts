@@ -20,6 +20,7 @@ import {
   adminCreateVariant,
   adminUpdateVariant,
   adminDeleteProduct,
+  adminDeleteEnquiry,
   adminGetHomepageCollections,
   adminUpdateHomepageCollection,
   adminUpdateCollectionProducts,
@@ -831,6 +832,94 @@ describe('Admin API Client Session Security & CSRF (Phase 3C)', () => {
         body: JSON.stringify({ productIds: ['prod-1', 'prod-2'] }),
       });
       expect(res).toEqual(mockUpdated);
+    });
+  });
+
+  describe('Enquiry Deletion API (Phase 3)', () => {
+    it('adminDeleteEnquiry sends DELETE request with CSRF token and credentials', async () => {
+      setCsrfToken('enquiry-delete-csrf');
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          message: 'Enquiry permanently deleted successfully',
+        }),
+      } as any);
+
+      const result = await adminDeleteEnquiry('11111111-1111-4111-8111-111111111111');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        '/api/admin/enquiries/11111111-1111-4111-8111-111111111111',
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-Token': 'enquiry-delete-csrf',
+          },
+          credentials: 'include',
+        }
+      );
+      expect(result.status).toBe('success');
+      expect(result.message).toContain('deleted successfully');
+    });
+
+    it('adminDeleteEnquiry captures 409 conflict and propagates status', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          status: 'error',
+          error: 'Enquiry is currently synchronizing with Google Drive. Please retry after synchronization completes.',
+        }),
+      } as any);
+
+      try {
+        await adminDeleteEnquiry('11111111-1111-4111-8111-111111111111');
+        expect.fail('Should have thrown error on 409');
+      } catch (err: any) {
+        expect(err.status).toBe(409);
+        expect(err.message).toContain('synchronizing with Google Drive');
+      }
+    });
+
+    it('adminDeleteEnquiry captures 404 not found and propagates status', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({
+          status: 'error',
+          error: 'Enquiry not found',
+        }),
+      } as any);
+
+      try {
+        await adminDeleteEnquiry('22222222-2222-4222-8222-222222222222');
+        expect.fail('Should have thrown error on 404');
+      } catch (err: any) {
+        expect(err.status).toBe(404);
+        expect(err.message).toBe('Enquiry not found');
+      }
+    });
+
+    it('adminDeleteEnquiry captures 401/403 session errors and propagates status', async () => {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: false,
+        status: 403,
+        json: async () => ({
+          status: 'error',
+          error: 'CSRF token missing or invalid',
+        }),
+      } as any);
+
+      try {
+        await adminDeleteEnquiry('33333333-3333-4333-8333-333333333333');
+        expect.fail('Should have thrown error on 403');
+      } catch (err: any) {
+        expect(err.status).toBe(403);
+        expect(err.message).toContain('CSRF token');
+      }
     });
   });
 });

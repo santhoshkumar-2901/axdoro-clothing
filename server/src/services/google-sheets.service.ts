@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import pg from 'pg';
 import { withTransaction, query } from '../config/db.js';
+import { getEnquirySyncAdvisoryLockKey } from './enquiry.service.js';
 
 export interface GoogleSheetsClient {
   appendRow(sheetId: string, rowValues: (string | number | null)[]): Promise<{ rowNumber: number }>;
@@ -397,33 +398,62 @@ export async function processDriveSyncQueue(
   let failed = 0;
   const errors: string[] = [];
 
-  // 3. Process claimed jobs with remote verification and claim ownership checks
+  // 3. Process claimed jobs with remote verification and shared advisory guard
   for (const job of claimedJobs) {
     try {
-      // Remote duplicate prevention and crash reconciliation
-      if (!existingRemoteIds.has(job.enquiryId)) {
-        const rowData = [
-          job.enquiryId,
-          new Date(job.createdAt).toISOString(),
-          job.enquiryType,
-          job.name,
-          job.email,
-          job.phone,
-          job.source,
-          job.productName || 'N/A',
-          job.quantity || '',
-          job.sizeBreakdown || '',
-          job.targetDate || '',
-          job.organization || '',
-          job.message,
-        ];
+      const lockKey = getEnquirySyncAdvisoryLockKey(job.enquiryId);
 
-        await client.appendRow(sheetId, rowData);
-        existingRemoteIds.add(job.enquiryId);
-      }
+      const syncSuccess = await withTransaction(async (dbClient) => {
+        // A. Acquire the shared transaction-level advisory guard non-blockingly
+        const lockRes = await dbClient.query<{ acquired: boolean }>(
+          `SELECT pg_try_advisory_xact_lock($1::bigint) as acquired;`,
+          [lockKey]
+        );
 
-      // Mark locally as SYNCED inside short transaction verifying claim_token ownership
-      const updateResult = await withTransaction(async (dbClient) => {
+        if (!lockRes.rows[0]?.acquired) {
+          // Another worker or deletion operation currently holds the guard for this enquiry
+          errors.push(`Job ${job.jobId}: could not acquire synchronization guard; skipping.`);
+          return false;
+        }
+
+        // B. Final database claim validation inside the locked transaction:
+        // Guarantees that if deletion committed while job was in flight or after lease expired,
+        // the worker will not append an orphaned or stale row to Google Sheets.
+        const claimCheck = await dbClient.query<{ id: string }>(
+          `SELECT j.id FROM drive_sync_jobs j
+           JOIN enquiries e ON e.id = j.enquiry_id
+           WHERE j.id = $1 AND j.claim_token = $2 AND j.status = 'PROCESSING';`,
+          [job.jobId, job.claimToken]
+        );
+
+        if (claimCheck.rows.length === 0) {
+          errors.push(`Job ${job.jobId}: active claim was lost before remote append; skipping append.`);
+          return false;
+        }
+
+        // C. Remote duplicate prevention and append WHILE holding the advisory guard
+        if (!existingRemoteIds.has(job.enquiryId)) {
+          const rowData = [
+            job.enquiryId,
+            new Date(job.createdAt).toISOString(),
+            job.enquiryType,
+            job.name,
+            job.email,
+            job.phone,
+            job.source,
+            job.productName || 'N/A',
+            job.quantity || '',
+            job.sizeBreakdown || '',
+            job.targetDate || '',
+            job.organization || '',
+            job.message,
+          ];
+
+          await client.appendRow(sheetId, rowData);
+          existingRemoteIds.add(job.enquiryId);
+        }
+
+        // D. Mark locally as SYNCED inside the same locked transaction
         const updateRes = await dbClient.query(
           `UPDATE drive_sync_jobs
            SET status = 'SYNCED', updated_at = CURRENT_TIMESTAMP, last_error = NULL, claim_token = NULL
@@ -440,13 +470,12 @@ export async function processDriveSyncQueue(
           );
           return true;
         }
+
         return false;
       });
 
-      if (updateResult) {
+      if (syncSuccess) {
         synced++;
-      } else {
-        errors.push(`Job ${job.jobId}: claim ownership was lost due to lease expiry`);
       }
     } catch (err: unknown) {
       failed++;

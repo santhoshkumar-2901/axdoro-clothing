@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireAdmin } from '../../middleware/adminAuth.js';
-import { enquiryQuerySchema } from '../../schemas/enquiries.js';
-import { listEnquiries, exportEnquiriesCsv } from '../../services/enquiry.service.js';
+import { enquiryQuerySchema, UUID_REGEX } from '../../schemas/enquiries.js';
+import { listEnquiries, exportEnquiriesCsv, adminDeleteEnquiry } from '../../services/enquiry.service.js';
 import {
   getDriveSyncStatus,
   backfillPendingEnquiries,
@@ -87,6 +87,49 @@ adminEnquiriesRouter.post('/sync', async (_req: Request, res: Response, next: Ne
         backfilled,
         ...result,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/enquiries/:id - Permanently delete an enquiry from PostgreSQL
+adminEnquiriesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id;
+    if (!UUID_REGEX.test(id)) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid enquiry ID format. Expected a valid UUID.',
+        message: 'Invalid enquiry ID format. Expected a valid UUID.',
+      });
+      return;
+    }
+
+    const ipAddress = req.ip || req.socket.remoteAddress || null;
+    const result = await adminDeleteEnquiry(id, req.admin!, ipAddress);
+
+    if (result.status === 'not_found') {
+      res.status(404).json({
+        status: 'error',
+        error: result.message || 'Enquiry not found',
+        message: result.message || 'Enquiry not found',
+      });
+      return;
+    }
+
+    if (result.status === 'conflict') {
+      res.status(409).json({
+        status: 'error',
+        error: result.message || 'Enquiry cannot be deleted due to an active synchronization conflict',
+        message: result.message || 'Enquiry cannot be deleted due to an active synchronization conflict',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: result.message || 'Enquiry permanently deleted successfully',
     });
   } catch (err) {
     next(err);
