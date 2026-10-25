@@ -1,8 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Product } from '../types/product.ts';
-import { X, Layers, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { X, Layers, MessageSquare, CheckCircle2, UploadCloud, FileText, Trash2 } from 'lucide-react';
 import { normalizeAndValidatePhone } from '../utils/idempotency.ts';
 import { useScrollLock } from '../utils/scrollLock.ts';
+
+const MAX_ARTWORK_BYTES = 4 * 1024 * 1024; // 4 MiB (4 * 1024 * 1024 bytes)
+const ALLOWED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'pdf'];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 interface BulkEnquiryModalProps {
   isOpen: boolean;
@@ -33,6 +42,37 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
   const [serverWhatsAppUrl, setServerWhatsAppUrl] = useState<string | null>(null);
   const [honeypot, setHoneypot] = useState('');
 
+  // Artwork file state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Manage image preview Object URL cleanup
+  useEffect(() => {
+    if (selectedFile && selectedFile.type.startsWith('image/')) {
+      const url = URL.createObjectURL(selectedFile);
+      setPreviewUrl(url);
+      return () => {
+        URL.revokeObjectURL(url);
+      };
+    }
+    setPreviewUrl(null);
+  }, [selectedFile]);
+
+  // Clean up file state and preview when modal closes or unmounts
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedFile(null);
+      setFileError(null);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    }
+  }, [isOpen]);
+
   // Sync state when prefilled product changes or modal reopens
   useEffect(() => {
     if (isOpen) {
@@ -48,6 +88,7 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
         setSpecifications('140 GSM Combed Cotton, Custom Branding');
       }
       setError(null);
+      setFileError(null);
     }
   }, [isOpen, prefilledProduct]);
 
@@ -64,8 +105,57 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleFileSelect = (file: File | null) => {
+    setFileError(null);
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    if (file.size > MAX_ARTWORK_BYTES) {
+      setFileError('File size exceeds the 4 MB limit (maximum 4 MiB).');
+      return;
+    }
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
+      setFileError('Invalid file format. Accepted formats: PNG, JPG, JPEG, WEBP, PDF.');
+      return;
+    }
+
+    setSelectedFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleRemoveFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFile(null);
+    setFileError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
     setError(null);
 
     // Validate phone with the same strict normalization as checkout
@@ -80,28 +170,63 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
       return;
     }
 
+    if (fileError) {
+      setError(fileError);
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const res = await fetch('/api/enquiries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({
-          enquiryType: 'BULK',
-          name: name.trim(),
-          phone: phoneValidation.normalized,
-          email: email.trim(),
-          message: `Requirements: ${specifications}\nTimeline: ${deliveryRequirement}`,
-          quantity: parseInt(quantity, 10) || 50,
-          sizeBreakdown: sizeBreakdown.trim(),
-          productId: prefilledProduct?.id || null,
-          source: 'WEBSITE',
-          website_hp: honeypot || undefined,
-        }),
-      });
+      let res: Response;
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append('enquiryType', 'BULK');
+        formData.append('name', name.trim());
+        formData.append('phone', phoneValidation.normalized);
+        formData.append('email', email.trim());
+        formData.append('message', `Requirements: ${specifications}\nTimeline: ${deliveryRequirement}`);
+        formData.append('quantity', String(parseInt(quantity, 10) || 50));
+        formData.append('sizeBreakdown', sizeBreakdown.trim());
+        if (prefilledProduct?.id) {
+          formData.append('productId', prefilledProduct.id);
+        }
+        formData.append('source', 'WEBSITE');
+        if (honeypot) {
+          formData.append('website_hp', honeypot);
+        }
+        // Backend artwork field name
+        formData.append('artwork', selectedFile);
+
+        res = await fetch('/api/enquiries', {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            // Note: Content-Type is intentionally omitted so browser sets multipart/form-data with boundary
+          },
+          body: formData,
+        });
+      } else {
+        res = await fetch('/api/enquiries', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({
+            enquiryType: 'BULK',
+            name: name.trim(),
+            phone: phoneValidation.normalized,
+            email: email.trim(),
+            message: `Requirements: ${specifications}\nTimeline: ${deliveryRequirement}`,
+            quantity: parseInt(quantity, 10) || 50,
+            sizeBreakdown: sizeBreakdown.trim(),
+            productId: prefilledProduct?.id || null,
+            source: 'WEBSITE',
+            website_hp: honeypot || undefined,
+          }),
+        });
+      }
 
       const json = await res.json();
       if (!res.ok) {
@@ -323,6 +448,110 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
               <span className="text-[10px] text-axdoro-text-muted block mt-1">
                 Note: Delivery timeline is captured as an indicative request.
               </span>
+            </div>
+
+            {/* Custom Artwork / Logo Attachment */}
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="bulk-artwork-file" className="text-xs font-bold text-axdoro-charcoal block cursor-pointer">
+                  Custom Artwork / Design Attachment (Optional)
+                </label>
+                <span className="text-[10px] text-axdoro-text-muted">PNG, JPG, WEBP, PDF up to 4 MB</span>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                id="bulk-artwork-file"
+                data-testid="artwork-file-input"
+                accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                  }
+                }}
+              />
+
+              {!selectedFile ? (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      fileInputRef.current?.click();
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload custom artwork or design file (optional)"
+                  data-testid="artwork-dropzone"
+                  className={`border border-dashed rounded-xl p-4 text-center cursor-pointer transition-all outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                    isDragging
+                      ? 'border-axdoro-accent bg-axdoro-accent/10 shadow-subtle'
+                      : 'border-axdoro-border bg-axdoro-bg hover:border-axdoro-accent/60'
+                  }`}
+                >
+                  <UploadCloud className="w-6 h-6 text-axdoro-accent mx-auto mb-1.5" />
+                  <p className="text-xs font-semibold text-axdoro-charcoal">
+                    Click to browse or drag and drop your logo or design
+                  </p>
+                  <p className="text-[10px] text-axdoro-text-muted mt-0.5">
+                    Accepted formats: PNG, JPG, WEBP, PDF (Max 4 MB)
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-axdoro-bg border border-axdoro-border shadow-subtle">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {previewUrl ? (
+                      <img
+                        src={previewUrl}
+                        alt="Artwork preview"
+                        className="w-10 h-10 object-cover rounded-lg border border-axdoro-border flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-lg bg-axdoro-surface flex items-center justify-center border border-axdoro-border flex-shrink-0">
+                        <FileText className="w-5 h-5 text-axdoro-accent" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-axdoro-charcoal truncate" title={selectedFile.name}>
+                        {selectedFile.name}
+                      </p>
+                      <p className="text-[10px] text-axdoro-text-muted font-mono">
+                        {formatFileSize(selectedFile.size)} • {selectedFile.name.split('.').pop()?.toUpperCase()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-xs text-axdoro-accent hover:underline font-semibold px-2 py-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded"
+                    >
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveFile}
+                      aria-label="Remove artwork attachment"
+                      data-testid="remove-artwork-button"
+                      className="p-1.5 text-axdoro-text-muted hover:text-red-500 rounded-lg hover:bg-axdoro-surface transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {fileError && (
+                <p className="text-[11px] text-red-500 font-medium mt-1.5" role="alert">
+                  {fileError}
+                </p>
+              )}
             </div>
 
             {error && (

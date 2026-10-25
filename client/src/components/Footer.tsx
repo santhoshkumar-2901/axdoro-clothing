@@ -172,17 +172,6 @@ export const Footer: React.FC<FooterProps> = ({
                   About AXDORO
                 </button>
               </li>
-              {Object.keys(policyPlaceholders).map((policy) => (
-                <li key={policy}>
-                  <button
-                    onClick={() => setActivePolicyModal(policy)}
-                    className="hover:text-axdoro-charcoal transition-colors cursor-pointer flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded py-0.5"
-                  >
-                    <span>{policy}</span>
-                    <span className="text-[9px] text-stone-400 font-mono">(dev)</span>
-                  </button>
-                </li>
-              ))}
             </ul>
           </div>
 

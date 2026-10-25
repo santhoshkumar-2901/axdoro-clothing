@@ -20,6 +20,7 @@ import { collectionsRouter } from './routes/collections.js';
 import { adminNotificationsRouter } from './routes/admin/notifications.js';
 import { homepageRouter } from './routes/homepage.js';
 import { adminHomepageRouter } from './routes/admin/homepage.js';
+import { adminMaintenanceRouter } from './routes/admin/maintenance.js';
 import { csrfProtection } from './middleware/csrf.js';
 
 export function createApp(): Express {
@@ -60,6 +61,7 @@ export function createApp(): Express {
   app.use('/api/admin/orders', adminOrdersRouter);
   app.use('/api/admin/enquiries', adminEnquiriesRouter);
   app.use('/api/admin/notifications', adminNotificationsRouter);
+  app.use('/api/admin/maintenance', adminMaintenanceRouter);
 
   // 4. Fallback for unhandled 404 routes
   app.use((req: Request, res: Response) => {

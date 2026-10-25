@@ -9,6 +9,12 @@
       "includeFiles": "server/dist/**"
     }
   },
+  "crons": [
+    {
+      "path": "/api/admin/maintenance/cleanup",
+      "schedule": "0 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api",

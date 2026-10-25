@@ -278,6 +278,7 @@ export async function processDriveSyncQueue(
       targetDate: string | null;
       organization: string | null;
       message: string;
+      hasArtwork: boolean;
     }[] = [];
 
     for (const cand of candidateRes.rows) {
@@ -295,7 +296,8 @@ export async function processDriveSyncQueue(
       const jobDetails = await dbClient.query<any>(
         `SELECT j.id as job_id, j.attempt_count, j.max_attempts,
                 e.id as enquiry_id, e.created_at, e.enquiry_type, e.name, e.email, e.phone,
-                e.source, e.product_name, e.quantity, e.size_breakdown, e.target_date, e.organization, e.message
+                e.source, e.product_name, e.quantity, e.size_breakdown, e.target_date, e.organization, e.message,
+                e.design_file_public_id
          FROM drive_sync_jobs j
          JOIN enquiries e ON e.id = j.enquiry_id
          WHERE j.id = $1;`,
@@ -322,6 +324,7 @@ export async function processDriveSyncQueue(
           targetDate: row.target_date,
           organization: row.organization,
           message: row.message,
+          hasArtwork: Boolean(row.design_file_public_id),
         });
       }
     }
@@ -447,6 +450,7 @@ export async function processDriveSyncQueue(
             job.targetDate || '',
             job.organization || '',
             job.message,
+            job.hasArtwork ? 'Yes (Artwork Attached)' : 'None',
           ];
 
           await client.appendRow(sheetId, rowData);

@@ -221,6 +221,7 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().trim().optional(),
   CLOUDINARY_API_KEY: z.string().trim().optional(),
   CLOUDINARY_API_SECRET: z.string().trim().optional(),
+  CRON_SECRET: z.string().trim().min(16, 'CRON_SECRET must be at least 16 characters long if set').optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

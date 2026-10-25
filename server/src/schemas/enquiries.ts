@@ -11,7 +11,11 @@ export const enquiryCreateSchema = z
     phone: z.string().trim().regex(PHONE_REGEX, 'Phone must be a valid 10 to 15 digit number'),
     message: z.string().trim().min(5, 'Message must be at least 5 characters').max(2000),
     productId: z.string().regex(UUID_REGEX, 'Invalid product ID format').optional().nullable(),
-    quantity: z.number().int().min(1, 'Quantity must be at least 1').max(100000).optional().nullable(),
+    quantity: z
+      .preprocess(
+        (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
+        z.number().int().min(1, 'Quantity must be at least 1').max(100000).optional().nullable()
+      ),
     sizeBreakdown: z.string().trim().max(255).optional().nullable(),
     targetDate: z.string().trim().max(50).optional().nullable(),
     organization: z.string().trim().max(100).optional().nullable(),
@@ -33,6 +37,14 @@ export const enquiryCreateSchema = z
   );
 
 export type EnquiryCreateInput = z.infer<typeof enquiryCreateSchema>;
+
+export interface ArtworkMetadataInput {
+  designFileUrl?: string | null;
+  designFilePublicId?: string | null;
+  designFileName?: string | null;
+  designFileFormat?: string | null;
+  designFileBytes?: number | null;
+}
 
 export const enquiryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

@@ -494,6 +494,10 @@ export interface AdminEnquiry {
   quantity: number | null;
   source: string;
   driveSyncStatus: string;
+  hasArtwork?: boolean;
+  designFileName?: string | null;
+  designFileFormat?: string | null;
+  designFileBytes?: number | null;
   createdAt: string;
 }
 
@@ -550,6 +554,48 @@ export async function adminGetEnquiries(enquiryType?: string): Promise<AdminEnqu
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to fetch enquiries');
   return json.data;
+}
+
+/**
+ * Downloads custom artwork attachment securely through the authenticated admin proxy endpoint.
+ * Ensures the response is saved as a file and cleans up generated object URLs.
+ */
+export async function adminDownloadArtwork(enquiryId: string, preferredFilename?: string | null): Promise<void> {
+  const res = await fetch(`/api/admin/enquiries/${enquiryId}/artwork`, {
+    headers: { Accept: '*/*' },
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    const errJson = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    throw new Error(errJson.message || errJson.error || `Download failed with HTTP ${res.status}`);
+  }
+
+  // Derive filename from Content-Disposition header if available
+  let filename = preferredFilename || `artwork-${enquiryId}`;
+  const disposition = res.headers.get('content-disposition');
+  if (disposition) {
+    const filenameMatch = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    if (filenameMatch && filenameMatch[1]) {
+      filename = filenameMatch[1].replace(/['"]/g, '').trim();
+    }
+  }
+
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } finally {
+    // Revoke object URL after use to prevent memory leaks
+    setTimeout(() => {
+      URL.revokeObjectURL(objectUrl);
+    }, 1000);
+  }
 }
 
 export async function adminGetDriveSyncStatus(): Promise<{

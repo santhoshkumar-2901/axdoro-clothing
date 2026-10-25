@@ -22,6 +22,7 @@ import {
   adminGetBadgeCounts,
   adminGetEnquiries,
   adminDeleteEnquiry,
+  adminDownloadArtwork,
   adminGetDriveSyncStatus,
   adminTriggerDriveSync,
 } from '../../api/admin.ts';
@@ -30,6 +31,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Download,
+  Paperclip,
   Cloud,
   Plus,
   Trash2,
@@ -108,6 +110,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [acknowledgingOrderId, setAcknowledgingOrderId] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Dynamic notification badge counts for sidebar
   const [badgeCounts, setBadgeCounts] = useState<{ orders: number; stock: number }>({
@@ -149,6 +152,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     isConflict?: boolean;
     isNotFound?: boolean;
   } | null>(null);
+  const [downloadingArtworkId, setDownloadingArtworkId] = useState<string | null>(null);
 
   // Sync tab with browser URL history (popstate)
   useEffect(() => {
@@ -418,6 +422,20 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     }
   };
 
+  const handleDownloadArtwork = async (enquiry: AdminEnquiry) => {
+    if (downloadingArtworkId) return;
+    setDownloadingArtworkId(enquiry.id);
+    setActionError(null);
+    try {
+      await adminDownloadArtwork(enquiry.id, enquiry.designFileName);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to download custom artwork';
+      setActionError(msg);
+    } finally {
+      setDownloadingArtworkId(null);
+    }
+  };
+
   const handleSaveStock = async (quantity: number, reason: string) => {
     if (!adjustingVariant) return;
     try {
@@ -546,6 +564,21 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <button
               onClick={() => setActionSuccess(null)}
               className="text-emerald-700 hover:text-emerald-950 text-xs font-semibold underline"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="bg-red-50 border-b border-red-200 px-6 py-3 text-xs text-red-900 flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+              <span className="font-semibold">{actionError}</span>
+            </div>
+            <button
+              onClick={() => setActionError(null)}
+              className="text-red-700 hover:text-red-950 text-xs font-semibold underline"
             >
               Dismiss
             </button>
@@ -1096,7 +1129,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary">{enq.enquiryType}</Badge>
+                          <div className="flex flex-col gap-1 items-start">
+                            <Badge variant="secondary">{enq.enquiryType}</Badge>
+                            {enq.hasArtwork && (
+                              <span
+                                data-testid={`artwork-indicator-${enq.id}`}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold text-axdoro-accent bg-axdoro-accent/10 border border-axdoro-accent/20 px-1.5 py-0.5 rounded"
+                                title={enq.designFileName ? `Artwork: ${enq.designFileName}` : 'Custom artwork attached'}
+                              >
+                                <Paperclip className="w-2.5 h-2.5 flex-shrink-0" />
+                                <span>Artwork</span>
+                              </span>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-xs">
                           <div className="line-clamp-2 text-axdoro-text text-xs">{enq.message}</div>
@@ -1123,19 +1168,39 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           {new Date(enq.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setDeleteEnquiryError(null);
-                              setEnquiryToDelete(enq);
-                            }}
-                            title={`Delete enquiry from ${enq.name}`}
-                            className="text-red-700 hover:text-red-800 hover:bg-red-50 border-red-200"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 mr-1 text-red-600" />
-                            Delete
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {enq.hasArtwork && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                data-testid={`download-artwork-${enq.id}`}
+                                onClick={() => handleDownloadArtwork(enq)}
+                                disabled={downloadingArtworkId === enq.id}
+                                title={enq.designFileName ? `Download ${enq.designFileName}` : 'Download custom artwork'}
+                                className="text-axdoro-accent hover:text-axdoro-accent-muted border-axdoro-border text-xs cursor-pointer"
+                              >
+                                {downloadingArtworkId === enq.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5 mr-1" />
+                                )}
+                                Artwork
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setDeleteEnquiryError(null);
+                                setEnquiryToDelete(enq);
+                              }}
+                              title={`Delete enquiry from ${enq.name}`}
+                              className="text-red-700 hover:text-red-800 hover:bg-red-50 border-red-200"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1 text-red-600" />
+                              Delete
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

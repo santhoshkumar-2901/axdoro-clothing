@@ -1,9 +1,11 @@
 import crypto from 'crypto';
 import pg from 'pg';
 import { withTransaction, query } from '../config/db.js';
-import { UUID_REGEX, EnquiryCreateInput, EnquiryQueryInput } from '../schemas/enquiries.js';
+import { UUID_REGEX, EnquiryCreateInput, EnquiryQueryInput, ArtworkMetadataInput } from '../schemas/enquiries.js';
 import { AdminUserDTO } from './admin-auth.service.js';
 import { createAuditLog } from './audit-log.service.js';
+import { deleteCloudinaryAsset } from './cloudinary.service.js';
+import { enqueueCleanupJob, processSingleCleanupJob } from './cloudinary-cleanup.service.js';
 
 export interface EnquiryRecord {
   id: string;
@@ -22,6 +24,12 @@ export interface EnquiryRecord {
   driveSyncStatus: 'PENDING' | 'SYNCED' | 'FAILED';
   driveSyncedAt: string | null;
   driveSyncError: string | null;
+  hasArtwork: boolean;
+  designFileUrl: string | null;
+  designFilePublicId: string | null;
+  designFileName: string | null;
+  designFileFormat: string | null;
+  designFileBytes: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -30,7 +38,10 @@ export interface EnquiryRecord {
  * Creates an enquiry in PostgreSQL first, ensuring durable local storage,
  * and enqueues a drive_sync_jobs record.
  */
-export async function createEnquiry(input: EnquiryCreateInput): Promise<EnquiryRecord> {
+export async function createEnquiry(
+  input: EnquiryCreateInput,
+  artwork?: ArtworkMetadataInput
+): Promise<EnquiryRecord> {
   return await withTransaction(async (client) => {
     let productName: string | null = null;
     if (input.productId) {
@@ -47,8 +58,9 @@ export async function createEnquiry(input: EnquiryCreateInput): Promise<EnquiryR
       `INSERT INTO enquiries (
         enquiry_type, name, email, phone, message,
         product_id, product_name, quantity, size_breakdown, target_date, organization,
-        source, drive_sync_status
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING')
+        source, drive_sync_status,
+        design_file_url, design_file_public_id, design_file_name, design_file_format, design_file_bytes
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'PENDING', $13, $14, $15, $16, $17)
       RETURNING *;`,
       [
         input.enquiryType,
@@ -63,6 +75,11 @@ export async function createEnquiry(input: EnquiryCreateInput): Promise<EnquiryR
         input.targetDate || null,
         input.organization || null,
         input.source,
+        artwork?.designFileUrl || null,
+        artwork?.designFilePublicId || null,
+        artwork?.designFileName || null,
+        artwork?.designFileFormat || null,
+        artwork?.designFileBytes || null,
       ]
     );
 
@@ -79,6 +96,16 @@ export async function createEnquiry(input: EnquiryCreateInput): Promise<EnquiryR
 
     return mapEnquiryRow(enquiry);
   });
+}
+
+/**
+ * Retrieves a single enquiry record by ID.
+ */
+export async function getEnquiryById(id: string): Promise<EnquiryRecord | null> {
+  if (!UUID_REGEX.test(id)) return null;
+  const res = await query<any>('SELECT * FROM enquiries WHERE id = $1;', [id]);
+  if (res.rows.length === 0) return null;
+  return mapEnquiryRow(res.rows[0]);
 }
 
 /**
@@ -174,6 +201,7 @@ export function sanitizeCsvField(value: unknown): string {
 /**
  * Exports filtered enquiries to a formula-safe CSV string.
  * Includes UTF-8 BOM (\uFEFF) for universal spreadsheet encoding support.
+ * Appends Artwork Attachment info strictly without exposing raw external URLs.
  */
 export async function exportEnquiriesCsv(params: Partial<EnquiryQueryInput>): Promise<string> {
   const { enquiries } = await listEnquiries({
@@ -197,6 +225,7 @@ export async function exportEnquiriesCsv(params: Partial<EnquiryQueryInput>): Pr
     'Organization',
     'Message',
     'Drive Sync Status',
+    'Artwork Attachment',
   ];
 
   const rows = enquiries.map((e) => [
@@ -214,6 +243,11 @@ export async function exportEnquiriesCsv(params: Partial<EnquiryQueryInput>): Pr
     sanitizeCsvField(e.organization || ''),
     sanitizeCsvField(e.message),
     sanitizeCsvField(e.driveSyncStatus),
+    sanitizeCsvField(
+      e.hasArtwork
+        ? `Yes (${e.designFileName || 'artwork'}, ${e.designFileBytes ? (e.designFileBytes / 1024).toFixed(1) + ' KB' : 'N/A'})`
+        : 'None'
+    ),
   ]);
 
   const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
@@ -230,6 +264,7 @@ export function generateWhatsAppShareUrl(enquiry: {
   quantity?: number | null;
   productName?: string | null;
   message?: string;
+  hasArtwork?: boolean;
 }): string {
   const phone = '919941816815'; // AXDORO primary business WhatsApp
   let text = `Hello AXDORO Team! I submitted an enquiry on your website.\n`;
@@ -237,6 +272,7 @@ export function generateWhatsAppShareUrl(enquiry: {
   text += `Type: ${enquiry.enquiryType}\n`;
   if (enquiry.productName) text += `Product: ${enquiry.productName}\n`;
   if (enquiry.quantity) text += `Quantity: ${enquiry.quantity} units\n`;
+  if (enquiry.hasArtwork) text += `Custom Artwork: Uploaded\n`;
   if (enquiry.message) text += `Details: ${enquiry.message.slice(0, 150)}\n`;
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -248,51 +284,32 @@ export interface DeleteEnquiryResult {
 }
 
 /**
- * Derives a deterministic 64-bit signed integer key from an enquiry UUID
- * for PostgreSQL transaction-level advisory locking (pg_try_advisory_xact_lock).
- * Uses SHA-256 with a domain namespace prefix to prevent key collision with any other advisory locks.
+ * Deterministically derives a 64-bit signed integer advisory lock key from an Enquiry UUID.
  */
 export function getEnquirySyncAdvisoryLockKey(enquiryId: string): string {
-  const hash = crypto
-    .createHash('sha256')
-    .update(`axdoro:enquiry-sync-guard:${enquiryId.toLowerCase().trim()}`)
-    .digest();
-  // Read first 8 bytes as a signed 64-bit BigInt
-  const lockKey = hash.readBigInt64BE(0);
-  return lockKey.toString();
+  const hex = crypto.createHash('sha256').update(enquiryId).digest('hex').slice(0, 15);
+  const bigInt = BigInt(`0x${hex}`);
+  const signed64 = BigInt.asIntN(64, bigInt);
+  return signed64.toString();
 }
 
 /**
- * Permanently deletes an enquiry from PostgreSQL within an atomic transaction.
- *
- * Concurrency & Integrity Protocol:
- * 1. Checks UUID validity.
- * 2. Begins transaction.
- * 3. Acquires transaction-level advisory lock (pg_try_advisory_xact_lock) for this enquiry.
- *    If a worker is actively appending or synchronizing this enquiry, aborts immediately with 'conflict' (409).
- * 4. Locks any associated drive_sync_jobs first (FOR UPDATE) to maintain deterministic lock ordering
- *    and ensure sync workers using FOR UPDATE SKIP LOCKED skip this job while deletion is in flight.
- * 5. Locks the enquiry row (FOR UPDATE).
- * 6. If enquiry does not exist, aborts with 'not_found'.
- * 7. Checks if any associated drive_sync_jobs has status = 'PROCESSING' with an active lease
- *    (claimed_at >= CURRENT_TIMESTAMP - INTERVAL '5 minutes'). If active, aborts with 'conflict'.
- * 8. Records an immutable administrative audit log entry in admin_audit_logs using the same transaction client.
- * 9. Permanently deletes the enquiry, triggering foreign-key CASCADE on dependent drive_sync_jobs rows.
- * 10. Commits the transaction (automatically releasing the advisory lock and row locks).
+ * Permanently deletes an enquiry and its associated drive_sync_jobs from PostgreSQL.
+ * Executes external Cloudinary cleanup post-commit to guarantee database deletion
+ * and immutable audit logging cannot be blocked by third-party outages.
  */
 export async function adminDeleteEnquiry(
   id: string,
   actor: AdminUserDTO,
-  ipAddress?: string | null
+  ipAddress?: string
 ): Promise<DeleteEnquiryResult> {
   if (!UUID_REGEX.test(id)) {
-    return { status: 'not_found', message: 'Enquiry not found' };
+    return { status: 'not_found', message: 'Invalid enquiry ID format' };
   }
 
-  const lockKey = getEnquirySyncAdvisoryLockKey(id);
-
-  return await withTransaction(async (client) => {
-    // 1. Acquire transaction-level advisory guard non-blockingly
+  const result = await withTransaction(async (client) => {
+    // 1. Acquire transaction-level advisory lock
+    const lockKey = getEnquirySyncAdvisoryLockKey(id);
     const guardRes = await client.query<{ acquired: boolean }>(
       `SELECT pg_try_advisory_xact_lock($1::bigint) as acquired;`,
       [lockKey]
@@ -300,8 +317,9 @@ export async function adminDeleteEnquiry(
 
     if (!guardRes.rows[0]?.acquired) {
       return {
-        status: 'conflict',
+        status: 'conflict' as const,
         message: 'Enquiry is currently synchronizing with Google Drive. Please retry after synchronization completes.',
+        artworkPublicId: null,
       };
     }
 
@@ -331,9 +349,10 @@ export async function adminDeleteEnquiry(
       product_id: string | null;
       product_name: string | null;
       quantity: number | null;
+      design_file_public_id: string | null;
     }>(
       `SELECT id, enquiry_type, name, email, source, drive_sync_status, created_at,
-              product_id, product_name, quantity
+              product_id, product_name, quantity, design_file_public_id
        FROM enquiries
        WHERE id = $1
        FOR UPDATE;`,
@@ -341,13 +360,12 @@ export async function adminDeleteEnquiry(
     );
 
     if (enquiryRes.rows.length === 0) {
-      return { status: 'not_found', message: 'Enquiry not found' };
+      return { status: 'not_found' as const, message: 'Enquiry not found', artworkPublicId: null };
     }
 
     const enquiry = enquiryRes.rows[0];
 
     // 3. Concurrency check: verify if an active worker claim is currently in progress
-    // A job is actively claimed if status is 'PROCESSING' and the lease has not expired (within 5 minutes)
     const hasActiveClaim = syncJobRes.rows.some((job) => {
       if (job.status !== 'PROCESSING') return false;
       if (!job.claimed_at) return false;
@@ -358,8 +376,9 @@ export async function adminDeleteEnquiry(
 
     if (hasActiveClaim) {
       return {
-        status: 'conflict',
+        status: 'conflict' as const,
         message: 'Enquiry is currently synchronizing with Google Drive. Please retry after synchronization completes.',
+        artworkPublicId: null,
       };
     }
 
@@ -379,19 +398,52 @@ export async function adminDeleteEnquiry(
         deletedAt: new Date().toISOString(),
         hasProductReference: Boolean(enquiry.product_id || enquiry.product_name),
         hasBulkQuantity: Boolean(enquiry.quantity),
+        hasArtwork: Boolean(enquiry.design_file_public_id),
       },
       ipAddress: ipAddress || null,
       client,
     });
 
-    // 5. Permanently delete the enquiry (cascades to drive_sync_jobs)
+    // 5. Enqueue durable Cloudinary cleanup job within the SAME transaction
+    let cleanupJobId: string | null = null;
+    if (enquiry.design_file_public_id) {
+      cleanupJobId = await enqueueCleanupJob(client, {
+        publicId: enquiry.design_file_public_id,
+        assetType: 'authenticated',
+        reason: 'ENQUIRY_DELETION',
+      });
+    }
+
+    // 6. Permanently delete the enquiry (cascades to drive_sync_jobs)
     await client.query('DELETE FROM enquiries WHERE id = $1;', [id]);
 
     return {
-      status: 'success',
+      status: 'success' as const,
       message: 'Enquiry deleted successfully',
+      cleanupJobId,
+      artworkPublicId: enquiry.design_file_public_id,
     };
   });
+
+  // 7. Post-Commit Durable Cloudinary Cleanup Execution
+  // Executed outside the database transaction so third-party errors cannot rollback the deletion or audit trail
+  if (result.status === 'success' && result.cleanupJobId) {
+    try {
+      await processSingleCleanupJob(result.cleanupJobId);
+    } catch (cleanupErr: unknown) {
+      // Non-fatal: the job remains stored as PENDING in cloudinary_cleanup_jobs for worker retry
+      console.warn('[Cloudinary Post-Delete Immediate Execution Warning]', {
+        cleanupJobId: result.cleanupJobId,
+        error: cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr),
+        timestamp: new Date().toISOString(),
+      });
+    }
+  }
+
+  return {
+    status: result.status,
+    message: result.message,
+  };
 }
 
 function mapEnquiryRow(row: any): EnquiryRecord {
@@ -412,6 +464,12 @@ function mapEnquiryRow(row: any): EnquiryRecord {
     driveSyncStatus: row.drive_sync_status,
     driveSyncedAt: row.drive_synced_at ? new Date(row.drive_synced_at).toISOString() : null,
     driveSyncError: row.drive_sync_error,
+    hasArtwork: Boolean(row.design_file_public_id || row.design_file_url),
+    designFileUrl: row.design_file_url || null,
+    designFilePublicId: row.design_file_public_id || null,
+    designFileName: row.design_file_name || null,
+    designFileFormat: row.design_file_format || null,
+    designFileBytes: row.design_file_bytes || null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : '',
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : '',
   };

@@ -5,7 +5,6 @@ import { ProductCard } from './ProductCard.tsx';
 import {
   ChevronRight,
   ArrowLeft,
-  Search,
   SlidersHorizontal,
   Layers,
   AlertCircle,
@@ -36,16 +35,6 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
   const [isNotFound, setIsNotFound] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>('featured');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   // Load category and products
   useEffect(() => {
@@ -66,7 +55,6 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
         const response = await fetchProducts({
           category: slug,
           sort: sortOption,
-          search: debouncedSearch,
           limit: 50,
         });
         if (!isCurrent) return;
@@ -92,7 +80,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
     return () => {
       isCurrent = false;
     };
-  }, [slug, sortOption, debouncedSearch]);
+  }, [slug, sortOption]);
 
   if (isLoading) {
     return (
@@ -211,20 +199,8 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
 
       {/* Category Controls & Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Search & Sort Bar */}
-        <div className="bg-axdoro-surface border border-axdoro-border rounded-xl p-4 mb-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 shadow-subtle">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 text-axdoro-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={`Search within ${category?.name}...`}
-              aria-label={`Search within ${category?.name}`}
-              className="w-full pl-9 pr-4 py-2 bg-axdoro-bg border border-axdoro-border rounded-lg text-xs text-axdoro-text focus:outline-none focus:ring-2 focus:ring-axdoro-accent focus:border-transparent transition-all placeholder:text-axdoro-text-muted/60"
-            />
-          </div>
-
+        {/* Sort Bar */}
+        <div className="bg-axdoro-surface border border-axdoro-border rounded-xl p-4 mb-8 flex items-center justify-end gap-4 shadow-subtle">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-axdoro-text-muted flex-shrink-0" />
             <span className="text-xs text-axdoro-text-muted font-medium hidden sm:inline">Sort:</span>
@@ -250,28 +226,15 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
               No products found in this category
             </h3>
             <p className="text-xs text-axdoro-text-muted max-w-md mx-auto mb-6">
-              {debouncedSearch
-                ? `No styles matched "${debouncedSearch}". Try a different keyword.`
-                : 'New garments are currently being tailored for this collection.'}
+              New garments are currently being tailored for this collection.
             </p>
-            {debouncedSearch ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSearchQuery('')}
-                className="text-xs"
-              >
-                Clear Search
-              </Button>
-            ) : (
-              <Button
-                onClick={() => onNavigate('/')}
-                size="sm"
-                className="text-xs"
-              >
-                Explore Other Collections
-              </Button>
-            )}
+            <Button
+              onClick={() => onNavigate('/')}
+              size="sm"
+              className="text-xs"
+            >
+              Explore Other Collections
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

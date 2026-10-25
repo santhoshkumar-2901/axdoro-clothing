@@ -159,7 +159,7 @@ export async function truncateTestEnquiries(): Promise<void> {
   validateTestDatabaseTarget(testConnectionString);
   const client = await testPool.connect();
   try {
-    await client.query('TRUNCATE TABLE drive_sync_jobs, enquiries CASCADE');
+    await client.query('TRUNCATE TABLE cloudinary_cleanup_jobs, drive_sync_jobs, enquiries CASCADE');
   } finally {
     client.release();
   }
