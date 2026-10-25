@@ -176,7 +176,7 @@ export const Footer: React.FC<FooterProps> = ({
           </div>
 
           {/* Business Contact */}
-          <div className="space-y-3">
+          <div id="contact-section" className="space-y-3 scroll-mt-24">
             <h4 className="font-bold text-axdoro-charcoal uppercase tracking-wider text-xs">Contact &amp; Owner</h4>
             <div className="space-y-2.5 text-axdoro-text-muted">
               <p className="font-semibold text-axdoro-charcoal">JANA VITHIYABATHI</p>

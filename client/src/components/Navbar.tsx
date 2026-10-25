@@ -9,6 +9,7 @@ interface NavbarProps {
   onOpenBulk: () => void;
   onScrollToShop: () => void;
   onScrollToAbout: () => void;
+  onScrollToContact?: () => void;
   categories?: Category[];
   onNavigate?: (path: string) => void;
 }
@@ -20,6 +21,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenBulk,
   onScrollToShop,
   onScrollToAbout,
+  onScrollToContact,
   categories = [],
   onNavigate,
 }) => {
@@ -80,7 +82,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Desktop Right-Aligned Navigation & Bag Action */}
           <div className="hidden md:flex items-center gap-6 lg:gap-8">
             {/* Desktop Navigation Links */}
-            <div className="flex items-center gap-5 lg:gap-7 text-xs sm:text-sm font-medium">
+            <div className="flex items-center gap-4 lg:gap-7 text-xs sm:text-sm font-medium">
               <button
                 onClick={() => {
                   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -203,6 +205,13 @@ export const Navbar: React.FC<NavbarProps> = ({
               >
                 <Layers className="w-4 h-4" />
                 <span>Bulk Orders</span>
+              </button>
+
+              <button
+                onClick={onScrollToContact}
+                className="text-axdoro-text hover:text-axdoro-accent transition-colors cursor-pointer py-1 px-1.5 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              >
+                Contact Us
               </button>
             </div>
 
@@ -336,6 +345,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Layers className="w-4 h-4" />
               <span>Bulk Clothing Orders</span>
+            </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                onScrollToContact?.();
+              }}
+              className="text-left text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-2.5 px-2 rounded min-h-[44px] flex items-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+            >
+              Contact Us
             </button>
             <button
               onClick={() => {

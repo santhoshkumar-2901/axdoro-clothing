@@ -163,6 +163,13 @@ export default function App(): React.JSX.Element {
     }
   };
 
+  const handleScrollToContact = () => {
+    const el = document.getElementById('contact-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   const handleOpenBulkWithProduct = (product: Product) => {
     setPrefilledBulkProduct(product);
     setIsBulkModalOpen(true);
@@ -206,6 +213,7 @@ export default function App(): React.JSX.Element {
         onOpenBulk={handleOpenGeneralBulk}
         onScrollToShop={handleScrollToShop}
         onScrollToAbout={handleScrollToAbout}
+        onScrollToContact={handleScrollToContact}
         categories={categories}
         onNavigate={navigate}
       />
