@@ -79,7 +79,7 @@ describe('Bulk Order Custom Artwork Upload & Admin Download — Frontend Tests',
       expect(modalContent).toContain("'Content-Type': 'application/json'");
       expect(modalContent).toContain('body: JSON.stringify({');
       expect(modalContent).toContain("enquiryType: 'BULK'");
-      expect(modalContent).toContain('quantity: parseInt(quantity, 10) || 50');
+      expect(modalContent).toContain('quantity: parsedQuantity');
       expect(modalContent).toContain('sizeBreakdown: sizeBreakdown.trim()');
       expect(modalContent).toContain('productId: prefilledProduct?.id || null');
       expect(modalContent).toContain("source: 'WEBSITE'");

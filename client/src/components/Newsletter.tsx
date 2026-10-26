@@ -36,7 +36,7 @@ export const Newsletter: React.FC = () => {
             className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 text-xs inline-flex items-center gap-2 animate-in zoom-in-95 shadow-subtle"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-            <span className="font-medium">Thank you for your interest! (Demo storefront submission recorded)</span>
+            <span className="font-medium">Thank you for your interest!</span>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row items-center justify-center gap-2.5 max-w-md mx-auto pt-2">

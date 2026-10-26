@@ -29,13 +29,13 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [productType, setProductType] = useState(prefilledProduct?.name || 'T-Shirts (140 GSM)');
-  const [quantity, setQuantity] = useState('50');
-  const [sizeBreakdown, setSizeBreakdown] = useState('S: 10, M: 20, L: 15, XL: 5');
+  const [productType, setProductType] = useState(prefilledProduct?.name || '');
+  const [quantity, setQuantity] = useState('');
+  const [sizeBreakdown, setSizeBreakdown] = useState('');
   const [specifications, setSpecifications] = useState(
-    prefilledProduct?.fabricSpec ? `${prefilledProduct.fabricSpec} Cotton` : '140 GSM Combed Cotton, Custom Branding'
+    prefilledProduct?.fabricSpec ? `${prefilledProduct.fabricSpec} Cotton` : ''
   );
-  const [deliveryRequirement, setDeliveryRequirement] = useState('Within 2-3 weeks');
+  const [deliveryRequirement, setDeliveryRequirement] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -81,12 +81,15 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
         setSpecifications(
           prefilledProduct.fabricSpec
             ? `${prefilledProduct.fabricSpec} Cotton`
-            : '140 GSM Combed Cotton, Custom Branding'
+            : ''
         );
       } else {
-        setProductType('T-Shirts (140 GSM)');
-        setSpecifications('140 GSM Combed Cotton, Custom Branding');
+        setProductType('');
+        setSpecifications('');
       }
+      setQuantity('');
+      setSizeBreakdown('');
+      setDeliveryRequirement('');
       setError(null);
       setFileError(null);
     }
@@ -170,6 +173,13 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
       return;
     }
 
+    // Validate estimated quantity: must be a valid positive integer
+    const parsedQuantity = parseInt(quantity.trim(), 10);
+    if (!quantity.trim() || isNaN(parsedQuantity) || parsedQuantity < 1) {
+      setError('Please enter a valid estimated quantity of at least 1 unit');
+      return;
+    }
+
     if (fileError) {
       setError(fileError);
       return;
@@ -178,6 +188,24 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
     setSubmitting(true);
 
     try {
+      // Construct informative message for backend schema (min 5 characters)
+      const messageParts: string[] = [];
+      if (productType.trim()) {
+        messageParts.push(`Product: ${productType.trim()}`);
+      }
+      if (specifications.trim()) {
+        messageParts.push(`Requirements: ${specifications.trim()}`);
+      }
+      if (deliveryRequirement.trim()) {
+        messageParts.push(`Timeline: ${deliveryRequirement.trim()}`);
+      }
+      if (sizeBreakdown.trim()) {
+        messageParts.push(`Sizes: ${sizeBreakdown.trim()}`);
+      }
+      const constructedMessage = messageParts.length > 0
+        ? messageParts.join('\n')
+        : `Bulk order enquiry for ${parsedQuantity} units.`;
+
       let res: Response;
       if (selectedFile) {
         const formData = new FormData();
@@ -185,8 +213,8 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
         formData.append('name', name.trim());
         formData.append('phone', phoneValidation.normalized);
         formData.append('email', email.trim());
-        formData.append('message', `Requirements: ${specifications}\nTimeline: ${deliveryRequirement}`);
-        formData.append('quantity', String(parseInt(quantity, 10) || 50));
+        formData.append('message', constructedMessage);
+        formData.append('quantity', String(parsedQuantity));
         formData.append('sizeBreakdown', sizeBreakdown.trim());
         if (prefilledProduct?.id) {
           formData.append('productId', prefilledProduct.id);
@@ -218,8 +246,8 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
             name: name.trim(),
             phone: phoneValidation.normalized,
             email: email.trim(),
-            message: `Requirements: ${specifications}\nTimeline: ${deliveryRequirement}`,
-            quantity: parseInt(quantity, 10) || 50,
+            message: constructedMessage,
+            quantity: parsedQuantity,
             sizeBreakdown: sizeBreakdown.trim(),
             productId: prefilledProduct?.id || null,
             source: 'WEBSITE',
@@ -247,13 +275,16 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
       window.open(serverWhatsAppUrl, '_blank');
       return;
     }
-    const text = encodeURIComponent(
-      `Hello AXDORO Team! I would like to enquire about a bulk clothing order:\n` +
-      `Product: ${productType}\n` +
-      `Estimated Quantity: ${quantity}\n` +
-      `Requirements: ${specifications}\n` +
-      `Delivery Timeline: ${deliveryRequirement}`
-    );
+    const textLines = [
+      'Hello AXDORO Team! I would like to enquire about a bulk clothing order:',
+    ];
+    if (productType.trim()) textLines.push(`Product: ${productType.trim()}`);
+    if (quantity.trim()) textLines.push(`Estimated Quantity: ${quantity.trim()}`);
+    if (specifications.trim()) textLines.push(`Requirements: ${specifications.trim()}`);
+    if (deliveryRequirement.trim()) textLines.push(`Delivery Timeline: ${deliveryRequirement.trim()}`);
+    if (sizeBreakdown.trim()) textLines.push(`Size Breakdown: ${sizeBreakdown.trim()}`);
+
+    const text = encodeURIComponent(textLines.join('\n'));
     window.open(`https://wa.me/919941816815?text=${text}`, '_blank');
   };
 
@@ -396,13 +427,15 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-bold text-axdoro-charcoal block mb-1">
-                  Estimated Quantity (Units)
+                  Estimated Quantity (Units) <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
-                  min="20"
+                  min="1"
+                  required
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
+                  placeholder="e.g. 50"
                   className="w-full px-3 py-2 rounded-lg bg-axdoro-bg border border-axdoro-border-strong text-xs text-axdoro-charcoal placeholder-axdoro-text-muted/60 focus:outline-none focus:ring-2 focus:ring-axdoro-accent"
                 />
               </div>
@@ -442,7 +475,7 @@ export const BulkEnquiryModal: React.FC<BulkEnquiryModalProps> = ({
                 type="text"
                 value={deliveryRequirement}
                 onChange={(e) => setDeliveryRequirement(e.target.value)}
-                placeholder="Captured as a customer request, not a guaranteed date"
+                placeholder="e.g. Within 2-3 weeks (indicative request)"
                 className="w-full px-3 py-2 rounded-lg bg-axdoro-bg border border-axdoro-border-strong text-xs text-axdoro-charcoal placeholder-axdoro-text-muted/60 focus:outline-none focus:ring-2 focus:ring-axdoro-accent"
               />
               <span className="text-[10px] text-axdoro-text-muted block mt-1">
