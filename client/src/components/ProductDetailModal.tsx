@@ -16,6 +16,69 @@ interface ProductDetailModalProps {
   onOpenBulkWithProduct: (product: Product) => void;
 }
 
+/**
+ * Resolves the active image collection for a product given the currently selected color.
+ *
+ * Precedence:
+ * 1. Dedicated color-specific images from product.allImages (sorted with primary image first).
+ * 2. Shared/uncolored images from product.allImages (images without a color tag).
+ * 3. Single safe default/primary image fallback (never images assigned to other colors).
+ * 4. product.images fallback if allImages is unavailable.
+ * 5. Empty array if no images exist.
+ */
+export function resolveProductActiveImages(
+  product: Product | null,
+  selectedColor: string
+): string[] {
+  if (!product) return [];
+
+  const normalizedSelectedColor = selectedColor ? selectedColor.trim().toLowerCase() : '';
+
+  // 1. If detailed image metadata is available:
+  if (product.allImages && product.allImages.length > 0) {
+    // 1a. Color-specific images for the selected color
+    if (normalizedSelectedColor) {
+      const colorSpecific = product.allImages.filter(
+        (img) => img.color && img.color.trim().toLowerCase() === normalizedSelectedColor
+      );
+      if (colorSpecific.length > 0) {
+        const sorted = [...colorSpecific].sort((a, b) => {
+          if (a.isPrimary !== b.isPrimary) {
+            return a.isPrimary ? -1 : 1;
+          }
+          return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+        });
+        return sorted.map((img) => img.url);
+      }
+    }
+
+    // 1b. Fallback to shared/general images without a color tag
+    const sharedImages = product.allImages.filter((img) => !img.color || !img.color.trim());
+    if (sharedImages.length > 0) {
+      const sortedShared = [...sharedImages].sort((a, b) => {
+        if (a.isPrimary !== b.isPrimary) {
+          return a.isPrimary ? -1 : 1;
+        }
+        return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+      });
+      return sortedShared.map((img) => img.url);
+    }
+
+    // 1c. Safe fallback: show only the single primary/default product image
+    // Never show images assigned to other colors as though they represent the selected color
+    const primaryImage =
+      product.allImages.find((img) => img.isPrimary)?.url ||
+      product.images?.[0] ||
+      product.allImages[0]?.url;
+    if (primaryImage) {
+      return [primaryImage];
+    }
+  }
+
+  // 2. Fallback to product.images array if allImages is unavailable
+  return product.images && product.images.length > 0 ? product.images : [];
+}
+
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
   onClose,
@@ -37,7 +100,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
     if (product) {
       setSelectedImageIndex(0);
       setSelectedSize('');
-      setSelectedColor(product.colors[0]?.name || 'Standard');
+      setSelectedColor(product.colors?.[0]?.name || 'Standard');
       setQuantity(1);
       setQuantityInput('1');
       setSizeError(false);
@@ -85,35 +148,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   // Resolve active gallery images based on selectedColor with graceful fallback
   // MUST execute unconditionally before any early returns to strictly adhere to the Rules of Hooks
   const activeImages = useMemo(() => {
-    if (!product) return [];
-
-    // 1. If detailed image metadata is available with color tags:
-    if (product.allImages && product.allImages.length > 0) {
-      if (selectedColor) {
-        const colorSpecific = product.allImages.filter(
-          (img) => img.color && img.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
-        );
-        if (colorSpecific.length > 0) {
-          return colorSpecific.map((img) => img.url);
-        }
-      }
-
-      // 2. Fallback to shared/general images without color tag
-      const sharedImages = product.allImages.filter((img) => !img.color || !img.color.trim());
-      if (sharedImages.length > 0) {
-        return sharedImages.map((img) => img.url);
-      }
-    }
-
-    // 3. Fallback to product.images array
-    return product.images && product.images.length > 0 ? product.images : [];
+    return resolveProductActiveImages(product, selectedColor);
   }, [product, selectedColor]);
 
   if (!product) return null;
 
   // Resolve matching variant from authoritative variant list
   const matchingVariant = product.variants?.find(
-    (v) => v.size === selectedSize && (!selectedColor || v.color === selectedColor)
+    (v) =>
+      v.size === selectedSize &&
+      (!selectedColor || v.color.trim().toLowerCase() === selectedColor.trim().toLowerCase())
   );
 
   const activePrice = matchingVariant ? matchingVariant.price : product.price;
@@ -177,15 +221,16 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
 
   // Color change handler that resets gallery index and clears image errors
   const handleColorChange = (newColor: string) => {
-    if (newColor !== selectedColor) {
+    if (newColor.trim().toLowerCase() !== selectedColor.trim().toLowerCase()) {
       setSelectedColor(newColor);
       setSelectedImageIndex(0);
       setImageError(false);
     }
   };
 
+  const safeImageIndex = selectedImageIndex < activeImages.length ? selectedImageIndex : 0;
   const currentImage = activeImages.length > 0
-    ? activeImages[selectedImageIndex] || activeImages[0]
+    ? activeImages[safeImageIndex] || activeImages[0]
     : '';
 
   return (
@@ -251,7 +296,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     }}
                     aria-label={`View image ${idx + 1}`}
                     className={`relative w-14 h-18 sm:w-16 sm:h-20 rounded-lg overflow-hidden border-2 flex-shrink-0 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
-                      selectedImageIndex === idx
+                      safeImageIndex === idx
                         ? 'border-axdoro-charcoal scale-105 shadow-subtle'
                         : 'border-axdoro-border opacity-70 hover:opacity-100'
                     }`}
@@ -310,7 +355,9 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     {product.sizes.map((size) => {
                       // Check variant stock for this size if variant data is populated
                       const variantForSize = product.variants?.find(
-                        (v) => v.size === size && (!selectedColor || v.color === selectedColor)
+                        (v) =>
+                          v.size === size &&
+                          (!selectedColor || v.color.trim().toLowerCase() === selectedColor.trim().toLowerCase())
                       );
                       const isSizeOutOfStock = variantForSize !== undefined && (variantForSize.stock <= 0 || !variantForSize.isActive);
 
@@ -350,26 +397,29 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     Color: <span className="text-axdoro-accent-muted font-semibold">{selectedColor}</span>
                   </label>
                   <div className="flex items-center gap-2.5" role="radiogroup" aria-label="Available colors">
-                    {product.colors.map((c) => (
-                      <button
-                        key={c.name}
-                        type="button"
-                        role="radio"
-                        aria-checked={selectedColor === c.name}
-                        onClick={() => handleColorChange(c.name)}
-                        title={c.name}
-                        className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
-                          selectedColor === c.name
-                            ? 'border-axdoro-charcoal scale-110 shadow-subtle'
-                            : 'border-transparent hover:scale-105'
-                        }`}
-                        style={{ backgroundColor: c.hex }}
-                      >
-                        {selectedColor === c.name && (
-                          <Check className={`w-3.5 h-3.5 ${c.hex.toLowerCase() === '#faf6fc' || c.hex.toLowerCase() === '#ffffff' ? 'text-black' : 'text-white'}`} />
-                        )}
-                      </button>
-                    ))}
+                    {product.colors.map((c) => {
+                      const isSelected = selectedColor.trim().toLowerCase() === c.name.trim().toLowerCase();
+                      return (
+                        <button
+                          key={c.name}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => handleColorChange(c.name)}
+                          title={c.name}
+                          className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                            isSelected
+                              ? 'border-axdoro-charcoal scale-110 shadow-subtle'
+                              : 'border-transparent hover:scale-105'
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                        >
+                          {isSelected && (
+                            <Check className={`w-3.5 h-3.5 ${c.hex.toLowerCase() === '#faf6fc' || c.hex.toLowerCase() === '#ffffff' ? 'text-black' : 'text-white'}`} />
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}

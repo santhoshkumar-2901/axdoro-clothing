@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { MOCK_PRODUCTS } from './data/mockProducts.ts';
 import { Product, formatPaiseToINR } from './types/product.ts';
 import { evaluateQuickAddAvailability } from './components/ProductCard.tsx';
+import { resolveProductActiveImages } from './components/ProductDetailModal.tsx';
 import {
   normalizeAndValidatePhone,
   getOrGenerateIdempotencyKey,
@@ -732,24 +733,6 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
   });
 
   describe('Color Variant Image Synchronization & Product Detail Modal Gallery (Phase 2)', () => {
-    const resolveActiveImages = (product: Product, selectedColor: string): string[] => {
-      if (product.allImages && product.allImages.length > 0) {
-        if (selectedColor) {
-          const colorSpecific = product.allImages.filter(
-            (img) => img.color && img.color.trim().toLowerCase() === selectedColor.trim().toLowerCase()
-          );
-          if (colorSpecific.length > 0) {
-            return colorSpecific.map((img) => img.url);
-          }
-        }
-        const sharedImages = product.allImages.filter((img) => !img.color || !img.color.trim());
-        if (sharedImages.length > 0) {
-          return sharedImages.map((img) => img.url);
-        }
-      }
-      return product.images && product.images.length > 0 ? product.images : [];
-    };
-
     const productWithColorImages: Product = {
       id: 'prod-color-test',
       slug: 'axdoro-color-sync-tee',
@@ -764,14 +747,6 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
       ],
       allImages: [
         {
-          id: 'img-black-front',
-          url: 'https://example.com/black-front.jpg',
-          altText: 'Black Front View',
-          displayOrder: 0,
-          isPrimary: true,
-          color: 'Pitch Black',
-        },
-        {
           id: 'img-black-back',
           url: 'https://example.com/black-back.jpg',
           altText: 'Black Back View',
@@ -780,10 +755,34 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
           color: 'Pitch Black',
         },
         {
+          id: 'img-black-front',
+          url: 'https://example.com/black-front.jpg',
+          altText: 'Black Front View',
+          displayOrder: 2,
+          isPrimary: true, // Primary image should sort first despite displayOrder 2
+          color: 'Pitch Black',
+        },
+        {
+          id: 'img-black-side',
+          url: 'https://example.com/black-side.jpg',
+          altText: 'Black Side View',
+          displayOrder: 3,
+          isPrimary: false,
+          color: 'Pitch Black',
+        },
+        {
           id: 'img-white-front',
           url: 'https://example.com/white-front.jpg',
           altText: 'White Front View',
-          displayOrder: 2,
+          displayOrder: 4,
+          isPrimary: true,
+          color: 'Ice White',
+        },
+        {
+          id: 'img-white-detail',
+          url: 'https://example.com/white-detail.jpg',
+          altText: 'White Detail View',
+          displayOrder: 5,
           isPrimary: false,
           color: 'Ice White',
         },
@@ -791,7 +790,7 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
           id: 'img-shared-tag',
           url: 'https://example.com/shared-fabric.jpg',
           altText: 'Fabric Close Up',
-          displayOrder: 3,
+          displayOrder: 6,
           isPrimary: false,
           color: null,
         },
@@ -823,8 +822,8 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
           size: 'L',
           color: 'Pitch Black',
           sku: 'AX-BLK-L',
-          pricePaise: 69900,
-          price: 699,
+          pricePaise: 74900,
+          price: 749,
           stock: 5,
           isActive: true,
         },
@@ -851,47 +850,167 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
       ],
     };
 
-    it('1. switching colors changes the displayed image collection to the active color', () => {
-      const blackImages = resolveActiveImages(productWithColorImages, 'Pitch Black');
+    it('1. selecting a color updates the main product image to that color\'s primary image (isPrimary first)', () => {
+      // In productWithColorImages, img-black-front has isPrimary: true and displayOrder: 2,
+      // while img-black-back has isPrimary: false and displayOrder: 1.
+      // Primary MUST sort to index 0.
+      const blackImages = resolveProductActiveImages(productWithColorImages, 'Pitch Black');
+      expect(blackImages[0]).toBe('https://example.com/black-front.jpg');
       expect(blackImages).toEqual([
         'https://example.com/black-front.jpg',
         'https://example.com/black-back.jpg',
+        'https://example.com/black-side.jpg',
       ]);
 
-      const whiteImages = resolveActiveImages(productWithColorImages, 'Ice White');
+      const whiteImages = resolveProductActiveImages(productWithColorImages, 'Ice White');
+      expect(whiteImages[0]).toBe('https://example.com/white-front.jpg');
       expect(whiteImages).toEqual([
         'https://example.com/white-front.jpg',
+        'https://example.com/white-detail.jpg',
       ]);
     });
 
-    it('2. switching colors resets an invalid gallery selection index back to index 0', () => {
-      let selectedImageIndex = 1;
-      let selectedColor = 'Pitch Black';
-      let activeImages = resolveActiveImages(productWithColorImages, selectedColor);
-      expect(activeImages[selectedImageIndex]).toBe('https://example.com/black-back.jpg');
+    it('2. thumbnail gallery displays only images assigned to the selected color', () => {
+      const blackImages = resolveProductActiveImages(productWithColorImages, 'Pitch Black');
+      // Must not contain white images or shared images when dedicated images exist
+      expect(blackImages.every((url) => !url.includes('white') && !url.includes('shared'))).toBe(true);
+      expect(blackImages).toHaveLength(3);
 
-      const onColorChange = (newColor: string) => {
-        selectedColor = newColor;
-        selectedImageIndex = 0;
+      const whiteImages = resolveProductActiveImages(productWithColorImages, 'Ice White');
+      expect(whiteImages.every((url) => !url.includes('black') && !url.includes('shared'))).toBe(true);
+      expect(whiteImages).toHaveLength(2);
+    });
+
+    it('3. clicking a thumbnail changes the active image within the selected color\'s gallery', () => {
+      const activeImages = resolveProductActiveImages(productWithColorImages, 'Pitch Black');
+      expect(activeImages.length).toBe(3);
+
+      let selectedIndex = 0;
+      expect(activeImages[selectedIndex]).toBe('https://example.com/black-front.jpg');
+
+      selectedIndex = 1;
+      expect(activeImages[selectedIndex]).toBe('https://example.com/black-back.jpg');
+
+      selectedIndex = 2;
+      expect(activeImages[selectedIndex]).toBe('https://example.com/black-side.jpg');
+    });
+
+    it('4. switching colors resets the selected thumbnail index to 0', () => {
+      let selectedColor = 'Pitch Black';
+      let selectedImageIndex = 2;
+      let activeImages = resolveProductActiveImages(productWithColorImages, selectedColor);
+      expect(activeImages[selectedImageIndex]).toBe('https://example.com/black-side.jpg');
+
+      // User switches color swatch
+      const handleColorChange = (newColor: string) => {
+        if (newColor.trim().toLowerCase() !== selectedColor.trim().toLowerCase()) {
+          selectedColor = newColor;
+          selectedImageIndex = 0;
+        }
       };
 
-      onColorChange('Ice White');
-      activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      handleColorChange('Ice White');
+      activeImages = resolveProductActiveImages(productWithColorImages, selectedColor);
+
+      expect(selectedColor).toBe('Ice White');
       expect(selectedImageIndex).toBe(0);
       expect(activeImages[selectedImageIndex]).toBe('https://example.com/white-front.jpg');
     });
 
-    it('3. thumbnail selection works within the active color collection', () => {
-      const selectedColor = 'Pitch Black';
-      const activeImages = resolveActiveImages(productWithColorImages, selectedColor);
-      expect(activeImages.length).toBe(2);
-
-      let selectedIndex = 0;
-      selectedIndex = 1;
-      expect(activeImages[selectedIndex]).toBe('https://example.com/black-back.jpg');
+    it('5. when the selected color has no dedicated images: falls back to shared/uncolored images if available', () => {
+      // Lilac Mist has no dedicated images, but allImages has img-shared-tag with color: null
+      const lilacImages = resolveProductActiveImages(productWithColorImages, 'Lilac Mist');
+      expect(lilacImages).toEqual(['https://example.com/shared-fabric.jpg']);
     });
 
-    it('4. changing sizes preserves the selected color and active gallery', () => {
+    it('6. when the selected color has no dedicated images and NO shared images exist: shows a single safe default/primary image and never falls back to a gallery of other colors', () => {
+      const productNoShared: Product = {
+        ...productWithColorImages,
+        allImages: [
+          {
+            id: 'img-blk-1',
+            url: 'https://example.com/only-black-1.jpg',
+            altText: 'Black 1',
+            displayOrder: 0,
+            isPrimary: true,
+            color: 'Pitch Black',
+          },
+          {
+            id: 'img-blk-2',
+            url: 'https://example.com/only-black-2.jpg',
+            altText: 'Black 2',
+            displayOrder: 1,
+            isPrimary: false,
+            color: 'Pitch Black',
+          },
+        ],
+      };
+
+      // Querying for Lilac Mist which has no dedicated images and no shared images
+      const fallbackImages = resolveProductActiveImages(productNoShared, 'Lilac Mist');
+
+      // CRITICAL REQUIREMENT:
+      // 1. Show a single safe default/primary image
+      // 2. NEVER fall back to a gallery containing images assigned to other colors
+      expect(fallbackImages).toHaveLength(1);
+      expect(fallbackImages[0]).toBe('https://example.com/only-black-1.jpg');
+      // Verify other black gallery images are NOT returned
+      expect(fallbackImages).not.toContain('https://example.com/only-black-2.jpg');
+    });
+
+    it('7. legacy products without allImages metadata fall back gracefully to product.images', () => {
+      const legacyProduct: Product = {
+        ...productWithColorImages,
+        allImages: undefined,
+      };
+
+      const imagesForBlack = resolveProductActiveImages(legacyProduct, 'Pitch Black');
+      expect(imagesForBlack).toEqual(legacyProduct.images);
+
+      const imagesForWhite = resolveProductActiveImages(legacyProduct, 'Ice White');
+      expect(imagesForWhite).toEqual(legacyProduct.images);
+    });
+
+    it('8. handles empty-image states gracefully when product has no images or is null', () => {
+      expect(resolveProductActiveImages(null, 'Pitch Black')).toEqual([]);
+
+      const productNoImages: Product = {
+        ...productWithColorImages,
+        images: [],
+        allImages: [],
+      };
+      expect(resolveProductActiveImages(productNoImages, 'Pitch Black')).toEqual([]);
+    });
+
+    it('9. color matching follows project normalization conventions (case-insensitive and trimmed)', () => {
+      const lower = resolveProductActiveImages(productWithColorImages, 'pitch black');
+      expect(lower[0]).toBe('https://example.com/black-front.jpg');
+
+      const upper = resolveProductActiveImages(productWithColorImages, 'PITCH BLACK');
+      expect(upper[0]).toBe('https://example.com/black-front.jpg');
+
+      const withSpaces = resolveProductActiveImages(productWithColorImages, '  Pitch Black   ');
+      expect(withSpaces[0]).toBe('https://example.com/black-front.jpg');
+
+      // Also verify when image color in metadata has whitespace/different casing
+      const productWithWhitespaceInMeta: Product = {
+        ...productWithColorImages,
+        allImages: [
+          {
+            id: 'img-ws-1',
+            url: 'https://example.com/ws-front.jpg',
+            altText: 'Whitespace Front',
+            displayOrder: 0,
+            isPrimary: true,
+            color: '  Pitch Black  ',
+          },
+        ],
+      };
+      const resolved = resolveProductActiveImages(productWithWhitespaceInMeta, 'pitch black');
+      expect(resolved).toEqual(['https://example.com/ws-front.jpg']);
+    });
+
+    it('10. changing sizes preserves the selected color and active gallery', () => {
       let selectedColor = 'Pitch Black';
       let selectedSize = 'M';
 
@@ -902,31 +1021,17 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
       onSizeChange('L');
       expect(selectedSize).toBe('L');
       expect(selectedColor).toBe('Pitch Black');
-      const activeImages = resolveActiveImages(productWithColorImages, selectedColor);
+      const activeImages = resolveProductActiveImages(productWithColorImages, selectedColor);
       expect(activeImages[0]).toBe('https://example.com/black-front.jpg');
     });
 
-    it('5. shared-image fallback works when a selected color has no dedicated images', () => {
-      const lilacImages = resolveActiveImages(productWithColorImages, 'Lilac Mist');
-      expect(lilacImages).toEqual(['https://example.com/shared-fabric.jpg']);
-    });
-
-    it('6. legacy products without allImages metadata fall back gracefully to product.images', () => {
-      const legacyProduct: Product = {
-        ...productWithColorImages,
-        allImages: undefined,
-      };
-
-      const imagesForBlack = resolveActiveImages(legacyProduct, 'Pitch Black');
-      expect(imagesForBlack).toEqual(legacyProduct.images);
-
-      const imagesForWhite = resolveActiveImages(legacyProduct, 'Ice White');
-      expect(imagesForWhite).toEqual(legacyProduct.images);
-    });
-
-    it('7. unavailable color-size combinations are correctly identified and prevented from add-to-cart', () => {
+    it('11. unavailable color-size combinations are correctly identified and prevented from add-to-cart', () => {
       const resolveVariant = (p: Product, size: string, color: string) =>
-        p.variants?.find((v) => v.size === size && (!color || v.color === color));
+        p.variants?.find(
+          (v) =>
+            v.size === size &&
+            (!color || v.color.trim().toLowerCase() === color.trim().toLowerCase())
+        );
 
       const whiteM = resolveVariant(productWithColorImages, 'M', 'Ice White');
       expect(whiteM?.stock).toBe(12);
@@ -938,8 +1043,52 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
       expect(isOutOfStock).toBe(true);
     });
 
+    it('12. preserves size, quantity, variant pricing, and cart payload contract upon add to cart', () => {
+      let addedPayload: {
+        product: Product;
+        size: string;
+        color: string;
+        quantity: number;
+        variant?: any;
+      } | null = null;
+
+      const mockAddToCart = (
+        product: Product,
+        size: string,
+        color: string,
+        quantity: number,
+        variant?: any
+      ) => {
+        addedPayload = { product, size, color, quantity, variant };
+      };
+
+      // Select L in Pitch Black with quantity 2 (which has price ₹749 rather than base ₹699)
+      const selectedSize = 'L';
+      const selectedColor = 'Pitch Black';
+      const quantity = 2;
+
+      const matchingVariant = productWithColorImages.variants?.find(
+        (v) =>
+          v.size === selectedSize &&
+          (!selectedColor || v.color.trim().toLowerCase() === selectedColor.trim().toLowerCase())
+      );
+
+      expect(matchingVariant?.id).toBe('v-black-l');
+      expect(matchingVariant?.price).toBe(749);
+
+      mockAddToCart(productWithColorImages, selectedSize, selectedColor, quantity, matchingVariant);
+
+      expect(addedPayload).toEqual({
+        product: productWithColorImages,
+        size: 'L',
+        color: 'Pitch Black',
+        quantity: 2,
+        variant: matchingVariant,
+      });
+    });
+
     describe('ProductDetailModal React Hooks Order & Safe Render Invariants', () => {
-      it('8. renders cleanly without product (product=null) and with selected product without hook order errors', async () => {
+      it('13. renders cleanly without product (product=null) and with selected product without hook order errors', async () => {
         const { renderToString } = await import('react-dom/server');
         const React = await import('react');
         const { ProductDetailModal } = await import('./components/ProductDetailModal.tsx');
@@ -989,7 +1138,7 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
         }).not.toThrow();
       });
 
-      it('9. static structural audit verifies activeImages useMemo is declared before any early return', async () => {
+      it('14. static structural audit verifies activeImages useMemo is declared before any early return', async () => {
         const fs = await import('node:fs');
         const path = await import('node:path');
         const modalPath = path.resolve(__dirname, 'components/ProductDetailModal.tsx');
@@ -1002,6 +1151,32 @@ describe('Phase 4: Product Card & Catalog Domain Logic', () => {
         expect(earlyReturnPos).toBeGreaterThan(0);
         // CRITICAL RULE OF HOOKS: useMemo must be positioned BEFORE the conditional return
         expect(useMemoPos).toBeLessThan(earlyReturnPos);
+      });
+
+      it('15. renders gracefully with empty-image state when activeImages is empty', async () => {
+        const { renderToString } = await import('react-dom/server');
+        const React = await import('react');
+        const { ProductDetailModal } = await import('./components/ProductDetailModal.tsx');
+
+        const productWithNoImages: Product = {
+          ...MOCK_PRODUCTS[0],
+          images: [],
+          allImages: [],
+        };
+
+        let html: string = '';
+        expect(() => {
+          html = renderToString(
+            React.createElement(ProductDetailModal, {
+              product: productWithNoImages,
+              onClose: () => {},
+              onAddToCart: () => {},
+              onOpenBulkWithProduct: () => {},
+            })
+          );
+        }).not.toThrow();
+
+        expect(html).toContain('Image Unavailable');
       });
     });
   });
