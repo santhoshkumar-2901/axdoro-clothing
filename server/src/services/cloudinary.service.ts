@@ -195,13 +195,17 @@ export async function fetchAuthenticatedArtworkBuffer(
   const cloudName = env.CLOUDINARY_CLOUD_NAME!;
   const apiKey = env.CLOUDINARY_API_KEY!;
   const apiSecret = env.CLOUDINARY_API_SECRET!;
-  const resourceType = format === 'pdf' ? 'image' : 'image';
+  const resourceType = 'image';
 
-  // Cloudinary download API with Basic Auth
+  // Cloudinary download API with Basic Auth and type=authenticated
   const basicAuth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
-  const url = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/download?public_id=${encodeURIComponent(
-    publicId
-  )}`;
+  const normalizedFormat = (format || 'png').toLowerCase().trim();
+  const params = new URLSearchParams({
+    public_id: publicId,
+    type: 'authenticated',
+    format: normalizedFormat,
+  });
+  const url = `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/download?${params.toString()}`;
 
   try {
     const res = await fetch(url, {
@@ -211,14 +215,17 @@ export async function fetchAuthenticatedArtworkBuffer(
     });
 
     if (!res.ok) {
+      console.warn(`[Cloudinary Artwork Download] Upstream fetch failed with HTTP ${res.status}`);
       return null;
     }
 
     const arrayBuffer = await res.arrayBuffer();
     const contentType =
-      format === 'pdf' ? 'application/pdf' : `image/${format === 'jpg' ? 'jpeg' : format}`;
+      res.headers.get('content-type') ||
+      (normalizedFormat === 'jpg' || normalizedFormat === 'jpeg' ? 'image/jpeg' : `image/${normalizedFormat}`);
     return { buffer: Buffer.from(arrayBuffer), contentType };
   } catch {
+    console.error('[Cloudinary Artwork Download] Request failed unexpectedly');
     return null;
   }
 }

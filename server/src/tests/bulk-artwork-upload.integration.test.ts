@@ -468,6 +468,144 @@ describe('Bulk Order Artwork Upload — Phase A Backend Integration Tests', () =
       expect(res.headers['content-security-policy']).toBe("default-src 'none'");
       expect(res.body.equals(validPdfBuffer)).toBe(true);
     });
+
+    it('returns HTTP 502 Bad Gateway safely when storage retrieval returns null without leaking details', async () => {
+      const enquiry = await createEnquiry(
+        {
+          enquiryType: 'BULK',
+          name: 'Artwork Failure User',
+          email: 'fail@example.com',
+          phone: '+919876543210',
+          message: 'Artwork fails',
+          quantity: 50,
+          source: 'WEBSITE',
+        },
+        {
+          designFileUrl: 'https://res.cloudinary.com/test/image/authenticated/artwork.png',
+          designFilePublicId: 'axdoro/enquiries/artwork/artwork_sample_png',
+          designFileName: 'customer-logo.png',
+          designFileFormat: 'png',
+          designFileBytes: validPngBuffer.length,
+        }
+      );
+
+      vi.spyOn(cloudinaryService, 'fetchAuthenticatedArtworkBuffer').mockResolvedValueOnce(null);
+
+      const res = await request(app)
+        .get(`/api/admin/enquiries/${enquiry.id}/artwork`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(res.status).toBe(502);
+      expect(res.body).toEqual({
+        status: 'error',
+        error: 'Unable to retrieve artwork from storage service.',
+      });
+      // Ensure zero internal credentials or URLs are exposed in body
+      expect(JSON.stringify(res.body)).not.toContain('cloudinary');
+      expect(JSON.stringify(res.body)).not.toContain('axdoro/enquiries/artwork');
+    });
+
+    it('calls Cloudinary download API with type=authenticated and HTTP Basic Auth', async () => {
+      const mockCloudName = 'test-cloud';
+      const mockApiKey = 'test-key-123';
+      const mockApiSecret = 'test-secret-456';
+      const origCloudName = env.CLOUDINARY_CLOUD_NAME;
+      const origKey = env.CLOUDINARY_API_KEY;
+      const origSecret = env.CLOUDINARY_API_SECRET;
+
+      env.CLOUDINARY_CLOUD_NAME = mockCloudName;
+      env.CLOUDINARY_API_KEY = mockApiKey;
+      env.CLOUDINARY_API_SECRET = mockApiSecret;
+
+      let capturedUrl = '';
+      let capturedHeaders: Record<string, string> = {};
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce(async (input, init) => {
+        capturedUrl = String(input);
+        capturedHeaders = (init?.headers as Record<string, string>) || {};
+        return new Response(validPngBuffer, {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        });
+      });
+
+      try {
+        const result = await cloudinaryService.fetchAuthenticatedArtworkBuffer(
+          'axdoro/enquiries/artwork/artwork_sample_123',
+          'png'
+        );
+
+        expect(result).not.toBeNull();
+        expect(result!.buffer.equals(validPngBuffer)).toBe(true);
+        expect(result!.contentType).toBe('image/png');
+
+        // Verify URL structure and query parameters
+        const parsedUrl = new URL(capturedUrl);
+        expect(parsedUrl.origin).toBe('https://api.cloudinary.com');
+        expect(parsedUrl.pathname).toBe(`/v1_1/${mockCloudName}/image/download`);
+        expect(parsedUrl.searchParams.get('public_id')).toBe('axdoro/enquiries/artwork/artwork_sample_123');
+        expect(parsedUrl.searchParams.get('type')).toBe('authenticated');
+        expect(parsedUrl.searchParams.get('format')).toBe('png');
+
+        // Verify Basic Auth
+        const expectedBasicAuth = `Basic ${Buffer.from(`${mockApiKey}:${mockApiSecret}`).toString('base64')}`;
+        expect(capturedHeaders['Authorization']).toBe(expectedBasicAuth);
+      } finally {
+        fetchSpy.mockRestore();
+        env.CLOUDINARY_CLOUD_NAME = origCloudName;
+        env.CLOUDINARY_API_KEY = origKey;
+        env.CLOUDINARY_API_SECRET = origSecret;
+      }
+    });
+
+    it('returns null safely when Cloudinary download returns non-200 without exposing credentials or data', async () => {
+      const mockCloudName = 'test-cloud';
+      const mockApiKey = 'test-key-123';
+      const mockApiSecret = 'test-secret-456';
+      const origCloudName = env.CLOUDINARY_CLOUD_NAME;
+      const origKey = env.CLOUDINARY_API_KEY;
+      const origSecret = env.CLOUDINARY_API_SECRET;
+
+      env.CLOUDINARY_CLOUD_NAME = mockCloudName;
+      env.CLOUDINARY_API_KEY = mockApiKey;
+      env.CLOUDINARY_API_SECRET = mockApiSecret;
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: 'Resource not found' } }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json', 'x-cld-error': 'Resource not found' },
+        })
+      );
+
+      try {
+        const result = await cloudinaryService.fetchAuthenticatedArtworkBuffer(
+          'axdoro/enquiries/artwork/nonexistent_asset',
+          'jpg'
+        );
+
+        expect(result).toBeNull();
+      } finally {
+        fetchSpy.mockRestore();
+        env.CLOUDINARY_CLOUD_NAME = origCloudName;
+        env.CLOUDINARY_API_KEY = origKey;
+        env.CLOUDINARY_API_SECRET = origSecret;
+      }
+    });
+
+    it('returns null when Cloudinary credentials are not configured', async () => {
+      const origCloudName = env.CLOUDINARY_CLOUD_NAME;
+      env.CLOUDINARY_CLOUD_NAME = undefined;
+
+      try {
+        const result = await cloudinaryService.fetchAuthenticatedArtworkBuffer(
+          'axdoro/enquiries/artwork/any_asset',
+          'png'
+        );
+        expect(result).toBeNull();
+      } finally {
+        env.CLOUDINARY_CLOUD_NAME = origCloudName;
+      }
+    });
   });
 
   describe('4. Deletion & Decoupled Post-Commit Cleanup', () => {
