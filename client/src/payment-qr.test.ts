@@ -33,6 +33,11 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
       expect(modalContent).toContain('UPI Payment Unavailable');
       expect(modalContent).toContain('settingsError');
     });
+
+    it('resets confirmedOrder and lightbox states when modal closes or reopens', () => {
+      expect(modalContent).toContain('setConfirmedOrder(null);');
+      expect(modalContent).toContain('setIsQrLightboxOpen(false);');
+    });
   });
 
   describe('2. Copyable UPI ID in Checkout & Confirmation Screens', () => {
@@ -118,6 +123,12 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
       expect(viewContent).toContain("formData.append('timestamp', String(sig.timestamp));");
       expect(viewContent).toContain("formData.append('signature', sig.signature);");
       expect(viewContent).toContain('sig.uploadUrl');
+    });
+
+    it('ensures payment QR modal is scrollable and Direct URL preview does not get shadowed', () => {
+      expect(viewContent).toContain('overflow-y-auto');
+      expect(viewContent).toContain('useQrManualUrl ? qrManualUrl.trim() : qrPreviewUrl');
+      expect(viewContent).toContain("setQrUpiId(paymentQrSetting?.upiId || '');");
     });
   });
 

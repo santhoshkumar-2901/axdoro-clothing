@@ -183,4 +183,106 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       expect(data.imageUrl).toBe('https://res.cloudinary.com/updated.jpg');
     });
   });
+
+  describe('5. Hero Banner Loading States, Obsolete Image Flash Prevention & Rapid Transitions', () => {
+    it('initializes App heroImageUrl as undefined to represent unresolved state', () => {
+      const appFilePath = path.join(clientDir, 'App.tsx');
+      const appContent = fs.readFileSync(appFilePath, 'utf-8');
+      expect(appContent).toContain('const [heroImageUrl, setHeroImageUrl] = useState<string | null | undefined>(undefined);');
+      expect(appContent).toContain('setHeroImageUrl(null);');
+    });
+
+    it('1. does not render default /hero-bg.jpg while settings are unresolved (heroImageUrl === undefined)', async () => {
+      const { renderToString } = await import('react-dom/server');
+      const React = await import('react');
+      const { Hero } = await import('./components/Hero.tsx');
+
+      const html = renderToString(
+        React.createElement(Hero, {
+          heroImageUrl: undefined,
+          onExplore: () => {},
+          onOpenBulk: () => {},
+        })
+      );
+
+      // Must not render /hero-bg.jpg while unresolved
+      expect(html).not.toContain('src="/hero-bg.jpg"');
+      expect(html).not.toContain('<img');
+      // Dark background and gradients are intact
+      expect(html).toContain('bg-[#0D0B14]');
+      expect(html).toContain('bg-gradient-to-r from-[#0D0B14]');
+    });
+
+    it('2. does not reveal custom image before it loads (starts hidden/unloaded)', async () => {
+      const { renderToString } = await import('react-dom/server');
+      const React = await import('react');
+      const { Hero } = await import('./components/Hero.tsx');
+
+      const customUrl = 'https://res.cloudinary.com/axdoro/hero-campaign.webp';
+      const html = renderToString(
+        React.createElement(Hero, {
+          heroImageUrl: customUrl,
+          onExplore: () => {},
+          onOpenBulk: () => {},
+        })
+      );
+
+      // On initial render before load/ready, image is not revealed and obsolete image is never rendered
+      expect(html).not.toContain('opacity-100');
+      expect(html).not.toContain('src="/hero-bg.jpg"');
+    });
+
+    it('3. reveals custom image with opacity-100 once preloaded', () => {
+      const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+      const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+
+      expect(heroContent).toContain('new Image()');
+      expect(heroContent).toContain("if ('decode' in img)");
+      expect(heroContent).toContain("isLoaded ? 'opacity-100' : 'opacity-0'");
+      expect(heroContent).toContain('transition-opacity duration-500');
+    });
+
+    it('4. uses /hero-bg.jpg when resolved setting is null (default fallback)', () => {
+      const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+      const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+
+      expect(heroContent).toContain("heroImageUrl !== undefined ? (heroImageUrl || '/hero-bg.jpg') : null");
+    });
+
+    it('5. resolves failed settings requests to default image via setHeroImageUrl(null)', () => {
+      const appFilePath = path.join(clientDir, 'App.tsx');
+      const appContent = fs.readFileSync(appFilePath, 'utf-8');
+
+      // The catch block sets heroImageUrl to null on error
+      expect(appContent).toContain('setHeroImageUrl(null);');
+    });
+
+    it('6. recovers safely to /hero-bg.jpg on custom image load failure without leaving hero broken', () => {
+      const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+      const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+
+      expect(heroContent).toContain("setImageSrc('/hero-bg.jpg');");
+      expect(heroContent).toContain("onError={() => setImageSrc('/hero-bg.jpg')}");
+    });
+
+    it('7. guards against rapid URL changes and cancels stale image completions', () => {
+      const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+      const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+
+      expect(heroContent).toContain('latestTargetRef.current !== targetSrc');
+      expect(heroContent).toContain('isCancelled = true');
+    });
+
+    it('8. preserves all existing hero headlines, CTAs, buttons, and layout dimensions', () => {
+      const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+      const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+
+      expect(heroContent).toContain('AXDORO &ndash; Clothing Made for Every Occasion');
+      expect(heroContent).toContain('Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.');
+      expect(heroContent).toContain('Explore Collection');
+      expect(heroContent).toContain('Enquire for Bulk Orders');
+      expect(heroContent).toContain('140 GSM Combed Cotton');
+      expect(heroContent).toContain('Oxford &amp; Linen Tailored Weaves');
+    });
+  });
 });

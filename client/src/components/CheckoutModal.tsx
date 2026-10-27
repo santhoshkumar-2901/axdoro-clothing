@@ -76,9 +76,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [isQrLightboxOpen, setIsQrLightboxOpen] = useState(false);
   useScrollLock(isQrLightboxOpen);
 
-  // Fetch dynamic payment QR settings on mount / open
+  // Fetch dynamic payment QR settings on mount / open, and clean up states
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setConfirmedOrder(null);
+      setIsQrLightboxOpen(false);
+      setErrorMessage(null);
+      setFieldErrors({});
+      setCopiedUpi(false);
+      return;
+    }
+
+    setConfirmedOrder(null);
+    setIsQrLightboxOpen(false);
+    setErrorMessage(null);
+    setFieldErrors({});
     let isMounted = true;
     setIsLoadingSettings(true);
     setSettingsError(null);
@@ -116,17 +128,21 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     };
   }, []);
 
-  // Escape key handler for QR lightbox
+  // Escape key handler for checkout modal and QR lightbox
   useEffect(() => {
-    if (!isQrLightboxOpen) return;
+    if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setIsQrLightboxOpen(false);
+        if (isQrLightboxOpen) {
+          setIsQrLightboxOpen(false);
+        } else if (!isSubmitting) {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isQrLightboxOpen]);
+  }, [isOpen, isQrLightboxOpen, isSubmitting, onClose]);
 
   // Copy UPI ID helper with graceful fallback
   const handleCopyUpi = async (upiId: string) => {
@@ -326,17 +342,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="checkout-modal-title"
+      onClick={onClose}
     >
       <div
-        className="relative w-full max-w-3xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-8"
+        className="relative w-full max-w-3xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden flex flex-col my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="p-5 sm:p-6 border-b border-axdoro-border bg-axdoro-bg flex items-center justify-between">
+        {/* Header - Pinned at top */}
+        <div className="p-4 sm:p-5 border-b border-axdoro-border bg-axdoro-bg flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <ShoppingBag className="w-5 h-5 text-axdoro-accent-muted" />
             <h2 id="checkout-modal-title" className="text-lg font-bold text-axdoro-charcoal tracking-tight">
@@ -351,6 +368,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Content Body - Scrollable */}
+        <div className="overflow-y-auto flex-1 overscroll-contain">
 
         {/* Content Body */}
         {confirmedOrder ? (
@@ -830,6 +850,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
             </div>
           </form>
         )}
+        </div>
       </div>
 
       {/* Click-to-Enlarge QR Lightbox Modal */}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Layers, CheckCircle2 } from 'lucide-react';
 
 interface HeroProps {
@@ -8,23 +8,77 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onExplore, onOpenBulk, heroImageUrl }) => {
-  const [imageSrc, setImageSrc] = React.useState<string>(heroImageUrl || '/hero-bg.jpg');
+  // Resolved target image: undefined when settings are unresolved, heroImageUrl or '/hero-bg.jpg' once resolved
+  const targetSrc = heroImageUrl !== undefined ? (heroImageUrl || '/hero-bg.jpg') : null;
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const latestTargetRef = useRef<string | null>(targetSrc);
 
-  React.useEffect(() => {
-    setImageSrc(heroImageUrl || '/hero-bg.jpg');
-  }, [heroImageUrl]);
+  useEffect(() => {
+    latestTargetRef.current = targetSrc;
+
+    // While settings are unresolved (heroImageUrl === undefined), do not load or reveal any image
+    if (!targetSrc) {
+      setImageSrc(null);
+      setIsLoaded(false);
+      return;
+    }
+
+    let isCancelled = false;
+    const img = new Image();
+    img.src = targetSrc;
+
+    const handleReady = () => {
+      if (isCancelled || latestTargetRef.current !== targetSrc) return;
+      setImageSrc(targetSrc);
+      setIsLoaded(true);
+    };
+
+    const handleError = () => {
+      if (isCancelled || latestTargetRef.current !== targetSrc) return;
+      // If custom image fails, safely fall back to default /hero-bg.jpg
+      setImageSrc('/hero-bg.jpg');
+      setIsLoaded(true);
+    };
+
+    // If image is already fully loaded and decoded in cache
+    if (img.complete && img.naturalWidth > 0) {
+      handleReady();
+    } else {
+      img.onload = () => {
+        if ('decode' in img) {
+          img.decode()
+            .then(() => handleReady())
+            .catch(() => handleReady());
+        } else {
+          handleReady();
+        }
+      };
+      img.onerror = handleError;
+    }
+
+    return () => {
+      isCancelled = true;
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [targetSrc]);
 
   return (
     <section className="relative overflow-hidden pt-12 pb-20 md:pt-20 md:pb-28 border-b border-axdoro-border bg-[#0D0B14]">
       {/* Background Picture & Atmospheric Gradient Overlays */}
       <div className="absolute inset-0 z-0">
-        <img
-          src={imageSrc}
-          alt="AXDORO Contemporary Apparel Lifestyle"
-          className="w-full h-full object-cover object-[75%_center] lg:object-right"
-          loading="eager"
-          onError={() => setImageSrc('/hero-bg.jpg')}
-        />
+        {imageSrc && (
+          <img
+            src={imageSrc}
+            alt="AXDORO Contemporary Apparel Lifestyle"
+            className={`w-full h-full object-cover object-[75%_center] lg:object-right transition-opacity duration-500 ${
+              isLoaded ? 'opacity-100' : 'opacity-0'
+            }`}
+            loading="eager"
+            onError={() => setImageSrc('/hero-bg.jpg')}
+          />
+        )}
         {/* Deep purple gradient vignette: dark on the left for text contrast, transparent on the right for models */}
         <div className="absolute inset-0 bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/90 to-transparent lg:via-[#0D0B14]/75 lg:to-transparent" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0D0B14] via-transparent to-transparent opacity-80" />

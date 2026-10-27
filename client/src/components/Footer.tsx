@@ -177,17 +177,17 @@ export const Footer: React.FC<FooterProps> = ({
 
           {/* Business Contact */}
           <div id="contact-section" className="space-y-3 scroll-mt-24">
-            <h4 className="font-bold text-axdoro-charcoal uppercase tracking-wider text-xs">Contact &amp; Owner</h4>
+            <h4 className="font-bold text-axdoro-charcoal uppercase tracking-wider text-xs">Contact Us</h4>
             <div className="space-y-2.5 text-axdoro-text-muted">
-              <p className="font-semibold text-axdoro-charcoal">JANA VITHIYABATHI</p>
+              <p className="font-semibold text-axdoro-charcoal">JANA V</p>
               <div className="flex items-center gap-2">
                 <Phone className="w-3.5 h-3.5 text-axdoro-charcoal flex-shrink-0" />
                 <span>+91 99418 16815</span>
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-3.5 h-3.5 text-axdoro-charcoal flex-shrink-0" />
-                <a href="mailto:Janavvagj@gmail.com" className="hover:text-axdoro-charcoal transition-colors">
-                  Janavvagj@gmail.com
+                <a href="mailto:janavvagj@gmail.com" className="hover:text-axdoro-charcoal transition-colors">
+                  janavvagj@gmail.com
                 </a>
               </div>
             </div>

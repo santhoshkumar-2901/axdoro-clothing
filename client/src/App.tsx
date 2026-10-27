@@ -27,7 +27,7 @@ export default function App(): React.JSX.Element {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [prefilledBulkProduct, setPrefilledBulkProduct] = useState<Product | null>(null);
   const [catalogueVersion, setCatalogueVersion] = useState(0);
-  const [heroImageUrl, setHeroImageUrl] = useState<string | null>(null);
+  const [heroImageUrl, setHeroImageUrl] = useState<string | null | undefined>(undefined);
 
   // Sync route path on browser back/forward navigation
   useEffect(() => {
@@ -58,7 +58,9 @@ export default function App(): React.JSX.Element {
         }
       })
       .catch(() => {
-        // Handled gracefully with default
+        if (isCurrent) {
+          setHeroImageUrl(null);
+        }
       });
 
     return () => {

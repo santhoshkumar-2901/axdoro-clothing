@@ -94,7 +94,7 @@ export const PaymentSettingsView: React.FC = () => {
     setQrPreviewUrl(paymentQrSetting?.imageUrl || null);
     setQrManualUrl(paymentQrSetting?.imageUrl || '');
     setUseQrManualUrl(false);
-    setQrUpiId(paymentQrSetting?.upiId || 'janavvagj-1@okicici');
+    setQrUpiId(paymentQrSetting?.upiId || '');
     setQrModalError(null);
     setIsPaymentQrModalOpen(true);
   };
@@ -378,17 +378,17 @@ export const PaymentSettingsView: React.FC = () => {
       {/* Payment QR Configuration Dialog Modal */}
       {isPaymentQrModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="qr-modal-title"
           onClick={handleCloseQrModal}
         >
           <Card
-            className="w-full max-w-lg bg-axdoro-surface border-axdoro-border shadow-elevated overflow-hidden"
+            className="w-full max-w-lg bg-axdoro-surface border-axdoro-border shadow-elevated overflow-hidden my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <CardHeader className="p-5 border-b border-axdoro-border flex flex-row items-center justify-between">
+            <CardHeader className="p-4 sm:p-5 border-b border-axdoro-border flex flex-row items-center justify-between shrink-0">
               <div>
                 <CardTitle id="qr-modal-title" className="text-base font-bold text-axdoro-charcoal flex items-center gap-2">
                   <QrCode className="w-4 h-4 text-axdoro-accent" />
@@ -409,7 +409,7 @@ export const PaymentSettingsView: React.FC = () => {
               </button>
             </CardHeader>
 
-            <CardContent className="p-5 space-y-4">
+            <CardContent className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1 min-h-0 overscroll-contain">
               {qrModalError && (
                 <div className="p-3 rounded-lg border border-red-200 bg-red-50 text-red-900 text-xs flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
@@ -476,22 +476,25 @@ export const PaymentSettingsView: React.FC = () => {
               {/* QR Image Preview */}
               <div className="space-y-1.5">
                 <Label className="text-xs text-axdoro-text-muted block">QR Code Preview</Label>
-                <div className="w-36 h-36 mx-auto rounded-xl overflow-hidden border-2 border-dashed border-axdoro-border bg-white p-2 flex items-center justify-center relative shadow-sm">
-                  {qrPreviewUrl || (useQrManualUrl && qrManualUrl.trim()) ? (
-                    <img
-                      src={qrPreviewUrl || qrManualUrl.trim()}
-                      alt="UPI QR Preview"
-                      className="w-full h-full object-contain"
-                      onError={() => {
-                        setQrModalError('Unable to load QR image from the specified path/URL.');
-                      }}
-                    />
-                  ) : (
-                    <div className="text-center p-2 text-stone-400">
-                      <QrCode className="w-8 h-8 mx-auto mb-1 opacity-50" />
-                      <span className="text-[10px]">No image selected</span>
-                    </div>
-                  )}
+                <div className="w-32 h-32 mx-auto rounded-xl overflow-hidden border-2 border-dashed border-axdoro-border bg-white p-2 flex items-center justify-center relative shadow-sm">
+                  {(() => {
+                    const activePreview = useQrManualUrl ? qrManualUrl.trim() : qrPreviewUrl;
+                    return activePreview ? (
+                      <img
+                        src={activePreview}
+                        alt="UPI QR Preview"
+                        className="w-full h-full object-contain"
+                        onError={() => {
+                          setQrModalError('Unable to load QR image from the specified path/URL.');
+                        }}
+                      />
+                    ) : (
+                      <div className="text-center p-2 text-stone-400">
+                        <QrCode className="w-8 h-8 mx-auto mb-1 opacity-50" />
+                        <span className="text-[10px]">No image selected</span>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -555,7 +558,7 @@ export const PaymentSettingsView: React.FC = () => {
               )}
             </CardContent>
 
-            <div className="p-4 border-t border-axdoro-border flex items-center justify-end gap-2">
+            <div className="p-4 border-t border-axdoro-border flex items-center justify-end gap-2 flex-shrink-0">
               <Button
                 type="button"
                 variant="outline"
