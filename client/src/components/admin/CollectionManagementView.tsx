@@ -103,7 +103,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     loadHero();
   }, [loadHero]);
 
-  // Clean up object preview URL
+  // Clean up object preview URLs
   useEffect(() => {
     return () => {
       if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
@@ -1103,3 +1103,4 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     </div>
   );
 };
+

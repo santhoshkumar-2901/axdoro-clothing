@@ -86,3 +86,26 @@ export async function fetchOrderByToken(token: string): Promise<CreatedOrderData
 
   return json.data;
 }
+
+export interface PaymentQrPublicData {
+  imageUrl: string | null;
+  upiId: string | null;
+}
+
+export async function fetchPaymentQrSettings(): Promise<PaymentQrPublicData | null> {
+  const response = await fetch('/api/payment-settings/qr', {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  const json = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const errorMsg = json.error || json.message || `Failed to load payment settings (HTTP ${response.status})`;
+    throw new Error(errorMsg);
+  }
+
+  return json.data || null;
+}
+

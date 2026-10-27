@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CartItem, formatPaiseToINR } from '../types/product.ts';
-import { submitOrder, CreateOrderPayload, CreatedOrderData } from '../api/orders.ts';
+import {
+  submitOrder,
+  CreateOrderPayload,
+  CreatedOrderData,
+  fetchPaymentQrSettings,
+  PaymentQrPublicData,
+} from '../api/orders.ts';
 import { fetchProductBySlug } from '../api/catalogue.ts';
 import {
   normalizeAndValidatePhone,
@@ -8,7 +14,21 @@ import {
   clearIdempotencySession,
 } from '../utils/idempotency.ts';
 import { useScrollLock } from '../utils/scrollLock.ts';
-import { X, CheckCircle2, AlertTriangle, Loader2, ShieldCheck, Truck, ShoppingBag, ArrowLeft } from 'lucide-react';
+import {
+  X,
+  CheckCircle2,
+  AlertTriangle,
+  Loader2,
+  ShieldCheck,
+  ShoppingBag,
+  ArrowLeft,
+  QrCode,
+  MessageSquare,
+  Smartphone,
+  Copy,
+  Check,
+  Maximize2,
+} from 'lucide-react';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -42,6 +62,99 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [confirmedOrder, setConfirmedOrder] = useState<CreatedOrderData | null>(null);
+
+  // Dynamic Payment QR Settings
+  const [paymentSettings, setPaymentSettings] = useState<PaymentQrPublicData | null>(null);
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+
+  // Copyable UPI ID state
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const copyTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // QR Lightbox state
+  const [isQrLightboxOpen, setIsQrLightboxOpen] = useState(false);
+  useScrollLock(isQrLightboxOpen);
+
+  // Fetch dynamic payment QR settings on mount / open
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    setIsLoadingSettings(true);
+    setSettingsError(null);
+
+    fetchPaymentQrSettings()
+      .then((data) => {
+        if (!isMounted) return;
+        if (!data || !data.imageUrl || !data.upiId) {
+          setPaymentSettings(null);
+          setSettingsError('UPI payment settings are currently not configured by the store administrator.');
+        } else {
+          setPaymentSettings(data);
+        }
+      })
+      .catch((_err) => {
+        if (!isMounted) return;
+        setPaymentSettings(null);
+        setSettingsError('Unable to load payment configuration. Please try again later.');
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingSettings(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
+  // Clean up copy timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Escape key handler for QR lightbox
+  useEffect(() => {
+    if (!isQrLightboxOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsQrLightboxOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isQrLightboxOpen]);
+
+  // Copy UPI ID helper with graceful fallback
+  const handleCopyUpi = async (upiId: string) => {
+    if (!upiId) return;
+    const textToCopy = upiId.trim();
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = textToCopy;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-9999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedUpi(true);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      copyTimeoutRef.current = setTimeout(() => {
+        setCopiedUpi(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy UPI ID:', err);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -97,6 +210,11 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
     if (cartItems.length === 0) {
       setErrorMessage('Your shopping bag is empty. Please add items before checking out.');
+      return;
+    }
+
+    if (!paymentSettings || !paymentSettings.imageUrl || !paymentSettings.upiId) {
+      setErrorMessage('UPI payment is currently unavailable because payment settings are not configured. Please contact support.');
       return;
     }
 
@@ -237,20 +355,20 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         {/* Content Body */}
         {confirmedOrder ? (
           /* Order Confirmation View */
-          <div className="p-6 sm:p-8 space-y-6 text-center max-w-lg mx-auto">
+          <div className="p-6 sm:p-8 space-y-5 text-center max-w-lg mx-auto">
             <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto mb-2">
               <CheckCircle2 className="w-8 h-8" />
             </div>
 
             <div>
               <span className="text-[11px] font-mono text-axdoro-accent-muted uppercase tracking-widest block font-bold mb-1">
-                Cash on Delivery Order Confirmed
+                Order Placed Successfully
               </span>
               <h3 className="text-2xl font-black text-axdoro-charcoal">
                 Thank you, {confirmedOrder.customerName}!
               </h3>
               <p className="text-xs text-axdoro-text-muted mt-1.5 leading-relaxed">
-                Your order has been recorded. Our team will verify and prepare your shipment.
+                Your order has been recorded. Complete your UPI payment below and share the screenshot on WhatsApp for verification.
               </p>
             </div>
 
@@ -261,7 +379,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
               <div className="flex justify-between py-1 border-b border-axdoro-border">
                 <span className="text-axdoro-text-muted">Payment Mode:</span>
-                <span className="font-semibold text-axdoro-charcoal">Cash on Delivery (COD)</span>
+                <span className="font-semibold text-axdoro-charcoal">UPI QR Code Payment</span>
               </div>
               <div className="flex justify-between py-1 border-b border-axdoro-border">
                 <span className="text-axdoro-text-muted">Delivery To:</span>
@@ -270,24 +388,109 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 </span>
               </div>
               <div className="flex justify-between py-1 pt-2 text-sm font-bold">
-                <span className="text-axdoro-charcoal">Amount Payable:</span>
+                <span className="text-axdoro-charcoal">Total Payable:</span>
                 <span className="text-axdoro-accent-muted">{formatPaiseToINR(confirmedOrder.grandTotalPaise)}</span>
               </div>
             </div>
 
-            <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-left flex items-start gap-2.5 text-xs text-emerald-800">
-              <Truck className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
-              <span>
-                Please keep exact cash ready upon delivery. Confirmation details sent to <strong>{confirmedOrder.customerEmail}</strong>.
-              </span>
+            {/* UPI QR Payment Card in Confirmation View */}
+            <div className="p-4 rounded-xl border-2 border-axdoro-charcoal bg-axdoro-surface space-y-3 text-left">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-axdoro-charcoal flex items-center gap-1.5">
+                  <QrCode className="w-4 h-4 text-axdoro-accent-muted" /> UPI QR Code Payment
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-bold">
+                  PENDING VERIFICATION
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 py-1">
+                {paymentSettings?.imageUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsQrLightboxOpen(true)}
+                    className="relative group w-36 h-36 bg-white p-2 rounded-xl border border-axdoro-border shadow-sm flex-shrink-0 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-axdoro-accent overflow-hidden"
+                    title="Click to enlarge QR code"
+                    aria-label="Enlarge QR code"
+                  >
+                    <img
+                      src={paymentSettings.imageUrl}
+                      alt="AxDoro UPI Payment QR Code"
+                      className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-black/40 rounded-xl opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity flex items-center justify-center text-white text-[11px] font-semibold gap-1">
+                      <Maximize2 className="w-4 h-4" />
+                      <span>Enlarge</span>
+                    </div>
+                  </button>
+                ) : (
+                  <div className="w-36 h-36 bg-stone-100 p-2 rounded-xl border border-axdoro-border flex-shrink-0 flex items-center justify-center text-xs text-stone-500">
+                    QR Unavailable
+                  </div>
+                )}
+                <div className="space-y-1.5 text-xs text-axdoro-charcoal text-left flex-1 min-w-0">
+                  <p className="font-semibold text-axdoro-charcoal">
+                    Amount to Pay:{' '}
+                    <span className="text-axdoro-accent-muted font-bold text-sm">
+                      {formatPaiseToINR(confirmedOrder.grandTotalPaise)}
+                    </span>
+                  </p>
+                  <p className="text-[11px] text-axdoro-text-muted leading-relaxed">
+                    Scan the QR code using your UPI app and complete the payment. After payment, send your payment screenshot and Order ID to us on WhatsApp. Your order will be confirmed after payment verification.
+                  </p>
+                  {paymentSettings?.upiId ? (
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <span className="text-[10px] text-axdoro-text-muted font-semibold">UPI ID:</span>
+                      <span className="text-[11px] font-mono text-axdoro-charcoal font-bold bg-axdoro-bg px-2 py-0.5 rounded border border-axdoro-border">
+                        {paymentSettings.upiId}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyUpi(paymentSettings.upiId!)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium text-axdoro-charcoal hover:bg-stone-200 bg-axdoro-bg border border-axdoro-border transition-colors cursor-pointer"
+                        aria-label="Copy UPI ID to clipboard"
+                        title="Copy UPI ID"
+                      >
+                        {copiedUpi ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <span className="text-emerald-700 font-bold text-[10px]">UPI ID copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-axdoro-text-muted" />
+                            <span className="text-[10px] font-semibold">Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="w-full py-3 rounded-lg bg-axdoro-charcoal hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-            >
-              Continue Shopping
-            </button>
+            {/* WhatsApp Payment Screenshot Action Button */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const messageText = `Hello AXDORO Team! I have placed an order and completed the UPI payment.\n\nOrder ID: ${confirmedOrder.orderNumber}\nAmount Payable: ${formatPaiseToINR(confirmedOrder.grandTotalPaise)}\nCustomer: ${confirmedOrder.customerName}\n\nI have attached my payment screenshot below for verification. Please verify and confirm my order.`;
+                  window.open(`https://wa.me/919941816815?text=${encodeURIComponent(messageText)}`, '_blank');
+                }}
+                className="w-full py-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-subtle flex items-center justify-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Send Payment Screenshot via WhatsApp</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-2.5 rounded-lg border border-axdoro-border bg-axdoro-surface text-axdoro-charcoal hover:bg-axdoro-surface-muted text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Continue Shopping
+              </button>
+            </div>
           </div>
         ) : (
           /* Checkout Form View */
@@ -490,27 +693,91 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ))}
                   </div>
 
-                  {/* Payment Method Selector */}
+                  {/* Payment Method Selector: UPI QR Code Payment */}
                   <h3 className="text-xs font-bold uppercase tracking-wider text-axdoro-charcoal pt-4 pb-1 border-b border-axdoro-border">
                     4. Payment Mode
                   </h3>
 
-                  <div className="mt-2.5 p-3.5 rounded-xl border-2 border-axdoro-charcoal bg-axdoro-bg space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-xs text-axdoro-charcoal flex items-center gap-1.5">
-                        <Truck className="w-4 h-4 text-axdoro-accent-muted" /> Cash on Delivery (COD)
-                      </span>
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
-                        ACTIVE
-                      </span>
+                  {isLoadingSettings ? (
+                    <div className="mt-2.5 p-6 rounded-xl border border-axdoro-border bg-axdoro-bg flex items-center justify-center gap-2 text-xs text-axdoro-text-muted">
+                      <Loader2 className="w-4 h-4 animate-spin text-axdoro-accent-muted" />
+                      <span>Loading payment details...</span>
                     </div>
-                    <p className="text-[11px] text-axdoro-text-muted leading-relaxed">
-                      Pay cash upon delivery at your doorstep across India. Zero online transaction fees.
-                    </p>
-                    <p className="text-[10px] text-axdoro-text-muted italic pt-1">
-                      (Online UPI &amp; Razorpay payment gateways will activate with live merchant credentials in Phase 5 feature release).
-                    </p>
-                  </div>
+                  ) : settingsError || !paymentSettings?.imageUrl || !paymentSettings?.upiId ? (
+                    <div className="mt-2.5 p-3.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs space-y-1">
+                      <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        <span>UPI Payment Unavailable</span>
+                      </div>
+                      <p className="text-[11px] text-amber-700 leading-relaxed">
+                        {settingsError || 'Payment settings are currently not configured. Please contact the store administrator before ordering.'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="mt-2.5 p-3.5 rounded-xl border-2 border-axdoro-charcoal bg-axdoro-bg space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs text-axdoro-charcoal flex items-center gap-1.5">
+                          <QrCode className="w-4 h-4 text-axdoro-accent-muted" /> UPI QR Code Payment
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                          ACTIVE
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setIsQrLightboxOpen(true)}
+                          className="relative group w-28 h-28 bg-white p-1.5 rounded-lg border border-axdoro-border shadow-sm flex-shrink-0 flex items-center justify-center cursor-pointer focus:outline-none focus:ring-2 focus:ring-axdoro-accent overflow-hidden"
+                          title="Click to enlarge QR code"
+                          aria-label="Enlarge QR code"
+                        >
+                          <img
+                            src={paymentSettings.imageUrl}
+                            alt="AxDoro UPI Payment QR Code"
+                            className="w-full h-full object-contain transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 rounded-lg opacity-0 group-hover:opacity-100 group-focus:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-semibold gap-1">
+                            <Maximize2 className="w-3.5 h-3.5" />
+                            <span>Enlarge</span>
+                          </div>
+                        </button>
+                        <div className="space-y-1.5 text-left flex-1 min-w-0">
+                          <p className="text-[11px] text-axdoro-charcoal font-medium leading-relaxed">
+                            Scan the QR code using your UPI app and complete the payment. After payment, send your payment screenshot and Order ID to us on WhatsApp. Your order will be confirmed after payment verification.
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                            <div className="flex items-center gap-1 text-[10px] text-axdoro-text-muted font-semibold">
+                              <Smartphone className="w-3 h-3 text-axdoro-accent-muted flex-shrink-0" />
+                              <span>UPI ID:</span>
+                            </div>
+                            <span className="font-mono text-xs font-bold text-axdoro-charcoal bg-axdoro-surface px-2 py-0.5 rounded border border-axdoro-border">
+                              {paymentSettings.upiId}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyUpi(paymentSettings.upiId!)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium text-axdoro-charcoal hover:bg-stone-200 bg-axdoro-surface border border-axdoro-border transition-colors cursor-pointer"
+                              aria-label="Copy UPI ID to clipboard"
+                              title="Copy UPI ID"
+                            >
+                              {copiedUpi ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span className="text-emerald-700 font-bold text-[10px]">UPI ID copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3 text-axdoro-text-muted" />
+                                  <span className="text-[10px] font-semibold">Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Totals Breakdown */}
                   <div className="rounded-xl border border-axdoro-border bg-axdoro-surface p-3.5 mt-3 space-y-1.5 text-xs">
@@ -520,7 +787,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     </div>
                     <div className="flex justify-between text-axdoro-text-muted">
                       <span>Shipping Fee</span>
-                      <span className="text-emerald-700 font-semibold">Free (COD Launch)</span>
+                      <span className="text-emerald-700 font-semibold">Free Delivery</span>
                     </div>
                     <div className="flex justify-between text-sm font-bold text-axdoro-charcoal pt-2 border-t border-axdoro-border">
                       <span>Total Payable</span>
@@ -533,7 +800,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <div className="space-y-2 pt-2">
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || !paymentSettings?.imageUrl || !paymentSettings?.upiId}
                     className="w-full py-3.5 rounded-lg bg-axdoro-charcoal hover:bg-black text-white text-xs font-bold uppercase tracking-wider transition-all shadow-subtle flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
                   >
                     {isSubmitting ? (
@@ -544,7 +811,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                     ) : (
                       <>
                         <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        <span>Place Cash on Delivery Order &bull; {formatPaiseToINR(grandTotalPaise)}</span>
+                        <span>Place Order &amp; Pay via UPI &bull; {formatPaiseToINR(grandTotalPaise)}</span>
                       </>
                     )}
                   </button>
@@ -564,6 +831,76 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           </form>
         )}
       </div>
+
+      {/* Click-to-Enlarge QR Lightbox Modal */}
+      {isQrLightboxOpen && paymentSettings?.imageUrl && (
+        <div
+          className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged QR Code"
+          onClick={() => setIsQrLightboxOpen(false)}
+        >
+          <div
+            className="relative bg-white rounded-2xl p-6 sm:p-8 max-w-sm sm:max-w-md w-full shadow-2xl flex flex-col items-center animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setIsQrLightboxOpen(false)}
+              className="absolute top-3 right-3 p-2 rounded-full text-stone-500 hover:text-axdoro-charcoal hover:bg-stone-100 transition-colors cursor-pointer"
+              aria-label="Close enlarged QR code view"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="text-center mb-4">
+              <h4 className="text-base font-bold text-stone-900">Scan UPI QR Code</h4>
+              <p className="text-xs text-stone-500 mt-0.5">Use any UPI app (GPay, PhonePe, Paytm) to scan</p>
+            </div>
+
+            <div className="w-64 h-64 sm:w-80 sm:h-80 bg-white p-3 rounded-xl border border-stone-200 shadow-inner flex items-center justify-center">
+              <img
+                src={paymentSettings.imageUrl}
+                alt="Enlarged UPI Payment QR Code"
+                className="w-full h-full object-contain"
+              />
+            </div>
+
+            {paymentSettings.upiId && (
+              <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                <span className="text-xs text-stone-500 font-medium">UPI ID:</span>
+                <span className="font-mono text-xs font-bold text-stone-800 bg-stone-100 px-3 py-1 rounded border border-stone-200">
+                  {paymentSettings.upiId}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyUpi(paymentSettings.upiId!)}
+                  className="p-1.5 px-2.5 rounded-lg border border-stone-200 bg-stone-50 hover:bg-stone-100 text-stone-700 transition-colors inline-flex items-center gap-1 text-xs font-semibold cursor-pointer"
+                  title="Copy UPI ID"
+                  aria-label="Copy UPI ID"
+                >
+                  {copiedUpi ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-emerald-700 text-[11px] font-bold">UPI ID copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5 text-stone-600" />
+                      <span className="text-[11px]">Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            <p className="text-[11px] text-stone-400 mt-3 text-center">
+              Click anywhere outside or press Esc to close
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -125,3 +125,10 @@ export interface HomepageHeroSetting {
   publicId?: string | null;
   updatedAt?: string;
 }
+
+export interface PaymentQrSetting {
+  imageUrl: string | null;
+  publicId?: string | null;
+  upiId: string | null;
+  updatedAt?: string;
+}

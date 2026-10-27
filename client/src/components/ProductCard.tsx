@@ -164,7 +164,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <article
-      className="group relative rounded-xl overflow-hidden bg-axdoro-surface border border-axdoro-border hover:border-axdoro-border-strong transition-all duration-300 flex flex-col justify-between shadow-subtle hover:shadow-card"
+      className="group relative overflow-hidden bg-axdoro-surface transition-all duration-300 flex flex-col justify-between w-full"
     >
       {/* Top Image Container */}
       <div className="relative aspect-[3/4] overflow-hidden bg-stone-100">
@@ -173,7 +173,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           type="button"
           onClick={() => onQuickView(product)}
           aria-label={`View details for ${product.name}`}
-          className="w-full h-full block text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded-t-xl"
+          className="w-full h-full block text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
         >
           {!imageLoaded && !imageError && (
             <div className="absolute inset-0 bg-axdoro-surface-muted animate-pulse" />

@@ -50,6 +50,7 @@ import { CategoryManagementView } from './CategoryManagementView.tsx';
 import { CollectionManagementView } from './CollectionManagementView.tsx';
 import { ProductCreateDialog } from './ProductCreateDialog.tsx';
 import { ProductEditDialog } from './ProductEditDialog.tsx';
+import { PaymentSettingsView } from './PaymentSettingsView.tsx';
 import {
   Card,
   CardHeader,
@@ -76,6 +77,7 @@ function getTabFromPath(pathname: string): AdminTab {
   if (normalized.endsWith('/orders')) return 'orders';
   if (normalized.endsWith('/enquiries')) return 'enquiries';
   if (normalized.endsWith('/audit')) return 'audit';
+  if (normalized.endsWith('/payments') || normalized.endsWith('/payment-settings')) return 'payments';
   return 'metrics';
 }
 
@@ -1208,6 +1210,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </Table>
               )}
             </div>
+          ) : activeTab === 'payments' ? (
+            /* 7. Payment Settings Tab */
+            <PaymentSettingsView />
           ) : (
             /* 6. Audit Logs Tab */
             <div className="space-y-4">

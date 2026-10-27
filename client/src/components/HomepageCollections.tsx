@@ -122,7 +122,7 @@ export const HomepageCollectionSection: React.FC<HomepageCollectionSectionProps>
       </div>
 
       {/* Product Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-0">
         {collection.products.map((product) => (
           <ProductCard
             key={product.id}

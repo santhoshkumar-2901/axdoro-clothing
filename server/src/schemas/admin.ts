@@ -284,3 +284,35 @@ export const homepageHeroUpdateSchema = z.object({
     .nullable(),
   publicId: z.string().trim().max(255).optional().nullable(),
 });
+
+export const paymentQrUpdateSchema = z.object({
+  imageUrl: z
+    .string()
+    .trim()
+    .min(1, 'Image URL cannot be empty')
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      // Allow relative asset paths starting with /
+      if (val.startsWith('/') && /\.(jpg|jpeg|png|webp|avif|svg|gif)$/i.test(val)) {
+        return;
+      }
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid QR image URL',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+  publicId: z.string().trim().max(255).optional().nullable(),
+  upiId: z
+    .string()
+    .trim()
+    .min(3, 'UPI ID must be at least 3 characters')
+    .max(100)
+    .optional()
+    .nullable(),
+});
+

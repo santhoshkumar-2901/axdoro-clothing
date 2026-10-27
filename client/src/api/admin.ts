@@ -909,3 +909,48 @@ export async function adminUpdateHomepageHero(
   if (!res.ok) throw new Error(json.message || json.error || 'Failed to update homepage hero image');
   return json.data;
 }
+
+// -------------------------------------------------------------
+// Payment QR Code Settings Client APIs
+// -------------------------------------------------------------
+
+export interface UpdatePaymentQrPayload {
+  imageUrl?: string | null;
+  publicId?: string | null;
+  upiId?: string | null;
+}
+
+export async function adminGetPaymentQr(): Promise<import('../types/product.js').PaymentQrSetting> {
+  const res = await fetch('/api/admin/payment-settings/qr', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch payment QR configuration');
+  return json.data;
+}
+
+export async function adminGetPaymentQrUploadSignature(): Promise<CloudinarySignature> {
+  const res = await fetch('/api/admin/payment-settings/qr/upload-signature', {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to get payment QR upload signature');
+  return json.data;
+}
+
+export async function adminUpdatePaymentQr(
+  payload: UpdatePaymentQrPayload
+): Promise<import('../types/product.js').PaymentQrSetting> {
+  const res = await fetch('/api/admin/payment-settings/qr', {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to update payment QR settings');
+  return json.data;
+}

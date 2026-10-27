@@ -22,6 +22,7 @@ const tabTitles: Record<AdminTab, string> = {
   orders: 'Customer Orders & Fulfillment',
   enquiries: 'Customer Enquiries & Drive Sync',
   audit: 'Security & Mutation Audit Trail',
+  payments: 'Storefront Payment Settings & UPI QR',
 };
 
 export const AdminHeader: React.FC<AdminHeaderProps> = ({

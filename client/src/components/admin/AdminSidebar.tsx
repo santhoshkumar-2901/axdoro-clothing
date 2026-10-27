@@ -12,12 +12,13 @@ import {
   ExternalLink,
   LogOut,
   X,
+  QrCode,
 } from 'lucide-react';
 import { AdminUser } from '../../api/admin.ts';
 import { Badge } from '../ui/badge.tsx';
 import { useScrollLock } from '../../utils/scrollLock.ts';
 
-export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'stock' | 'orders' | 'enquiries' | 'audit';
+export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'stock' | 'orders' | 'enquiries' | 'audit' | 'payments';
 
 export interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -61,6 +62,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'enquiries', label: 'Enquiries & Drive Sync', icon: Inbox },
     { id: 'audit', label: 'Security Audit Logs', icon: History },
+    { id: 'payments', label: 'Payment Settings', icon: QrCode },
   ];
 
   const content = (
