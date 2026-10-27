@@ -147,6 +147,10 @@ describe('Admin Payment QR Settings Integration Tests (axdoro_test)', () => {
       expect(res.body.data).toHaveProperty('signature');
       expect(res.body.data).toHaveProperty('timestamp');
       expect(res.body.data).toHaveProperty('apiKey');
+      expect(res.body.data).toHaveProperty('publicId');
+      expect(typeof res.body.data.publicId).toBe('string');
+      expect(res.body.data).toHaveProperty('uploadUrl');
+      expect(res.body.data.uploadUrl).toContain('image/upload');
       expect(res.body.data.folder).toBe('axdoro/payment');
     });
   });

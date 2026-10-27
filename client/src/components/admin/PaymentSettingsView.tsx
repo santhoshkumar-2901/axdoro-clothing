@@ -171,9 +171,10 @@ export const PaymentSettingsView: React.FC = () => {
         formData.append('timestamp', String(sig.timestamp));
         formData.append('signature', sig.signature);
         formData.append('folder', sig.folder);
+        formData.append('public_id', sig.publicId);
 
         const uploadRes = await fetch(
-          `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
+          sig.uploadUrl || `https://api.cloudinary.com/v1_1/${sig.cloudName}/image/upload`,
           {
             method: 'POST',
             body: formData,

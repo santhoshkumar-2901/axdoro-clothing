@@ -111,6 +111,14 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
       expect(viewContent).toContain('setQrModalError');
       expect(viewContent).toContain('isSavingQr');
     });
+
+    it('appends public_id to formData matching the signed publicId and uses sig.uploadUrl', () => {
+      expect(viewContent).toContain("formData.append('public_id', sig.publicId);");
+      expect(viewContent).toContain("formData.append('folder', sig.folder);");
+      expect(viewContent).toContain("formData.append('timestamp', String(sig.timestamp));");
+      expect(viewContent).toContain("formData.append('signature', sig.signature);");
+      expect(viewContent).toContain('sig.uploadUrl');
+    });
   });
 
   describe('5. Extraction from CollectionManagementView.tsx', () => {
@@ -239,7 +247,15 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
         ok: true,
         json: async () => ({
           status: 'success',
-          data: { signature: 'sig123', timestamp: 12345, apiKey: 'key', folder: 'axdoro/payment' },
+          data: {
+            signature: 'sig123',
+            timestamp: 12345,
+            apiKey: 'key',
+            cloudName: 'axdoro-cloud',
+            folder: 'axdoro/payment',
+            publicId: 'payment_qr_12345_abc123',
+            uploadUrl: 'https://api.cloudinary.com/v1_1/axdoro-cloud/image/upload',
+          },
         }),
       });
       global.fetch = mockFetch;
@@ -250,6 +266,38 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
         credentials: 'include',
       }));
       expect(result.signature).toBe('sig123');
+      expect(result.publicId).toBe('payment_qr_12345_abc123');
+      expect(result.folder).toBe('axdoro/payment');
+      expect(result.timestamp).toBe(12345);
+      expect(result.uploadUrl).toBe('https://api.cloudinary.com/v1_1/axdoro-cloud/image/upload');
+    });
+
+    it('verifies Cloudinary upload form payload contains all signed parameters matching the server contract', () => {
+      const sig = {
+        signature: 'c3aad718df6ae362efff4251bd643351ae560713',
+        timestamp: 1793083504,
+        apiKey: '123456789012345',
+        cloudName: 'axdoro-cloud',
+        folder: 'axdoro/payment',
+        publicId: 'asset_1793083504_abcd1234',
+        uploadUrl: 'https://api.cloudinary.com/v1_1/axdoro-cloud/image/upload',
+      };
+
+      const formData = new FormData();
+      formData.append('file', new Blob(['test-qr'], { type: 'image/png' }), 'test-qr.png');
+      formData.append('api_key', sig.apiKey);
+      formData.append('timestamp', String(sig.timestamp));
+      formData.append('signature', sig.signature);
+      formData.append('folder', sig.folder);
+      formData.append('public_id', sig.publicId);
+
+      expect(formData.get('api_key')).toBe(sig.apiKey);
+      expect(formData.get('timestamp')).toBe(String(sig.timestamp));
+      expect(formData.get('signature')).toBe(sig.signature);
+      expect(formData.get('folder')).toBe('axdoro/payment');
+      expect(formData.get('public_id')).toBe('asset_1793083504_abcd1234');
+      expect(formData.get('public_id')).toBe(sig.publicId);
+      expect(sig.uploadUrl).toBe('https://api.cloudinary.com/v1_1/axdoro-cloud/image/upload');
     });
   });
 });
