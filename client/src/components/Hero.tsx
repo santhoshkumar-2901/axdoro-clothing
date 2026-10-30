@@ -24,7 +24,7 @@ export const Hero: React.FC<HeroProps> = ({
   slides,
   categories,
   onNavigate,
-  onExplore,
+  onExplore: _onExplore,
 }) => {
   const isSettingsResolved = slides !== undefined || heroImageUrl !== undefined;
   const isCategoriesResolved = categories !== undefined;
@@ -366,6 +366,9 @@ export const Hero: React.FC<HeroProps> = ({
               {primarySequence.map((cat, idx) => {
                 const isFirstEncounter = idx < usableCategories.length;
                 const catImage = cat.imageUrl || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                const isNarrowBottom = ['pants', 'jeans', 'trousers', 'bottoms', 'shorts'].some((k) =>
+                  cat.slug?.toLowerCase().includes(k)
+                );
 
                 return (
                   <button
@@ -384,17 +387,17 @@ export const Hero: React.FC<HeroProps> = ({
                     className="flex flex-col items-center justify-center flex-shrink-0 group cursor-pointer px-3 sm:px-5 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded-lg transition-transform hover:scale-105"
                   >
                     {/* Contained 3D Clothing Image */}
-                    <div className="relative flex items-center justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
+                    <div className="relative flex items-end justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
                       <img
                         src={catImage}
                         alt={`${cat.name} Category`}
-                        className="max-h-full max-w-full object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-110"
+                        className="max-h-full max-w-full object-contain filter drop-shadow-[0_2px_6px_rgba(0,0,0,0.12)] transition-transform duration-300 group-hover:scale-110"
                         loading="eager"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          const fbJpg = `/categories/${cat.slug}-3d.jpg`;
-                          if (target.src !== fbJpg && !target.src.endsWith(fbJpg)) {
-                            target.src = fbJpg;
+                          const fbPng = `/categories/${cat.slug}-3d.png`;
+                          if (target.src !== fbPng && !target.src.endsWith(fbPng)) {
+                            target.src = fbPng;
                           } else {
                             target.src = GENERIC_CATEGORY_IMAGE;
                           }
@@ -402,8 +405,17 @@ export const Hero: React.FC<HeroProps> = ({
                       />
                     </div>
 
-                    {/* Subtle Pedestal / Base inspired by reference design */}
-                    <div className="w-12 sm:w-16 h-1 sm:h-1.5 rounded-full bg-neutral-300/80 group-hover:bg-neutral-400 shadow-sm mx-auto mt-1 transition-colors" />
+                    {/* Realistic Ground / Contact Down Shadow Aligned With Garment Footprint */}
+                    <div
+                      aria-hidden="true"
+                      className={`h-1.5 sm:h-2 rounded-full mx-auto -mt-0.5 transition-all duration-300 group-hover:scale-110 group-hover:opacity-80 ${
+                        isNarrowBottom ? 'w-7 sm:w-8 md:w-9' : 'w-11 sm:w-13 md:w-14'
+                      }`}
+                      style={{
+                        background:
+                          'radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.10) 45%, rgba(0, 0, 0, 0) 75%)',
+                      }}
+                    />
 
                     {/* Category Name beneath the image */}
                     <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1 whitespace-nowrap">
@@ -422,6 +434,9 @@ export const Hero: React.FC<HeroProps> = ({
               >
                 {primarySequence.map((cat, idx) => {
                   const catImage = cat.imageUrl || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                  const isNarrowBottom = ['pants', 'jeans', 'trousers', 'bottoms', 'shorts'].some((k) =>
+                    cat.slug?.toLowerCase().includes(k)
+                  );
 
                   return (
                     <button
@@ -439,18 +454,18 @@ export const Hero: React.FC<HeroProps> = ({
                       className="flex flex-col items-center justify-center flex-shrink-0 group cursor-pointer px-3 sm:px-5 py-1 focus:outline-none rounded-lg transition-transform hover:scale-105"
                     >
                       {/* Contained 3D Clothing Image */}
-                      <div className="relative flex items-center justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
+                      <div className="relative flex items-end justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
                         <img
                           src={catImage}
                           alt=""
                           aria-hidden="true"
-                          className="max-h-full max-w-full object-contain filter drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)] transition-transform duration-300 group-hover:scale-110"
+                          className="max-h-full max-w-full object-contain filter drop-shadow-[0_2px_6px_rgba(0,0,0,0.12)] transition-transform duration-300 group-hover:scale-110"
                           loading="eager"
                           onError={(e) => {
                             const target = e.currentTarget;
-                            const fbJpg = `/categories/${cat.slug}-3d.jpg`;
-                            if (target.src !== fbJpg && !target.src.endsWith(fbJpg)) {
-                              target.src = fbJpg;
+                            const fbPng = `/categories/${cat.slug}-3d.png`;
+                            if (target.src !== fbPng && !target.src.endsWith(fbPng)) {
+                              target.src = fbPng;
                             } else {
                               target.src = GENERIC_CATEGORY_IMAGE;
                             }
@@ -458,8 +473,17 @@ export const Hero: React.FC<HeroProps> = ({
                         />
                       </div>
 
-                      {/* Subtle Pedestal / Base inspired by reference design */}
-                      <div className="w-12 sm:w-16 h-1 sm:h-1.5 rounded-full bg-neutral-300/80 group-hover:bg-neutral-400 shadow-sm mx-auto mt-1 transition-colors" />
+                      {/* Realistic Ground / Contact Down Shadow Aligned With Garment Footprint */}
+                      <div
+                        aria-hidden="true"
+                        className={`h-1.5 sm:h-2 rounded-full mx-auto -mt-0.5 transition-all duration-300 group-hover:scale-110 group-hover:opacity-80 ${
+                          isNarrowBottom ? 'w-7 sm:w-8 md:w-9' : 'w-11 sm:w-13 md:w-14'
+                        }`}
+                        style={{
+                          background:
+                            'radial-gradient(ellipse at center, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.10) 45%, rgba(0, 0, 0, 0) 75%)',
+                        }}
+                      />
 
                       {/* Category Name beneath the image */}
                       <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1 whitespace-nowrap">
@@ -498,34 +522,6 @@ export const Hero: React.FC<HeroProps> = ({
           />
         )}
 
-        {/* Editorial Headline Overlay matching reference */}
-        <div className="absolute right-6 sm:right-12 lg:right-16 top-1/2 -translate-y-1/2 max-w-[200px] sm:max-w-xs text-right pointer-events-none select-none z-10">
-          <span className="text-xl sm:text-3xl font-serif font-light text-white tracking-wider block drop-shadow-md">
-            LOOSE FIT
-          </span>
-          <span className="text-xl sm:text-3xl font-serif font-bold text-white tracking-tight block drop-shadow-md">
-            TROUSERS
-          </span>
-          <span className="text-xs sm:text-sm text-white/90 font-light tracking-widest uppercase block mt-1 drop-shadow-md">
-            To Relax In
-          </span>
-          <div className="mt-3 sm:mt-4 pointer-events-auto">
-            <button
-              type="button"
-              onClick={() => {
-                if (onExplore) {
-                  onExplore();
-                } else if (onNavigate) {
-                  onNavigate('/category/pants');
-                }
-              }}
-              className="inline-flex items-center gap-1 text-xs sm:text-sm font-semibold uppercase tracking-widest text-white hover:text-axdoro-accent underline underline-offset-4 cursor-pointer transition-colors drop-shadow-md"
-            >
-              <span>Explore</span>
-              <span>&gt;</span>
-            </button>
-          </div>
-        </div>
 
         {/* Bottom-Center Progress Dots (Exactly 1 dot per enabled slide) */}
         {effectiveSlides.length > 1 && (

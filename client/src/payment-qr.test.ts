@@ -162,12 +162,11 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
       expect(sidebarContent).toContain('icon: QrCode');
     });
 
-    it('preserves all eight existing navigation sections in their exact order', () => {
+    it('preserves all seven existing navigation sections in their exact order', () => {
       const metricsIdx = sidebarContent.indexOf("id: 'metrics'");
       const productsIdx = sidebarContent.indexOf("id: 'products'");
       const categoriesIdx = sidebarContent.indexOf("id: 'categories'");
       const collectionsIdx = sidebarContent.indexOf("id: 'collections'");
-      const stockIdx = sidebarContent.indexOf("id: 'stock'");
       const ordersIdx = sidebarContent.indexOf("id: 'orders'");
       const enquiriesIdx = sidebarContent.indexOf("id: 'enquiries'");
       const auditIdx = sidebarContent.indexOf("id: 'audit'");
@@ -177,8 +176,7 @@ describe('Admin-Managed Payment QR, Copyable UPI ID & QR Lightbox Client Verific
       expect(productsIdx).toBeGreaterThan(metricsIdx);
       expect(categoriesIdx).toBeGreaterThan(productsIdx);
       expect(collectionsIdx).toBeGreaterThan(categoriesIdx);
-      expect(stockIdx).toBeGreaterThan(collectionsIdx);
-      expect(ordersIdx).toBeGreaterThan(stockIdx);
+      expect(ordersIdx).toBeGreaterThan(collectionsIdx);
       expect(enquiriesIdx).toBeGreaterThan(ordersIdx);
       expect(auditIdx).toBeGreaterThan(enquiriesIdx);
       expect(paymentsIdx).toBeGreaterThan(auditIdx);

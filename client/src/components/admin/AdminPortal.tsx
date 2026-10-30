@@ -57,7 +57,6 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
-  CardFooter,
 } from '../ui/card.tsx';
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '../ui/table.tsx';
 import { Badge } from '../ui/badge.tsx';
@@ -73,7 +72,6 @@ function getTabFromPath(pathname: string): AdminTab {
   if (normalized.endsWith('/categories')) return 'categories';
   if (normalized.endsWith('/collections')) return 'collections';
   if (normalized.endsWith('/products')) return 'products';
-  if (normalized.endsWith('/stock')) return 'stock';
   if (normalized.endsWith('/orders')) return 'orders';
   if (normalized.endsWith('/enquiries')) return 'enquiries';
   if (normalized.endsWith('/audit')) return 'audit';
@@ -209,7 +207,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     setIsLoadingData(true);
     try {
       fetchBadgeCounts();
-      if (activeTab === 'metrics' || activeTab === 'stock') {
+      if (activeTab === 'metrics') {
         const m = await adminGetMetrics();
         setMetrics(m);
       }
@@ -725,13 +723,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-bold text-axdoro-charcoal">Storefront Product Catalogue</h2>
+                  <h2 className="text-base font-bold text-axdoro-charcoal">Storefront Inventory</h2>
                   <p className="text-xs text-axdoro-text-muted">Manage published products and visibility states ({products.length} registered)</p>
                 </div>
                 <Button
                   onClick={() => setIsAddProductOpen(true)}
                   className="bg-axdoro-charcoal text-white hover:bg-black font-semibold text-xs flex items-center gap-1.5 shadow-sm"
-                  title="Add new product to catalogue"
+                  title="Add new product to inventory"
                 >
                   <Plus className="w-4 h-4" />
                   Add Product
@@ -861,67 +859,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 onCatalogueMutated?.();
               }}
             />
-          ) : activeTab === 'stock' ? (
-            /* 3. Stock Adjustment Tab */
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-base font-bold text-axdoro-charcoal">Variant Stock Inventory Overview</h2>
-                <p className="text-xs text-axdoro-text-muted">
-                  Select a variant to execute an atomic inventory adjustment. Every adjustment records actor and rationale in the audit log.
-                </p>
-              </div>
-
-              {metrics && metrics.inventoryAlerts.criticalVariants.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {metrics.inventoryAlerts.criticalVariants.map((item) => (
-                    <Card key={item.variantId} className="border-axdoro-border bg-axdoro-surface shadow-sm">
-                      <CardHeader className="pb-2">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <CardTitle className="text-sm font-bold text-axdoro-charcoal">{item.productName}</CardTitle>
-                            <CardDescription className="font-mono text-[11px] text-axdoro-text-muted mt-1">
-                              Size: {item.size} &bull; Color: {item.color} &bull; SKU: {item.sku}
-                            </CardDescription>
-                          </div>
-                          {item.stockQuantity === 0 ? (
-                            <Badge variant="destructive" className="bg-red-600 text-white font-bold">
-                              Out of Stock
-                            </Badge>
-                          ) : (
-                            <Badge variant="warning">{item.stockQuantity} in stock</Badge>
-                          )}
-                        </div>
-                      </CardHeader>
-                      <CardFooter className="pt-2 flex justify-end">
-                        <Button
-                          size="sm"
-                          onClick={() =>
-                            setAdjustingVariant({
-                              variantId: item.variantId,
-                              productName: item.productName,
-                              size: item.size,
-                              color: item.color,
-                              sku: item.sku,
-                              currentStock: item.stockQuantity,
-                            })
-                          }
-                        >
-                          Adjust Units
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <Card className="border-axdoro-border bg-axdoro-surface">
-                  <CardContent className="py-8 text-center text-xs text-axdoro-text-muted">
-                    No critical low stock alerts active. All variant stock counts are above the minimum threshold.
-                  </CardContent>
-                </Card>
-              )}
-            </div>
           ) : activeTab === 'orders' ? (
-            /* 4. Orders Tab */
+            /* 3. Orders Tab */
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-bold text-axdoro-charcoal">Customer Orders ({orders.length})</h2>

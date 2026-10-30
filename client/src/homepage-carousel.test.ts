@@ -467,8 +467,9 @@ describe('Homepage Responsive 3-Slide Hero Carousel Client Tests', () => {
       expect(html).toContain('Shirts');
       expect(html).toContain('Pants');
 
-      // Verify subtle pedestal styling inspired by reference design
-      expect(html).toContain('w-12 sm:w-16 h-1 sm:h-1.5 rounded-full bg-neutral-300/80');
+      // Verify tailored contact down shadow styling aligned with garments
+      expect(html).toContain('rounded-full mx-auto -mt-0.5');
+      expect(html).toContain('radial-gradient(ellipse at center');
 
       // Verify contained image presentation (no stretching)
       expect(html).toContain('object-contain');
@@ -610,29 +611,12 @@ describe('Homepage Responsive 3-Slide Hero Carousel Client Tests', () => {
       expect(viewContent).toContain('activeSlideId');
     });
 
-    it('provides editable fields for heading, subtitle, CTA label, and CTA destination', () => {
-      expect(viewContent).toContain('id="slide-heading"');
-      expect(viewContent).toContain('id="slide-subtitle"');
-      expect(viewContent).toContain('id="slide-cta-label"');
-      expect(viewContent).toContain('id="slide-cta-link"');
-    });
-
-    it('provides enable/disable toggle for storefront carousel display', () => {
-      expect(viewContent).toContain('id="slide-enabled-toggle"');
-      expect(viewContent).toContain('Enable Slide on Storefront');
-      expect(viewContent).toContain("handleActiveSlideChange('isEnabled'");
-    });
-
-    it('provides image controls including live preview, replace, and removal', () => {
-      expect(viewContent).toContain('Live Banner Preview');
-      expect(viewContent).toContain('Remove Image');
-      expect(viewContent).toContain('Upload');
-      expect(viewContent).toContain('handleResetSlotImageToDefault');
-    });
-
-    it('validates CTA destinations rejecting protocol-relative and dangerous destinations', () => {
-      expect(viewContent).toContain('isValidClientCtaDestination');
-      expect(viewContent).toContain('Protocol-relative or malformed path not allowed');
+    it('streamlines editor by removing text fields to keep hero banner image-driven', () => {
+      expect(viewContent).not.toContain('id="slide-heading"');
+      expect(viewContent).not.toContain('id="slide-subtitle"');
+      expect(viewContent).not.toContain('id="slide-cta-label"');
+      expect(viewContent).not.toContain('id="slide-cta-link"');
+      expect(viewContent).not.toContain('id="slide-enabled-toggle"');
     });
 
     it('provides modal with signed Cloudinary upload workflow and direct URL option', () => {

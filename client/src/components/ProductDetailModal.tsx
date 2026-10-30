@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Product, ProductVariant } from '../types/product.ts';
 import { X, Check, ShoppingBag, Layers, AlertCircle, Plus, Minus, ImageOff } from 'lucide-react';
 import { useScrollLock } from '../utils/scrollLock.ts';
+import { sortProductSizes } from '../utils/sizes.ts';
 
 interface ProductDetailModalProps {
   product: Product | null;
@@ -352,7 +353,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Available sizes">
-                    {product.sizes.map((size) => {
+                    {sortProductSizes(product.sizes).map((size) => {
                       // Check variant stock for this size if variant data is populated
                       const variantForSize = product.variants?.find(
                         (v) =>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Product, CategoryShortcutItem } from '../types/product.ts';
 import { fetchProducts } from '../api/catalogue.ts';
 import { ArrowRight, ImageOff } from 'lucide-react';
+import { sortProductSizes } from '../utils/sizes.ts';
 
 export interface CategorySectionBlockProps {
   id?: string;
@@ -309,7 +310,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
                     {/* Sizes preview if available */}
                     {product.sizes && product.sizes.length > 0 && (
                       <div className="flex items-center gap-1 mt-2 flex-wrap">
-                        {product.sizes.slice(0, 4).map((s) => (
+                        {sortProductSizes(product.sizes).slice(0, 4).map((s) => (
                           <span
                             key={s}
                             className="text-[9px] text-neutral-600 bg-neutral-100 px-1 py-0.5 rounded"

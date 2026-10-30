@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, ProductVariant } from '../types/product.ts';
 import { Eye, ShoppingBag, ImageOff, Check } from 'lucide-react';
+import { sortProductSizes } from '../utils/sizes.ts';
 
 interface ProductCardProps {
   product: Product;
@@ -268,7 +269,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
         {/* Sizing Preview Pills */}
         <div className="flex items-center gap-1 mt-2.5 flex-wrap">
-          {product.sizes.map((s) => (
+          {sortProductSizes(product.sizes).map((s) => (
             <span
               key={s}
               className="text-[10px] font-medium text-axdoro-text-muted bg-axdoro-bg px-1.5 py-0.5 rounded border border-axdoro-border"

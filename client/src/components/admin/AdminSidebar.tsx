@@ -4,7 +4,6 @@ import {
   Package,
   FolderTree,
   Sparkles,
-  Sliders,
   ShoppingBag,
   Inbox,
   History,
@@ -18,7 +17,7 @@ import { AdminUser } from '../../api/admin.ts';
 import { Badge } from '../ui/badge.tsx';
 import { useScrollLock } from '../../utils/scrollLock.ts';
 
-export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'stock' | 'orders' | 'enquiries' | 'audit' | 'payments';
+export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'orders' | 'enquiries' | 'audit' | 'payments';
 
 export interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -30,7 +29,7 @@ export interface AdminSidebarProps {
   onCloseMobile: () => void;
   badgeCounts?: {
     orders: number;
-    stock: number;
+    stock?: number;
   };
 }
 
@@ -55,10 +54,9 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
   const navItems: { id: AdminTab; label: string; icon: React.FC<{ className?: string }> }[] = [
     { id: 'metrics', label: 'Dashboard Metrics', icon: BarChart3 },
-    { id: 'products', label: 'Product Catalogue', icon: Package },
+    { id: 'products', label: 'Inventory', icon: Package },
     { id: 'categories', label: 'Categories', icon: FolderTree },
     { id: 'collections', label: 'Homepage Content', icon: Sparkles },
-    { id: 'stock', label: 'Inventory & Stock', icon: Sliders },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'enquiries', label: 'Enquiries & Drive Sync', icon: Inbox },
     { id: 'audit', label: 'Security Audit Logs', icon: History },
@@ -108,18 +106,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            const count =
-              item.id === 'orders'
-                ? badgeCounts?.orders ?? 0
-                : item.id === 'stock'
-                ? badgeCounts?.stock ?? 0
-                : 0;
+            const count = item.id === 'orders' ? badgeCounts?.orders ?? 0 : 0;
             const formattedBadge = formatBadgeCount(count);
             const badgeAriaLabel =
               item.id === 'orders'
                 ? `${count} unacknowledged orders requiring attention`
-                : item.id === 'stock'
-                ? `${count} products requiring stock attention`
                 : undefined;
 
             return (

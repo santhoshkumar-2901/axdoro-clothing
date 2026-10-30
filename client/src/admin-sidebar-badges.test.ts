@@ -31,18 +31,15 @@ describe('Admin Sidebar Notification Badges Logic & Formatting', () => {
     const sidebarPath = path.resolve(__dirname, 'components/admin/AdminSidebar.tsx');
     const sidebarCode = fs.readFileSync(sidebarPath, 'utf-8');
 
-    it('accepts badgeCounts prop with orders and stock numbers', () => {
+    it('accepts badgeCounts prop with orders number', () => {
       expect(sidebarCode).toContain('badgeCounts?:');
       expect(sidebarCode).toContain('orders: number;');
-      expect(sidebarCode).toContain('stock: number;');
     });
 
     it('renders a red badge with readable text and accessible aria-label', () => {
       expect(sidebarCode).toContain('bg-red-600 text-white rounded-full');
       expect(sidebarCode).toContain('item.id === \'orders\'');
       expect(sidebarCode).toContain('unacknowledged orders requiring attention');
-      expect(sidebarCode).toContain('item.id === \'stock\'');
-      expect(sidebarCode).toContain('products requiring stock attention');
       expect(sidebarCode).toContain('aria-label={badgeAriaLabel}');
     });
 
@@ -89,12 +86,6 @@ describe('Admin Sidebar Notification Badges Logic & Formatting', () => {
       expect(portalCode).toContain('data-testid={`new-badge-${order.id}`}');
       expect(portalCode).toContain('handleAcknowledgeOrder(order.id)');
       expect(portalCode).toContain('data-testid={`acknowledge-btn-${order.id}`}');
-    });
-
-    it('clearly distinguishes Out of Stock vs in stock in Inventory cards', () => {
-      expect(portalCode).toContain('item.stockQuantity === 0');
-      expect(portalCode).toContain('Out of Stock');
-      expect(portalCode).toContain('in stock');
     });
   });
 

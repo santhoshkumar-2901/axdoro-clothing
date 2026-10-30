@@ -247,7 +247,7 @@ describe('Modal & Dialog Integration Verification (Source Code Inspection)', () 
     checkComponentScrollLock('admin/CategoryManagementView.tsx', 'isAddOpen || Boolean(editingCategory)');
 
     // CollectionManagementView
-    checkComponentScrollLock('admin/CollectionManagementView.tsx', 'isAddModalOpen');
+    checkComponentScrollLock('admin/CollectionManagementView.tsx', 'isHeroModalOpen');
 
     // AdminPortal delete product dialog
     checkComponentScrollLock('admin/AdminPortal.tsx', 'Boolean(productToDelete)');

@@ -67,12 +67,9 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       expect(viewContent).toContain('Homepage Content');
     });
 
-    it('places Hero Banner management section above the collections switcher', () => {
-      const heroSectionIdx = viewContent.indexOf('Storefront Hero Lifestyle Banner');
-      const collectionSwitcherIdx = viewContent.indexOf('Collection Switcher Tabs');
-      expect(heroSectionIdx).toBeGreaterThan(0);
-      expect(collectionSwitcherIdx).toBeGreaterThan(0);
-      expect(heroSectionIdx).toBeLessThan(collectionSwitcherIdx);
+    it('displays Storefront Hero Lifestyle Banner management section and removes collection switcher', () => {
+      expect(viewContent).toContain('Storefront Hero Lifestyle Banner');
+      expect(viewContent).not.toContain('Collection Switcher Tabs');
     });
 
     it('provides Hero Image Modal dialog with file upload, direct URL, preview, and cancel', () => {
