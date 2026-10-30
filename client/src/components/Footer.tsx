@@ -7,7 +7,7 @@ interface FooterProps {
   onSelectCategory: (category: ProductCategory | 'all') => void;
   onOpenBulk: () => void;
   onScrollToShop: () => void;
-  onScrollToAbout: () => void;
+  onScrollToAbout?: () => void;
   categories?: Category[];
   onNavigate?: (path: string) => void;
 }
@@ -16,7 +16,6 @@ export const Footer: React.FC<FooterProps> = ({
   onSelectCategory,
   onOpenBulk,
   onScrollToShop,
-  onScrollToAbout,
   categories = [],
   onNavigate,
 }) => {
@@ -54,12 +53,12 @@ export const Footer: React.FC<FooterProps> = ({
   return (
     <footer className="bg-axdoro-bg border-t border-axdoro-border text-axdoro-text-muted text-xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* Brand Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center">
               <img
-                src="/logo-transparent.png"
+                src="/logo-dark.png"
                 alt="AXDORO"
                 width={128}
                 height={32}
@@ -155,21 +154,6 @@ export const Footer: React.FC<FooterProps> = ({
                   className="text-axdoro-accent-muted hover:text-axdoro-accent font-semibold transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded py-0.5"
                 >
                   Bulk Order Enquiry
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          {/* About & Policies */}
-          <div className="space-y-3">
-            <h4 className="font-bold text-axdoro-charcoal uppercase tracking-wider text-xs">Customer Care</h4>
-            <ul className="space-y-2.5">
-              <li>
-                <button
-                  onClick={onScrollToAbout}
-                  className="hover:text-axdoro-charcoal transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded py-0.5"
-                >
-                  About AXDORO
                 </button>
               </li>
             </ul>

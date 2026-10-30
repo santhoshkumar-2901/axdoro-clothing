@@ -75,7 +75,9 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
       const res = await request(app).get('/api/homepage/hero');
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
-      expect(res.body.data).toEqual({ imageUrl: null });
+      expect(res.body.data.imageUrl).toBeNull();
+      expect(Array.isArray(res.body.data.slides)).toBe(true);
+      expect(res.body.data.slides).toHaveLength(3);
     });
   });
 
@@ -252,8 +254,8 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
     });
   });
 
-  describe('7. Post-Commit Cloudinary Cleanup & Resilience', () => {
-    it('deletes replaced Cloudinary asset after successful commit', async () => {
+  describe('7. Post-Commit Cloudinary Asset Safety & Data Preservation', () => {
+    it('preserves Cloudinary assets without deletion when hero image is replaced', async () => {
       const deleteSpy = vi.spyOn(cloudinaryService, 'deleteCloudinaryAsset').mockResolvedValue(true);
 
       try {
@@ -274,16 +276,15 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
           .send({ imageUrl: 'https://res.cloudinary.com/new-hero.jpg', publicId: 'axdoro/hero/new_asset' });
 
         expect(replaceRes.status).toBe(200);
-        expect(deleteSpy).toHaveBeenCalledWith('axdoro/hero/old_asset');
+        // Automatic Cloudinary asset deletion is disabled to prevent accidental cross-feature data loss
+        expect(deleteSpy).not.toHaveBeenCalled();
       } finally {
         deleteSpy.mockRestore();
       }
     });
 
-    it('does not fail database save if Cloudinary cleanup rejects or fails', async () => {
-      const deleteSpy = vi
-        .spyOn(cloudinaryService, 'deleteCloudinaryAsset')
-        .mockRejectedValue(new Error('Cloudinary API Network Timeout'));
+    it('preserves Cloudinary assets without deletion when hero image is cleared (reset to default)', async () => {
+      const deleteSpy = vi.spyOn(cloudinaryService, 'deleteCloudinaryAsset').mockResolvedValue(true);
 
       try {
         // Initial image
@@ -293,16 +294,18 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
           .set('x-csrf-token', csrfToken)
           .send({ imageUrl: 'https://res.cloudinary.com/old-hero2.jpg', publicId: 'axdoro/hero/old_asset2' });
 
-        // Replace with new image
-        const replaceRes = await request(app)
+        deleteSpy.mockClear();
+
+        // Clear image (reset to default)
+        const resetRes = await request(app)
           .put('/api/admin/homepage/hero')
           .set('Cookie', adminCookies)
           .set('x-csrf-token', csrfToken)
-          .send({ imageUrl: 'https://res.cloudinary.com/new-hero2.jpg', publicId: 'axdoro/hero/new_asset2' });
+          .send({ imageUrl: null, publicId: null });
 
-        // Save succeeds with 200 despite Cloudinary deletion error
-        expect(replaceRes.status).toBe(200);
-        expect(replaceRes.body.data.imageUrl).toBe('https://res.cloudinary.com/new-hero2.jpg');
+        expect(resetRes.status).toBe(200);
+        expect(resetRes.body.data.imageUrl).toBeNull();
+        expect(deleteSpy).not.toHaveBeenCalled();
       } finally {
         deleteSpy.mockRestore();
       }

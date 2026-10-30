@@ -16,48 +16,34 @@ describe('Homepage Collections & Independent Section Rendering Verification', ()
   });
 
   describe('1. Homepage Architecture & Unwanted Collections Section Absence', () => {
-    it('verifies App.tsx renders This Month Best Sellers and Signature Picks independently', () => {
+    it('verifies App.tsx does not mount redundant category showcase or collection sections', () => {
       const appContent = fs.readFileSync(path.join(clientDir, 'src', 'App.tsx'), 'utf-8');
 
-      // Best Sellers section must be independently rendered
-      expect(appContent).toContain('slug="best-sellers"');
-      expect(appContent).toContain('key={`best-sellers-${catalogueVersion}`}');
-      expect(appContent).toContain('badgeText="Top Sellers"');
+      // Best Sellers and Signature Picks removed from homepage
+      expect(appContent).not.toContain('slug="best-sellers"');
+      expect(appContent).not.toContain('slug="signature-picks"');
 
-      // Signature Picks section must be independently rendered
-      expect(appContent).toContain('slug="signature-picks"');
-      expect(appContent).toContain('key={`signature-picks-${catalogueVersion}`}');
-      expect(appContent).toContain('badgeText="Curated Selection"');
+      // CategoryShowcase removed from homepage
+      expect(appContent).not.toContain('<CategoryShowcase');
 
       // Monolithic collections dump must NOT be present on the homepage
-      expect(appContent).not.toContain('<HomepageCollections\n              key={`collections-');
-      expect(appContent).not.toContain('<HomepageCollections key={`collections-');
+      expect(appContent).not.toContain('<HomepageCollections');
 
       // ProductCatalogue must NOT be mounted on the homepage or imported
       expect(appContent).not.toContain('<ProductCatalogue');
       expect(appContent).not.toContain("import { ProductCatalogue }");
 
-      // ProductCatalogue.tsx file must be preserved in the repository
+      // Components and files preserved in repo
       const catalogueComponentPath = path.join(clientDir, 'src', 'components', 'ProductCatalogue.tsx');
       expect(fs.existsSync(catalogueComponentPath)).toBe(true);
+      const showcaseComponentPath = path.join(clientDir, 'src', 'components', 'CategoryShowcase.tsx');
+      expect(fs.existsSync(showcaseComponentPath)).toBe(true);
+      const collectionsComponentPath = path.join(clientDir, 'src', 'components', 'HomepageCollections.tsx');
+      expect(fs.existsSync(collectionsComponentPath)).toBe(true);
     });
 
-    it('verifies CategoryShowcase and dynamic category navigation are preserved', () => {
+    it('verifies CategoryPage and dynamic category routes remain intact', () => {
       const appContent = fs.readFileSync(path.join(clientDir, 'src', 'App.tsx'), 'utf-8');
-      const showcaseContent = fs.readFileSync(
-        path.join(clientDir, 'src', 'components', 'CategoryShowcase.tsx'),
-        'utf-8'
-      );
-
-      // CategoryShowcase must have stable anchor and remain intact on homepage
-      expect(showcaseContent).toContain('id="category-showcase"');
-      expect(appContent).toContain('<CategoryShowcase');
-      expect(appContent).toContain('activeCategory={selectedCategory}');
-      expect(appContent).toContain('categories={categories}');
-      expect(appContent).toContain('onNavigate={navigate}');
-
-      // Hero and navigation scroll target points to category-showcase
-      expect(appContent).toContain("document.getElementById('category-showcase')");
 
       // Dynamic category routes must remain intact
       expect(appContent).toContain('const isCategoryRoute = currentPath.startsWith(\'/category/\');');

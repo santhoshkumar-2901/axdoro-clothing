@@ -43,30 +43,30 @@ describe('Category Banner Contrast & WCAG 2.2 Verification', () => {
   const appContent = fs.readFileSync(appPath, 'utf-8');
 
   describe('1. Category Banner Markup, Overlay & Stacking Order', () => {
-    it('uses dark #0D0B14 container background rather than inverted axdoro-charcoal', () => {
-      expect(categoryPageContent).toContain('bg-[#0D0B14] text-white');
-      expect(categoryPageContent).not.toContain('bg-axdoro-charcoal text-white');
+    it('uses light #F7F7F7 container background with axdoro-charcoal text', () => {
+      expect(categoryPageContent).toContain('bg-[#F7F7F7] text-axdoro-charcoal');
+      expect(categoryPageContent).not.toContain('bg-[#0D0B14] text-white');
     });
 
-    it('implements directional dark gradient overlays using #0D0B14', () => {
+    it('implements directional light gradient overlays using #F7F7F7', () => {
       expect(categoryPageContent).toContain(
-        'bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/85 to-[#0D0B14]/40'
+        'bg-gradient-to-r from-[#F7F7F7] via-[#F7F7F7]/85 to-[#F7F7F7]/40'
       );
       expect(categoryPageContent).toContain(
-        'bg-gradient-to-t from-[#0D0B14] via-transparent to-transparent opacity-80'
+        'bg-gradient-to-t from-[#F7F7F7] via-transparent to-transparent opacity-80'
       );
     });
 
-    it('ensures overlays do not use light axdoro-charcoal gradient tokens', () => {
-      expect(categoryPageContent).not.toContain('from-axdoro-charcoal');
-      expect(categoryPageContent).not.toContain('via-axdoro-charcoal');
-      expect(categoryPageContent).not.toContain('to-axdoro-charcoal');
+    it('ensures overlays do not use dark 0D0B14 gradient tokens', () => {
+      expect(categoryPageContent).not.toContain('from-[#0D0B14]');
+      expect(categoryPageContent).not.toContain('via-[#0D0B14]');
+      expect(categoryPageContent).not.toContain('to-[#0D0B14]');
     });
 
     it('maintains strict stacking order: image at z-0, overlays at z-0, and text content at z-10', () => {
       const z0Index = categoryPageContent.indexOf('absolute inset-0 z-0');
       const imgIndex = categoryPageContent.indexOf('<img', z0Index);
-      const overlayIndex = categoryPageContent.indexOf('bg-gradient-to-r from-[#0D0B14]', imgIndex);
+      const overlayIndex = categoryPageContent.indexOf('bg-gradient-to-r from-[#F7F7F7]', imgIndex);
       const z10Index = categoryPageContent.indexOf('relative z-10', overlayIndex);
 
       expect(z0Index).toBeGreaterThan(-1);
@@ -77,69 +77,68 @@ describe('Category Banner Contrast & WCAG 2.2 Verification', () => {
   });
 
   describe('2. Text & Badge Contrast Styling', () => {
-    it('preserves high-contrast white category title', () => {
+    it('preserves high-contrast charcoal category title', () => {
       expect(categoryPageContent).toContain(
-        '<h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white">'
+        '<h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-axdoro-charcoal">'
       );
     });
 
-    it('upgrades description text to high-contrast text-zinc-200', () => {
-      expect(categoryPageContent).toContain('text-xs sm:text-sm text-zinc-200 leading-relaxed max-w-xl');
-      expect(categoryPageContent).not.toContain('text-zinc-300 leading-relaxed max-w-xl');
+    it('provides description text in high-contrast text-neutral-600', () => {
+      expect(categoryPageContent).toContain('text-xs sm:text-sm text-neutral-600 leading-relaxed max-w-xl');
     });
 
-    it('provides dark semi-transparent backdrops for Collection and style count badges', () => {
-      expect(categoryPageContent).toContain('bg-black/50 backdrop-blur-md border border-white/10');
-      expect(categoryPageContent).toContain('text-axdoro-accent uppercase font-bold');
-      expect(categoryPageContent).toContain('text-zinc-200 font-mono text-[11px]');
+    it('provides clean light semi-transparent backdrops for Collection and style count badges', () => {
+      expect(categoryPageContent).toContain('bg-white/90 backdrop-blur-md border border-neutral-200');
+      expect(categoryPageContent).toContain('text-axdoro-charcoal uppercase font-bold');
+      expect(categoryPageContent).toContain('text-neutral-700 font-mono text-[11px]');
     });
   });
 
   describe('3. Mathematical WCAG 2.2 AA Contrast Verification', () => {
     // Hex Definitions
-    const DARK_BG: [number, number, number] = [13, 11, 20]; // #0D0B14
-    const WHITE_TEXT: [number, number, number] = [255, 255, 255]; // #FFFFFF
-    const ZINC_200: [number, number, number] = [228, 228, 231]; // #E4E4E7
-    const ACCENT_LAVENDER: [number, number, number] = [165, 140, 244]; // #A58CF4 (--axdoro-accent)
-    const PURE_WHITE_IMG: [number, number, number] = [255, 255, 255]; // Worst case bright image highlight
+    const LIGHT_BG: [number, number, number] = [247, 247, 247]; // #F7F7F7
+    const CHARCOAL_TEXT: [number, number, number] = [23, 23, 23]; // #171717
+    const NEUTRAL_600: [number, number, number] = [82, 82, 82]; // #525252
+    const NEUTRAL_700: [number, number, number] = [64, 64, 64]; // #404040
+    const DARK_IMG: [number, number, number] = [0, 0, 0]; // Worst case dark image bleed-through
 
-    it('Category Title (White #FFFFFF) on dark background achieves > 18:1 contrast (WCAG AA Large requirement is 3.0:1)', () => {
-      const ratio = getContrastRatio(WHITE_TEXT, DARK_BG);
-      expect(ratio).toBeGreaterThanOrEqual(3.0);
-      expect(ratio).toBeGreaterThan(18.0);
-    });
-
-    it('Category Title against worst-case 100% white image bleed-through with 85% dark overlay achieves > 4.5:1 contrast', () => {
-      const compositeBg = alphaComposite(DARK_BG, 0.85, PURE_WHITE_IMG);
-      const ratio = getContrastRatio(WHITE_TEXT, compositeBg);
-      expect(ratio).toBeGreaterThanOrEqual(3.0);
-      expect(ratio).toBeGreaterThan(4.5);
-    });
-
-    it('Category Description (Zinc-200 #E4E4E7) on dark background achieves > 14:1 contrast (WCAG AA Normal requirement is 4.5:1)', () => {
-      const ratio = getContrastRatio(ZINC_200, DARK_BG);
+    it('Category Title (Charcoal #171717) on light background achieves > 15:1 contrast (WCAG AA requirement is 4.5:1, AAA is 7:1)', () => {
+      const ratio = getContrastRatio(CHARCOAL_TEXT, LIGHT_BG);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
-      expect(ratio).toBeGreaterThan(14.0);
+      expect(ratio).toBeGreaterThan(15.0);
     });
 
-    it('Category Description against worst-case white image bleed-through with 85% dark overlay achieves >= 4.5:1 contrast', () => {
-      const compositeBg = alphaComposite(DARK_BG, 0.85, PURE_WHITE_IMG);
-      const ratio = getContrastRatio(ZINC_200, compositeBg);
+    it('Category Title against worst-case dark image bleed-through with 85% light overlay achieves > 10:1 contrast', () => {
+      const compositeBg = alphaComposite(LIGHT_BG, 0.85, DARK_IMG);
+      const ratio = getContrastRatio(CHARCOAL_TEXT, compositeBg);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
+      expect(ratio).toBeGreaterThan(10.0);
     });
 
-    it('Collection badge text (Lavender #A58CF4) on dark badge backing achieves > 7:1 contrast (WCAG AA Normal requirement is 4.5:1)', () => {
-      const badgeBg = alphaComposite([0, 0, 0], 0.5, DARK_BG);
-      const ratio = getContrastRatio(ACCENT_LAVENDER, badgeBg);
+    it('Category Description (Neutral-600 #525252) on light background achieves > 7:1 contrast (WCAG AA Normal requirement is 4.5:1)', () => {
+      const ratio = getContrastRatio(NEUTRAL_600, LIGHT_BG);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
       expect(ratio).toBeGreaterThan(7.0);
     });
 
-    it('Style count badge text (Zinc-200 #E4E4E7) on dark badge backing achieves > 15:1 contrast (WCAG AA requirement is 4.5:1)', () => {
-      const badgeBg = alphaComposite([0, 0, 0], 0.5, DARK_BG);
-      const ratio = getContrastRatio(ZINC_200, badgeBg);
+    it('Category Description against worst-case dark image bleed-through with 85% light overlay achieves >= 4.5:1 contrast', () => {
+      const compositeBg = alphaComposite(LIGHT_BG, 0.85, DARK_IMG);
+      const ratio = getContrastRatio(NEUTRAL_600, compositeBg);
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it('Collection badge text (Charcoal #171717) on light badge backing achieves > 15:1 contrast', () => {
+      const badgeBg = alphaComposite([255, 255, 255], 0.9, LIGHT_BG);
+      const ratio = getContrastRatio(CHARCOAL_TEXT, badgeBg);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
       expect(ratio).toBeGreaterThan(15.0);
+    });
+
+    it('Style count badge text (Neutral-700 #404040) on light badge backing achieves > 9:1 contrast', () => {
+      const badgeBg = alphaComposite([255, 255, 255], 0.9, LIGHT_BG);
+      const ratio = getContrastRatio(NEUTRAL_700, badgeBg);
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+      expect(ratio).toBeGreaterThan(9.0);
     });
   });
 

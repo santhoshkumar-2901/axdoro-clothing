@@ -266,12 +266,74 @@ export const collectionProductsUpdateSchema = z.object({
   productIds: z.array(z.string().uuid('Invalid product ID')),
 });
 
-export const homepageHeroUpdateSchema = z.object({
+/**
+ * Validates a CTA destination link for hero slides.
+ * Strictly enforces internal paths, anchors, or approved actions.
+ * Rejects dangerous protocols (javascript:, data:) and arbitrary external URLs.
+ */
+export function isValidCtaDestination(destination: string): { valid: boolean; reason?: string } {
+  if (!destination || typeof destination !== 'string') {
+    return { valid: false, reason: 'CTA destination is required' };
+  }
+  const trimmed = destination.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, reason: 'CTA destination cannot be empty' };
+  }
+  if (trimmed.length > 200) {
+    return { valid: false, reason: 'CTA destination cannot exceed 200 characters' };
+  }
+
+  const lower = trimmed.toLowerCase();
+
+  // Reject dangerous protocols and protocol-relative links
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:') ||
+    lower.startsWith('file:') ||
+    lower.startsWith('//')
+  ) {
+    return { valid: false, reason: 'Dangerous or external protocol disallowed in CTA destination' };
+  }
+
+  // Approved internal action keywords
+  const approvedActions = ['bulk', 'explore'];
+  if (approvedActions.includes(lower)) {
+    return { valid: true };
+  }
+
+  // Anchor links (#id)
+  if (trimmed.startsWith('#')) {
+    if (/^#[a-zA-Z0-9_\-]+$/.test(trimmed)) {
+      return { valid: true };
+    }
+    return { valid: false, reason: 'Anchor destination must contain only alphanumeric characters, hyphens, and underscores' };
+  }
+
+  // Internal absolute paths (/path)
+  if (trimmed.startsWith('/')) {
+    if (/^\/[a-zA-Z0-9_\-/?&=#.]*$/.test(trimmed)) {
+      return { valid: true };
+    }
+    return { valid: false, reason: 'Internal path contains invalid characters' };
+  }
+
+  return {
+    valid: false,
+    reason: 'CTA destination must be an internal path (starting with /), an anchor (starting with #), or an approved action (bulk, explore)',
+  };
+}
+
+export const heroSlideSchema = z.object({
+  id: z.number().int().min(1).max(3),
   imageUrl: z
     .string()
     .trim()
     .superRefine((val, ctx) => {
       if (!val) return;
+      if (val.startsWith('/') && !val.startsWith('//') && /\.(jpg|jpeg|png|webp|avif|svg|gif)$/i.test(val)) {
+        return;
+      }
       const result = isValidProductImageUrl(val);
       if (!result.valid) {
         ctx.addIssue({
@@ -283,7 +345,66 @@ export const homepageHeroUpdateSchema = z.object({
     .optional()
     .nullable(),
   publicId: z.string().trim().max(255).optional().nullable(),
+  heading: z.string().trim().min(1, 'Heading is required').max(200, 'Heading cannot exceed 200 characters'),
+  subtitle: z.string().trim().min(1, 'Subtitle is required').max(300, 'Subtitle cannot exceed 300 characters'),
+  ctaLabel: z.string().trim().min(1, 'CTA label is required').max(50, 'CTA label cannot exceed 50 characters'),
+  ctaLink: z
+    .string()
+    .trim()
+    .min(1, 'CTA destination is required')
+    .superRefine((val, ctx) => {
+      const res = isValidCtaDestination(val);
+      if (!res.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: res.reason || 'Invalid CTA destination',
+        });
+      }
+    }),
+  isEnabled: z.boolean().default(true),
 });
+
+export const homepageHeroUpdateSchema = z
+  .object({
+    slides: z.array(heroSlideSchema).length(3, 'Exactly three slides are required').optional(),
+    imageUrl: z
+      .string()
+      .trim()
+      .superRefine((val, ctx) => {
+        if (!val) return;
+        if (val.startsWith('/') && !val.startsWith('//') && /\.(jpg|jpeg|png|webp|avif|svg|gif)$/i.test(val)) {
+          return;
+        }
+        const result = isValidProductImageUrl(val);
+        if (!result.valid) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: result.reason || 'Invalid hero image URL',
+          });
+        }
+      })
+      .optional()
+      .nullable(),
+    publicId: z.string().trim().max(255).optional().nullable(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.slides) {
+      const ids = data.slides.map((s) => s.id);
+      const uniqueIds = new Set(ids);
+      if (uniqueIds.size !== 3 || ![1, 2, 3].every((id) => uniqueIds.has(id))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Slides must contain exactly slots 1, 2, and 3',
+          path: ['slides'],
+        });
+      }
+    } else if (data.imageUrl === undefined && data.publicId === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either slides array or legacy imageUrl/publicId must be provided',
+      });
+    }
+  });
 
 export const paymentQrUpdateSchema = z.object({
   imageUrl: z

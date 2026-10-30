@@ -70,7 +70,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               aria-label="AXDORO Home"
             >
               <img
-                src="/logo-transparent.png"
+                src="/logo-dark.png"
                 alt="AXDORO"
                 width={144}
                 height={36}
@@ -224,7 +224,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <div className="relative flex items-center justify-center">
                 <ShoppingBag className="w-4 h-4" />
                 {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-axdoro-accent text-black text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm animate-in zoom-in-50">
+                  <span className="absolute -top-2 -right-2 bg-axdoro-accent text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm animate-in zoom-in-50">
                     {cartCount}
                   </span>
                 )}
@@ -237,12 +237,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="flex md:hidden items-center gap-2">
             <button
               onClick={onOpenCart}
-              className="relative p-2 rounded-lg hover:bg-white/5 text-axdoro-text hover:text-axdoro-accent transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="relative p-2 rounded-lg hover:bg-black/5 text-axdoro-text hover:text-axdoro-accent transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
               aria-label={`Shopping bag with ${cartCount} items`}
             >
               <ShoppingBag className="w-5 h-5" />
               {cartCount > 0 && (
-                <span className="absolute top-0.5 right-0.5 bg-axdoro-accent text-black text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm animate-in zoom-in-50">
+                <span className="absolute top-0.5 right-0.5 bg-axdoro-accent text-white text-[10px] font-black w-4 h-4 rounded-full flex items-center justify-center shadow-sm animate-in zoom-in-50">
                   {cartCount}
                 </span>
               )}
@@ -251,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg hover:bg-white/5 text-axdoro-text hover:text-axdoro-accent transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
+              className="p-2 rounded-lg hover:bg-black/5 text-axdoro-text hover:text-axdoro-accent transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
               aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-navigation-menu"

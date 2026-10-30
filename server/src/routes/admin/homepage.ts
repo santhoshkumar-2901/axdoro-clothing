@@ -71,6 +71,7 @@ adminHomepageRouter.put('/hero', async (req: Request, res: Response, next: NextF
     const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
 
     const updated = await updateHomepageHeroSetting({
+      slides: parseResult.data.slides,
       imageUrl: parseResult.data.imageUrl,
       publicId: parseResult.data.publicId,
       adminId: req.admin!.id,

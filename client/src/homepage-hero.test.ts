@@ -31,16 +31,16 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       expect(heroContent).toContain("onError={() => setImageSrc('/hero-bg.jpg')}");
     });
 
-    it('preserves 100% of the editorial copy and headlines', () => {
-      expect(heroContent).toContain('AXDORO &ndash; Clothing Made for Every Occasion');
-      expect(heroContent).toContain('Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.');
-      expect(heroContent).toContain('Explore Collection');
-      expect(heroContent).toContain('Enquire for Bulk Orders');
+    it('confirms image-only hero omits text overlays and headlines', () => {
+      expect(heroContent).not.toContain('AXDORO &ndash; Clothing Made for Every Occasion');
+      expect(heroContent).not.toContain('Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.');
+      expect(heroContent).not.toContain('Explore Collection');
+      expect(heroContent).not.toContain('Enquire for Bulk Orders');
     });
 
-    it('preserves dark purple text-contrast gradient overlays', () => {
-      expect(heroContent).toContain('bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/90 to-transparent');
-      expect(heroContent).toContain('bg-gradient-to-t from-[#0D0B14] via-transparent to-transparent');
+    it('confirms image-only hero omits dark gradient overlays', () => {
+      expect(heroContent).not.toContain('bg-gradient-to-r');
+      expect(heroContent).not.toContain('bg-gradient-to-t');
     });
   });
 
@@ -208,9 +208,9 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       // Must not render /hero-bg.jpg while unresolved
       expect(html).not.toContain('src="/hero-bg.jpg"');
       expect(html).not.toContain('<img');
-      // Dark background and gradients are intact
-      expect(html).toContain('bg-[#0D0B14]');
-      expect(html).toContain('bg-gradient-to-r from-[#0D0B14]');
+      // Background is intact
+      expect(html).toContain('bg-axdoro-bg');
+      expect(html).not.toContain('bg-gradient-to-r');
     });
 
     it('2. does not reveal custom image before it loads (starts hidden/unloaded)', async () => {
@@ -273,16 +273,16 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       expect(heroContent).toContain('isCancelled = true');
     });
 
-    it('8. preserves all existing hero headlines, CTAs, buttons, and layout dimensions', () => {
+    it('8. confirms image-only hero layout omits headlines and CTAs', () => {
       const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
       const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
 
-      expect(heroContent).toContain('AXDORO &ndash; Clothing Made for Every Occasion');
-      expect(heroContent).toContain('Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.');
-      expect(heroContent).toContain('Explore Collection');
-      expect(heroContent).toContain('Enquire for Bulk Orders');
-      expect(heroContent).toContain('140 GSM Combed Cotton');
-      expect(heroContent).toContain('Oxford &amp; Linen Tailored Weaves');
+      expect(heroContent).not.toContain('AXDORO &ndash; Clothing Made for Every Occasion');
+      expect(heroContent).not.toContain('Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.');
+      expect(heroContent).not.toContain('Explore Collection');
+      expect(heroContent).not.toContain('Enquire for Bulk Orders');
+      expect(heroContent).not.toContain('140 GSM Combed Cotton');
+      expect(heroContent).not.toContain('Oxford &amp; Linen Tailored Weaves');
     });
   });
 });

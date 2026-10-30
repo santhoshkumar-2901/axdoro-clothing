@@ -11,6 +11,14 @@ export interface Category {
   imageUrl?: string | null;
 }
 
+export interface CategoryShortcutItem {
+  id: string;
+  label: string;
+  sublabel?: string;
+  imageUrl: string;
+  query?: string;
+}
+
 export interface ProductVariant {
   id: string;
   size: string;
@@ -120,7 +128,19 @@ export interface AdminHomepageCollection {
   updatedAt: string;
 }
 
+export interface HeroSlide {
+  id: number;
+  imageUrl: string | null;
+  publicId?: string | null;
+  heading: string;
+  subtitle: string;
+  ctaLabel: string;
+  ctaLink: string;
+  isEnabled: boolean;
+}
+
 export interface HomepageHeroSetting {
+  slides?: HeroSlide[];
   imageUrl: string | null;
   publicId?: string | null;
   updatedAt?: string;

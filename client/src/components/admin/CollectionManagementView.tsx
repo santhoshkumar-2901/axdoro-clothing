@@ -30,6 +30,7 @@ import {
 import { useScrollLock } from '../../utils/scrollLock.ts';
 import {
   AdminHomepageCollection,
+  HeroSlide,
   HomepageHeroSetting,
   formatPaiseToINR,
 } from '../../types/product.ts';
@@ -72,8 +73,79 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   // Global reference-counted scroll lock while add products modal is open
   useScrollLock(isAddModalOpen);
 
+  // Default 3 hero slides fallback
+  const DEFAULT_HERO_SLIDES: HeroSlide[] = [
+    {
+      id: 1,
+      imageUrl: null,
+      heading: 'AXDORO – Clothing Made for Every Occasion',
+      subtitle: 'Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.',
+      ctaLabel: 'Explore Collection',
+      ctaLink: '#collection-tabs',
+      isEnabled: true,
+    },
+    {
+      id: 2,
+      imageUrl: null,
+      heading: 'Tailored Elegance for Work & Celebrations',
+      subtitle: 'Refined formalwear and versatile essentials designed with premium breathable cotton and modern silhouettes.',
+      ctaLabel: 'Shop Formals',
+      ctaLink: '/category/formal',
+      isEnabled: true,
+    },
+    {
+      id: 3,
+      imageUrl: null,
+      heading: 'Seamless Custom Bulk Orders & Uniforms',
+      subtitle: 'Elevate your team with personalized fits, high-durability fabrics, and dedicated bulk pricing.',
+      ctaLabel: 'Enquire for Bulk Orders',
+      ctaLink: 'bulk',
+      isEnabled: true,
+    },
+  ];
+
+  function isValidClientCtaDestination(val: string): { valid: boolean; reason?: string } {
+    if (!val || typeof val !== 'string') {
+      return { valid: false, reason: 'CTA destination is required' };
+    }
+    const trimmed = val.trim();
+    if (trimmed.length === 0) {
+      return { valid: false, reason: 'CTA destination cannot be empty' };
+    }
+
+    // Same-site absolute path
+    if (trimmed.startsWith('/')) {
+      if (trimmed.startsWith('//') || trimmed.includes('\\') || /[\r\n\t]/.test(trimmed)) {
+        return { valid: false, reason: 'Protocol-relative or malformed path not allowed' };
+      }
+      return { valid: true };
+    }
+
+    // Anchor
+    if (trimmed.startsWith('#')) {
+      if (trimmed.length < 2 || /[\r\n\t\s]/.test(trimmed)) {
+        return { valid: false, reason: 'Malformed anchor destination' };
+      }
+      return { valid: true };
+    }
+
+    // Approved actions
+    const lower = trimmed.toLowerCase();
+    if (lower === 'bulk' || lower === 'explore') {
+      return { valid: true };
+    }
+
+    return {
+      valid: false,
+      reason: 'Must start with / (path), # (anchor), or be "bulk" or "explore"',
+    };
+  }
+
   // Hero banner state
   const [heroSetting, setHeroSetting] = useState<HomepageHeroSetting | null>(null);
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>(DEFAULT_HERO_SLIDES);
+  const [activeSlideId, setActiveSlideId] = useState<number>(1);
+  const [editingModalSlideId, setEditingModalSlideId] = useState<number>(1);
   const [isLoadingHero, setIsLoadingHero] = useState<boolean>(true);
   const [isHeroModalOpen, setIsHeroModalOpen] = useState<boolean>(false);
   const [heroFile, setHeroFile] = useState<File | null>(null);
@@ -82,6 +154,8 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   const [useHeroManualUrl, setUseHeroManualUrl] = useState<boolean>(false);
   const [isSavingHero, setIsSavingHero] = useState<boolean>(false);
   const [heroModalError, setHeroModalError] = useState<string | null>(null);
+  const [heroError, setHeroError] = useState<string | null>(null);
+  const [heroSuccessMessage, setHeroSuccessMessage] = useState<string | null>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   // Global reference-counted scroll lock for hero image modal
@@ -90,10 +164,23 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   const loadHero = useCallback(async () => {
     try {
       setIsLoadingHero(true);
+      setHeroError(null);
       const hero = await adminGetHomepageHero();
       setHeroSetting(hero);
+      if (Array.isArray(hero.slides) && hero.slides.length === 3) {
+        setHeroSlides(hero.slides);
+      } else if (hero.imageUrl) {
+        setHeroSlides([
+          { ...DEFAULT_HERO_SLIDES[0], imageUrl: hero.imageUrl, publicId: hero.publicId || null },
+          DEFAULT_HERO_SLIDES[1],
+          DEFAULT_HERO_SLIDES[2],
+        ]);
+      } else {
+        setHeroSlides(DEFAULT_HERO_SLIDES);
+      }
     } catch (err) {
       console.warn('[CollectionManagementView] Failed to load homepage hero:', err);
+      setHeroError(err instanceof Error ? err.message : 'Failed to load hero configuration');
     } finally {
       setIsLoadingHero(false);
     }
@@ -112,13 +199,19 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     };
   }, [heroPreviewUrl]);
 
-  const handleOpenHeroModal = () => {
+  const handleOpenHeroModalForSlot = (slotId: number) => {
+    setEditingModalSlideId(slotId);
+    const targetSlide = heroSlides.find((s) => s.id === slotId) || heroSlides[0];
     setHeroFile(null);
-    setHeroPreviewUrl(heroSetting?.imageUrl || null);
-    setHeroManualUrl(heroSetting?.imageUrl || '');
+    setHeroPreviewUrl(targetSlide.imageUrl || null);
+    setHeroManualUrl(targetSlide.imageUrl || '');
     setUseHeroManualUrl(false);
     setHeroModalError(null);
     setIsHeroModalOpen(true);
+  };
+
+  const handleOpenHeroModal = () => {
+    handleOpenHeroModalForSlot(activeSlideId);
   };
 
   const handleCloseHeroModal = () => {
@@ -149,7 +242,8 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       URL.revokeObjectURL(heroPreviewUrl);
     }
     setHeroFile(null);
-    setHeroPreviewUrl(heroSetting?.imageUrl || null);
+    const targetSlide = heroSlides.find((s) => s.id === editingModalSlideId);
+    setHeroPreviewUrl(targetSlide?.imageUrl || null);
     if (heroFileInputRef.current) {
       heroFileInputRef.current.value = '';
     }
@@ -199,13 +293,21 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
         return;
       }
 
+      const updatedSlides = heroSlides.map((s) =>
+        s.id === editingModalSlideId
+          ? { ...s, imageUrl: finalImageUrl, publicId: finalPublicId }
+          : s
+      );
+
       const updated = await adminUpdateHomepageHero({
-        imageUrl: finalImageUrl,
-        publicId: finalPublicId,
+        slides: updatedSlides,
       });
 
       setHeroSetting(updated);
-      setSuccessMessage('Homepage hero banner updated successfully.');
+      if (updated.slides) {
+        setHeroSlides(updated.slides);
+      }
+      setHeroSuccessMessage(`Slide ${editingModalSlideId} image updated successfully.`);
       handleCloseHeroModal();
       onCollectionMutated?.();
     } catch (err) {
@@ -215,22 +317,139 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     }
   };
 
-  const handleResetHeroToDefault = async () => {
+  const handleResetSlotImageToDefault = async (slotId: number) => {
     try {
       setIsSavingHero(true);
-      setError(null);
+      setHeroError(null);
+      const updatedSlides = heroSlides.map((s) =>
+        s.id === slotId ? { ...s, imageUrl: null, publicId: null } : s
+      );
+
       const updated = await adminUpdateHomepageHero({
-        imageUrl: null,
-        publicId: null,
+        slides: updatedSlides,
       });
+
       setHeroSetting(updated);
-      setSuccessMessage('Homepage hero banner restored to default asset (/hero-bg.jpg).');
+      if (updated.slides) {
+        setHeroSlides(updated.slides);
+      }
+      setHeroSuccessMessage(`Slide ${slotId} restored to default asset (/hero-bg.jpg).`);
       onCollectionMutated?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to reset hero banner');
+      setHeroError(err instanceof Error ? err.message : 'Failed to reset slide image');
     } finally {
       setIsSavingHero(false);
     }
+  };
+
+  const handleResetHeroToDefault = async () => {
+    try {
+      setIsSavingHero(true);
+      setHeroError(null);
+      const targetSlot = isHeroModalOpen ? editingModalSlideId : activeSlideId;
+      const updatedSlides = heroSlides.map((s) =>
+        s.id === targetSlot ? { ...s, imageUrl: null, publicId: null } : s
+      );
+
+      const updated = await adminUpdateHomepageHero({
+        slides: updatedSlides,
+      });
+
+      setHeroSetting(updated);
+      if (updated.slides) {
+        setHeroSlides(updated.slides);
+      }
+      setHeroSuccessMessage(`Slide ${targetSlot} restored to default asset (/hero-bg.jpg).`);
+      if (isHeroModalOpen) {
+        handleCloseHeroModal();
+      }
+      onCollectionMutated?.();
+    } catch (err) {
+      if (isHeroModalOpen) {
+        setHeroModalError(err instanceof Error ? err.message : 'Failed to reset hero banner');
+      } else {
+        setHeroError(err instanceof Error ? err.message : 'Failed to reset hero banner');
+      }
+    } finally {
+      setIsSavingHero(false);
+    }
+  };
+
+  const handleSaveAllSlides = async () => {
+    try {
+      setIsSavingHero(true);
+      setHeroError(null);
+      setHeroSuccessMessage(null);
+
+      // Validate all slides
+      for (const slide of heroSlides) {
+        if (!slide.heading.trim()) {
+          setHeroError(`Slide ${slide.id}: Heading is required.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        if (slide.heading.length > 200) {
+          setHeroError(`Slide ${slide.id}: Heading cannot exceed 200 characters.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        if (!slide.subtitle.trim()) {
+          setHeroError(`Slide ${slide.id}: Subtitle is required.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        if (slide.subtitle.length > 300) {
+          setHeroError(`Slide ${slide.id}: Subtitle cannot exceed 300 characters.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        if (!slide.ctaLabel.trim()) {
+          setHeroError(`Slide ${slide.id}: CTA label is required.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        if (slide.ctaLabel.length > 50) {
+          setHeroError(`Slide ${slide.id}: CTA label cannot exceed 50 characters.`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+        const ctaValidation = isValidClientCtaDestination(slide.ctaLink);
+        if (!ctaValidation.valid) {
+          setHeroError(`Slide ${slide.id}: ${ctaValidation.reason || 'Invalid CTA destination'}`);
+          setActiveSlideId(slide.id);
+          setIsSavingHero(false);
+          return;
+        }
+      }
+
+      const updated = await adminUpdateHomepageHero({
+        slides: heroSlides,
+      });
+
+      setHeroSetting(updated);
+      if (updated.slides) {
+        setHeroSlides(updated.slides);
+      }
+      setHeroSuccessMessage('All homepage hero slides updated successfully.');
+      onCollectionMutated?.();
+    } catch (err) {
+      setHeroError(err instanceof Error ? err.message : 'Failed to update homepage hero slides');
+    } finally {
+      setIsSavingHero(false);
+    }
+  };
+
+  const handleActiveSlideChange = <K extends keyof HeroSlide>(key: K, value: HeroSlide[K]) => {
+    setHeroSlides((prev) =>
+      prev.map((s) => (s.id === activeSlideId ? { ...s, [key]: value } : s))
+    );
+    if (heroError) setHeroError(null);
   };
 
   const loadCollections = useCallback(async () => {
@@ -436,23 +655,26 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 Storefront Hero Lifestyle Banner
               </CardTitle>
               <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
-                The primary full-width background lifestyle image displayed in the homepage hero campaign section.
+                Manage the three rotating hero slides displayed at the top of the storefront homepage.
+                {heroSetting?.updatedAt && (
+                  <span className="ml-2 font-mono text-[10px] text-axdoro-accent-muted">
+                    (Last saved: {new Date(heroSetting.updatedAt).toLocaleTimeString()})
+                  </span>
+                )}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              {heroSetting?.imageUrl && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetHeroToDefault}
-                  disabled={isSavingHero}
-                  className="h-8 text-xs font-semibold text-axdoro-text-muted hover:text-red-400 hover:border-red-400/40"
-                  title="Reset to default /hero-bg.jpg"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset Default
-                </Button>
-              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResetHeroToDefault}
+                disabled={isSavingHero || !heroSlides.find((s) => s.id === activeSlideId)?.imageUrl}
+                className="h-8 text-xs font-semibold text-axdoro-text-muted hover:text-red-400 hover:border-red-400/40"
+                title="Reset to default /hero-bg.jpg"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset to Default
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -461,65 +683,317 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 className="h-8 text-xs font-semibold px-3 shadow-xs flex items-center gap-1.5"
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>{heroSetting?.imageUrl ? 'Change Hero Image' : 'Upload Hero Image'}</span>
+                <span>{heroSlides.find((s) => s.id === activeSlideId)?.imageUrl ? 'Change Hero Image' : 'Upload Hero Image'}</span>
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleSaveAllSlides}
+                disabled={isSavingHero || isLoadingHero}
+                className="h-8 text-xs font-semibold px-3.5 bg-axdoro-purple text-white hover:bg-axdoro-purple-light flex items-center gap-1.5"
+              >
+                {isSavingHero ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Hero Slides</span>
+                  </>
+                )}
               </Button>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 pb-4">
-          <div className="flex flex-col md:flex-row items-center gap-6">
-            {/* Banner Preview Thumbnail */}
-            <div className="relative w-full md:w-80 h-36 rounded-lg overflow-hidden border border-axdoro-border bg-black/40 flex-shrink-0 group">
-              <img
-                src={heroSetting?.imageUrl || '/hero-bg.jpg'}
-                alt="Current Hero Banner"
-                className="w-full h-full object-cover object-[75%_center]"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/hero-bg.jpg';
-                }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none" />
-              <div className="absolute top-2 left-2">
-                {heroSetting?.imageUrl ? (
-                  <Badge variant="default" className="text-[10px] bg-axdoro-accent text-black font-semibold">
-                    Custom Image
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary" className="text-[10px] bg-black/60 text-stone-200 border-white/20">
-                    Default Asset (/hero-bg.jpg)
-                  </Badge>
-                )}
-              </div>
-            </div>
 
-            {/* Banner Meta & Instructions */}
-            <div className="space-y-2 text-xs text-axdoro-text-muted flex-1">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-                <div>
-                  <span className="text-axdoro-text-muted/60">Status: </span>
-                  <span className="text-axdoro-charcoal font-semibold">
-                    {heroSetting?.imageUrl ? 'Active (Custom)' : 'Active (Default System Asset)'}
-                  </span>
-                </div>
-                {heroSetting?.updatedAt && (
-                  <div>
-                    <span className="text-axdoro-text-muted/60">Updated: </span>
-                    <span className="text-axdoro-charcoal font-semibold">
-                      {new Date(heroSetting.updatedAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <p className="leading-relaxed">
-                Recommended aspect ratio: <strong className="text-axdoro-charcoal font-semibold">16:9 or 21:9</strong> landscape. The image uses right-focused alignment with a soft atmospheric gradient overlay to preserve optimal contrast for headline text on the left.
-              </p>
-              {heroSetting?.imageUrl && (
-                <p className="font-mono text-[10px] text-axdoro-accent-muted truncate max-w-lg">
-                  {heroSetting.imageUrl}
-                </p>
-              )}
+        {/* Hero Save & Validation Alerts */}
+        {heroError && (
+          <div className="mx-6 mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600 mt-0.5" />
+            <div className="flex-1">
+              <span className="font-semibold">Hero Validation Error: </span>
+              {heroError}
             </div>
+            <button onClick={() => setHeroError(null)} className="text-red-500 hover:text-red-700">
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
+        )}
+        {heroSuccessMessage && (
+          <div className="mx-6 mt-4 p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
+            <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
+            <div className="flex-1 font-medium">{heroSuccessMessage}</div>
+            <button onClick={() => setHeroSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Slide Slot Navigation Tabs */}
+        <div className="flex items-center gap-2 border-b border-axdoro-border px-6 pt-3 pb-2 overflow-x-auto">
+          {heroSlides.map((slide) => {
+            const isSelected = slide.id === activeSlideId;
+            return (
+              <button
+                key={slide.id}
+                type="button"
+                onClick={() => {
+                  setActiveSlideId(slide.id);
+                  if (heroError) setHeroError(null);
+                }}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors flex items-center gap-2 border cursor-pointer ${
+                  isSelected
+                    ? 'bg-axdoro-purple text-white border-axdoro-purple shadow-xs'
+                    : 'bg-axdoro-surface border-axdoro-border text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-axdoro-surface-muted'
+                }`}
+              >
+                <span>Slide Slot {slide.id}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                    slide.isEnabled
+                      ? isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-emerald-100 text-emerald-800'
+                      : isSelected
+                      ? 'bg-black/30 text-white/70'
+                      : 'bg-stone-200 text-stone-600'
+                  }`}
+                >
+                  {slide.isEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+                {slide.imageUrl && (
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      isSelected ? 'bg-amber-300' : 'bg-amber-500'
+                    }`}
+                    title="Custom image configured"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <CardContent className="pt-4 pb-4">
+          {(() => {
+            const activeSlide = heroSlides.find((s) => s.id === activeSlideId) || heroSlides[0];
+            const ctaCheck = isValidClientCtaDestination(activeSlide.ctaLink);
+
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Left Column (5 cols): Live Slide Preview & Image Management */}
+                <div className="lg:col-span-5 space-y-3">
+                  <div className="text-xs font-semibold text-axdoro-charcoal flex items-center justify-between">
+                    <span>Live Banner Preview</span>
+                    <span className="text-[11px] font-mono text-axdoro-text-muted">Slot {activeSlide.id}</span>
+                  </div>
+
+                  {/* Banner Preview Thumbnail with Overlay Simulation */}
+                  <div className="relative w-full h-44 sm:h-52 rounded-lg overflow-hidden border border-axdoro-border bg-axdoro-bg group">
+                    <img
+                      src={activeSlide.imageUrl || '/hero-bg.jpg'}
+                      alt={`Slide ${activeSlide.id} Preview`}
+                      className="w-full h-full object-cover object-[75%_center]"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (!target.src.endsWith('/hero-bg.jpg')) {
+                          target.src = '/hero-bg.jpg';
+                        }
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent pointer-events-none" />
+
+                    {/* Live Dynamic Preview Overlay Content */}
+                    <div className="absolute inset-0 p-4 flex flex-col justify-end text-left pointer-events-none">
+                      <div className="space-y-1 max-w-xs">
+                        <span className="inline-block text-[9px] font-mono font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-black/60 text-[#E5B842] border border-[#E5B842]/30 mb-1">
+                          {activeSlide.isEnabled ? 'Active Slide' : 'Slide Disabled (Hidden)'}
+                        </span>
+                        <h4 className="text-xs sm:text-sm font-serif font-bold text-white leading-tight line-clamp-2">
+                          {activeSlide.heading || 'AXDORO – Clothing Made for Every Occasion'}
+                        </h4>
+                        <p className="text-[10px] text-stone-300 line-clamp-2 leading-relaxed">
+                          {activeSlide.subtitle || 'Quality Clothing. Comfortable Wear. Bulk Orders Made Simple.'}
+                        </p>
+                        <div className="pt-1.5">
+                          <span className="inline-block px-2.5 py-1 text-[10px] font-semibold rounded bg-[#E5B842] text-black">
+                            {activeSlide.ctaLabel || 'Explore Collection'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="absolute top-2 right-2">
+                      {activeSlide.imageUrl ? (
+                        <Badge variant="default" className="text-[10px] bg-axdoro-accent text-black font-semibold">
+                          Custom Image
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px] bg-black/60 text-stone-200 border-white/20">
+                          Default Asset (/hero-bg.jpg)
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Image Controls under preview */}
+                  <div className="p-3 rounded-lg border border-axdoro-border bg-axdoro-surface-muted/30 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-axdoro-charcoal">Slide Image</span>
+                      <div className="flex items-center gap-2">
+                        {activeSlide.imageUrl && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResetSlotImageToDefault(activeSlide.id)}
+                            disabled={isSavingHero}
+                            className="h-7 text-[11px] text-red-500 hover:text-red-600 hover:border-red-300"
+                          >
+                            Remove Image
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => handleOpenHeroModalForSlot(activeSlide.id)}
+                          disabled={isSavingHero}
+                          className="h-7 text-[11px] font-semibold"
+                        >
+                          <Upload className="w-3 h-3 mr-1" />
+                          {activeSlide.imageUrl ? 'Replace' : 'Upload'}
+                        </Button>
+                      </div>
+                    </div>
+                    {activeSlide.imageUrl ? (
+                      <p className="font-mono text-[10px] text-axdoro-text-muted truncate">
+                        {activeSlide.imageUrl}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-axdoro-text-muted leading-relaxed">
+                        Uses default storefront fallback asset (<code className="text-[10px] font-mono">/hero-bg.jpg</code>).
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column (7 cols): Editorial & Behavior Form */}
+                <div className="lg:col-span-7 space-y-4">
+                  {/* Enabled / Disabled Toggle */}
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-axdoro-border bg-axdoro-surface">
+                    <div>
+                      <label htmlFor="slide-enabled-toggle" className="text-xs font-semibold text-axdoro-charcoal cursor-pointer">
+                        Enable Slide on Storefront
+                      </label>
+                      <p className="text-[11px] text-axdoro-text-muted">
+                        When disabled, the carousel automatically skips this slide slot.
+                      </p>
+                    </div>
+                    <input
+                      id="slide-enabled-toggle"
+                      type="checkbox"
+                      checked={activeSlide.isEnabled}
+                      onChange={(e) => handleActiveSlideChange('isEnabled', e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-300 text-axdoro-purple focus:ring-axdoro-purple cursor-pointer"
+                    />
+                  </div>
+
+                  {/* Heading */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="slide-heading" className="text-xs font-semibold text-axdoro-charcoal">
+                        Slide Heading *
+                      </Label>
+                      <span className="text-[10px] font-mono text-axdoro-text-muted">
+                        {activeSlide.heading.length} / 200
+                      </span>
+                    </div>
+                    <Input
+                      id="slide-heading"
+                      type="text"
+                      value={activeSlide.heading}
+                      maxLength={200}
+                      onChange={(e) => handleActiveSlideChange('heading', e.target.value)}
+                      placeholder="e.g. AXDORO – Clothing Made for Every Occasion"
+                      className="text-xs"
+                    />
+                  </div>
+
+                  {/* Subtitle */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="slide-subtitle" className="text-xs font-semibold text-axdoro-charcoal">
+                        Slide Subtitle / Description *
+                      </Label>
+                      <span className="text-[10px] font-mono text-axdoro-text-muted">
+                        {activeSlide.subtitle.length} / 300
+                      </span>
+                    </div>
+                    <textarea
+                      id="slide-subtitle"
+                      value={activeSlide.subtitle}
+                      maxLength={300}
+                      rows={2}
+                      onChange={(e) => handleActiveSlideChange('subtitle', e.target.value)}
+                      placeholder="e.g. Quality Clothing. Comfortable Wear. Bulk Orders Made Simple."
+                      className="w-full text-xs rounded-md border border-axdoro-border bg-transparent p-2 focus:outline-none focus:ring-1 focus:ring-axdoro-purple"
+                    />
+                  </div>
+
+                  {/* CTA Label & Destination Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="slide-cta-label" className="text-xs font-semibold text-axdoro-charcoal">
+                          CTA Button Label *
+                        </Label>
+                        <span className="text-[10px] font-mono text-axdoro-text-muted">
+                          {activeSlide.ctaLabel.length} / 50
+                        </span>
+                      </div>
+                      <Input
+                        id="slide-cta-label"
+                        type="text"
+                        value={activeSlide.ctaLabel}
+                        maxLength={50}
+                        onChange={(e) => handleActiveSlideChange('ctaLabel', e.target.value)}
+                        placeholder="e.g. Explore Collection"
+                        className="text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="slide-cta-link" className="text-xs font-semibold text-axdoro-charcoal">
+                          CTA Destination *
+                        </Label>
+                        {ctaCheck.valid ? (
+                          <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-0.5">
+                            <CheckCircle2 className="w-3 h-3" /> Valid
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-red-500 font-medium">Invalid</span>
+                        )}
+                      </div>
+                      <Input
+                        id="slide-cta-link"
+                        type="text"
+                        value={activeSlide.ctaLink}
+                        onChange={(e) => handleActiveSlideChange('ctaLink', e.target.value)}
+                        placeholder="e.g. #collection-tabs, /category/formal, bulk"
+                        className={`text-xs ${!ctaCheck.valid ? 'border-red-400 focus:ring-red-400' : ''}`}
+                      />
+                      <p className="text-[10px] text-axdoro-text-muted">
+                        Allowed: <code className="font-mono text-axdoro-charcoal">/path</code>, <code className="font-mono text-axdoro-charcoal">#anchor</code>, or action <code className="font-mono text-axdoro-charcoal">bulk</code> / <code className="font-mono text-axdoro-charcoal">explore</code>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
 
@@ -920,7 +1394,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   Manage Homepage Hero Image
                 </CardTitle>
                 <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
-                  Upload a high-resolution banner via Cloudinary or enter an image URL.
+                  Upload a high-resolution banner via Cloudinary or enter an image URL for Slot {editingModalSlideId}.
                 </CardDescription>
               </div>
               <button
@@ -947,14 +1421,17 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 <Label className="text-xs font-semibold text-axdoro-charcoal">Live Banner Preview</Label>
                 <div className="relative w-full h-44 rounded-lg overflow-hidden border border-axdoro-border bg-black/60 flex items-center justify-center">
                   <img
-                    src={heroPreviewUrl || heroSetting?.imageUrl || '/hero-bg.jpg'}
+                    src={heroPreviewUrl || heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl || '/hero-bg.jpg'}
                     alt="Hero Preview"
                     className="w-full h-full object-cover object-[75%_center]"
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/hero-bg.jpg';
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.endsWith('/hero-bg.jpg')) {
+                        target.src = '/hero-bg.jpg';
+                      }
                     }}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-[#0D0B14] via-[#0D0B14]/80 to-transparent pointer-events-none" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent pointer-events-none" />
                   <div className="absolute bottom-3 left-4 pointer-events-none text-left">
                     <span className="text-[10px] font-mono uppercase tracking-wider text-[#E5B842] font-bold">Preview</span>
                     <p className="text-xs font-bold text-white leading-tight">Headline Contrast Overlay Simulation</p>
@@ -1050,13 +1527,13 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
             </CardContent>
 
             <div className="p-4 border-t border-axdoro-border flex items-center justify-between">
-              {heroSetting?.imageUrl && (
+              {heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={async () => {
-                    await handleResetHeroToDefault();
+                    await handleResetSlotImageToDefault(editingModalSlideId);
                     setIsHeroModalOpen(false);
                   }}
                   disabled={isSavingHero}
@@ -1080,7 +1557,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   type="button"
                   size="sm"
                   onClick={handleSaveHero}
-                  disabled={isSavingHero || (!heroFile && (!heroManualUrl.trim() || heroManualUrl.trim() === heroSetting?.imageUrl))}
+                  disabled={isSavingHero || (!heroFile && (!heroManualUrl.trim() || heroManualUrl.trim() === heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl))}
                   className="text-xs font-semibold flex items-center gap-1.5"
                 >
                   {isSavingHero ? (

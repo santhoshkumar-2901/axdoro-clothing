@@ -873,6 +873,7 @@ export async function adminUpdateCollectionProducts(
 export interface UpdateHomepageHeroPayload {
   imageUrl?: string | null;
   publicId?: string | null;
+  slides?: import('../types/product.js').HeroSlide[];
 }
 
 export async function adminGetHomepageHero(): Promise<import('../types/product.js').HomepageHeroSetting> {

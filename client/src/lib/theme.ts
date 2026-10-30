@@ -1,30 +1,33 @@
 /**
- * AXDORO Permanent Brand Design Tokens — Deep Purple Theme
+ * AXDORO Permanent Brand Design Tokens — Light Luxury Theme
  *
  * Source of truth:
- * - Primary: #433075 (Deep Purple)
- * - Accent: #A58CF4 (Lavender)
- * - Light surface/text: #FAFAFA (Soft White)
- * - Dark canvas: #0D0D0D (Jet Black)
+ * - Canvas: #FFFFFF (Pure White)
+ * - Secondary surface: #F7F7F7 (Very Light Grey)
+ * - Text: #171717 (Near-Black)
+ * - Muted text: #666666 (Neutral Grey)
+ * - Border: #E5E5E5 (Subtle Grey)
+ * - Accent: #171717 (Restrained Charcoal/Black)
  */
 
 export const THEME = {
-  name: 'Deep Purple',
-  id: 'deep-purple',
+  name: 'Light Luxury',
+  id: 'light-luxury',
   colors: {
-    primary: '#433075',
-    accent: '#A58CF4',
-    accentMuted: '#BBA6F7',
-    accentSubtle: '#261A42',
-    background: '#0D0D0D',
-    surface: '#171224',
-    surfaceMuted: '#221B36',
-    text: '#FAFAFA',
-    textMuted: '#C5B8EA',
-    border: '#3E2C6A',
-    borderStrong: '#6D52AB',
-    ring: '#A58CF4',
+    primary: '#171717',
+    accent: '#171717',
+    accentMuted: '#525252',
+    accentSubtle: '#F3F4F6',
+    background: '#FFFFFF',
+    surface: '#FFFFFF',
+    surfaceMuted: '#F7F7F7',
+    text: '#171717',
+    textMuted: '#666666',
+    border: '#E5E5E5',
+    borderStrong: '#D4D4D4',
+    ring: '#171717',
   },
 } as const;
 
 export type ThemeConfig = typeof THEME;
+

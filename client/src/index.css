@@ -2,42 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-/* AXDORO Minimal Luxury Permanent Theme — Deep Purple */
+/* AXDORO Minimal Luxury Permanent Theme — Light Luxury */
 :root {
   /* Palette Foundations */
-  --axdoro-bg: #0D0D0D;             /* Jet Black canvas */
-  --axdoro-surface: #171224;        /* Deep-purple tinted dark surface */
-  --axdoro-surface-muted: #221B36;  /* Secondary panel surface */
-  --axdoro-text: #FAFAFA;           /* Soft White */
-  --axdoro-text-muted: #C5B8EA;     /* Light Lavender tint */
-  --axdoro-charcoal: #FAFAFA;       /* High-emphasis text & headings */
-  --axdoro-ivory: #0D0D0D;          /* Canvas background alias */
-  --axdoro-white: #FAFAFA;          /* Elevated high-contrast text/surface */
-  --axdoro-purple: #433075;         /* Deep Purple primary brand */
-  --axdoro-accent: #A58CF4;         /* Lavender accent */
-  --axdoro-accent-muted: #BBA6F7;   /* Lighter lavender for small text/icons */
-  --axdoro-accent-subtle: #261A42;  /* Deep purple badge background */
-  --axdoro-border: #3E2C6A;         /* Deep Purple hairline border */
-  --axdoro-border-strong: #6D52AB;  /* Form control boundary */
-  --axdoro-ring: #A58CF4;           /* Lavender focus ring */
+  --axdoro-bg: #FFFFFF;             /* Pure White canvas */
+  --axdoro-surface: #FFFFFF;        /* Crisp White content surface */
+  --axdoro-surface-muted: #F7F7F7;  /* Very light grey secondary surface */
+  --axdoro-text: #171717;           /* Near-Black high-contrast body text */
+  --axdoro-text-muted: #666666;     /* Neutral grey secondary text */
+  --axdoro-charcoal: #171717;       /* High-emphasis text, headings & buttons */
+  --axdoro-ivory: #FAF9F6;          /* Off-white canvas alias */
+  --axdoro-white: #FFFFFF;          /* Elevated high-contrast surface */
+  --axdoro-purple: #171717;         /* Neutral charcoal/black primary brand accent */
+  --axdoro-accent: #171717;         /* Restrained neutral brand accent */
+  --axdoro-accent-muted: #525252;   /* Neutral grey for small text and icons */
+  --axdoro-accent-subtle: #F3F4F6;  /* Light grey badge and avatar background */
+  --axdoro-border: #E5E5E5;         /* Subtle hairline border and divider */
+  --axdoro-border-strong: #D4D4D4;  /* Form control and interactive boundary */
+  --axdoro-ring: #171717;           /* High-contrast accessible focus ring */
 }
 
-/* Deep Purple solid action buttons */
+/* Luxury solid action buttons */
 .bg-axdoro-charcoal {
-  background-color: #433075;
-  color: #FAFAFA;
+  background-color: #171717;
+  color: #FFFFFF;
 }
 .bg-axdoro-charcoal:hover {
-  background-color: #553E92;
+  background-color: #2E2E2E;
 }
 
-
-/* Hover and dark-canvas text contrast adaptations */
+/* Hover text contrast */
 .hover\:text-black:hover {
   color: var(--axdoro-accent) !important;
 }
 .hover\:bg-black\/5:hover {
-  background-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
 }
 
 /* ==========================================================================

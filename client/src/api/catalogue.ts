@@ -1,4 +1,4 @@
-import { Product, Category, HomepageCollection } from '../types/product.ts';
+import { Product, Category, HomepageCollection, HeroSlide } from '../types/product.ts';
 
 export interface ProductsFetchParams {
   page?: number;
@@ -170,7 +170,7 @@ export async function fetchHomepageCollectionBySlug(
   };
 }
 
-export async function fetchHomepageHero(): Promise<{ imageUrl: string | null }> {
+export async function fetchHomepageHero(): Promise<{ imageUrl: string | null; slides?: HeroSlide[] }> {
   try {
     const response = await fetch('/api/homepage/hero', {
       headers: {
@@ -179,15 +179,16 @@ export async function fetchHomepageHero(): Promise<{ imageUrl: string | null }> 
     });
 
     if (!response.ok) {
-      return { imageUrl: null };
+      return { imageUrl: null, slides: [] };
     }
 
     const json = await response.json();
     return {
       imageUrl: json.data?.imageUrl || null,
+      slides: Array.isArray(json.data?.slides) ? json.data.slides : undefined,
     };
   } catch {
     // Fail safely with default fallback
-    return { imageUrl: null };
+    return { imageUrl: null, slides: [] };
   }
 }

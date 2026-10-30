@@ -39,7 +39,7 @@ describe('AXDORO — Hover Visibility & Theme Contrast Integrity (Source & Token
     });
 
     it('client/src/index.css defines --axdoro-purple in :root', () => {
-      expect(indexCss).toMatch(/--axdoro-purple:\s*#433075;/);
+      expect(indexCss).toMatch(/--axdoro-purple:\s*#171717;/);
     });
 
     it('eliminates fragile custom .hover:bg-axdoro-charcoal overrides from index.css', () => {

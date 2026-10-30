@@ -33,46 +33,48 @@ describe('AXDORO Permanent Theme — Deep Purple Verification', () => {
   const clientDir = path.resolve(__dirname, '..');
 
   describe('Theme Token Source of Truth', () => {
-    it('defines exact Deep Purple design tokens in lib/theme.ts', () => {
-      expect(THEME.id).toBe('deep-purple');
-      expect(THEME.name).toBe('Deep Purple');
-      expect(THEME.colors.primary).toBe('#433075');
-      expect(THEME.colors.accent).toBe('#A58CF4');
-      expect(THEME.colors.background).toBe('#0D0D0D');
-      expect(THEME.colors.surface).toBe('#171224');
-      expect(THEME.colors.surfaceMuted).toBe('#221B36');
-      expect(THEME.colors.text).toBe('#FAFAFA');
-      expect(THEME.colors.textMuted).toBe('#C5B8EA');
-      expect(THEME.colors.border).toBe('#3E2C6A');
-      expect(THEME.colors.borderStrong).toBe('#6D52AB');
-      expect(THEME.colors.ring).toBe('#A58CF4');
+    it('defines exact Light Luxury design tokens in lib/theme.ts', () => {
+      expect(THEME.id).toBe('light-luxury');
+      expect(THEME.name).toBe('Light Luxury');
+      expect(THEME.colors.primary).toBe('#171717');
+      expect(THEME.colors.accent).toBe('#171717');
+      expect(THEME.colors.accentMuted).toBe('#525252');
+      expect(THEME.colors.accentSubtle).toBe('#F3F4F6');
+      expect(THEME.colors.background).toBe('#FFFFFF');
+      expect(THEME.colors.surface).toBe('#FFFFFF');
+      expect(THEME.colors.surfaceMuted).toBe('#F7F7F7');
+      expect(THEME.colors.text).toBe('#171717');
+      expect(THEME.colors.textMuted).toBe('#666666');
+      expect(THEME.colors.border).toBe('#E5E5E5');
+      expect(THEME.colors.borderStrong).toBe('#D4D4D4');
+      expect(THEME.colors.ring).toBe('#171717');
     });
 
-    it('verifies index.css defines Deep Purple tokens in :root for universal storefront and admin application', () => {
+    it('verifies index.css defines Light Luxury tokens in :root for universal storefront and admin application', () => {
       const cssContent = fs.readFileSync(path.join(clientDir, 'src', 'index.css'), 'utf-8');
 
-      expect(cssContent).toContain('--axdoro-bg: #0D0D0D;');
-      expect(cssContent).toContain('--axdoro-surface: #171224;');
-      expect(cssContent).toContain('--axdoro-surface-muted: #221B36;');
-      expect(cssContent).toContain('--axdoro-text: #FAFAFA;');
-      expect(cssContent).toContain('--axdoro-text-muted: #C5B8EA;');
-      expect(cssContent).toContain('--axdoro-charcoal: #FAFAFA;');
-      expect(cssContent).toContain('--axdoro-purple: #433075;');
-      expect(cssContent).toContain('--axdoro-accent: #A58CF4;');
-      expect(cssContent).toContain('--axdoro-accent-muted: #BBA6F7;');
-      expect(cssContent).toContain('--axdoro-accent-subtle: #261A42;');
-      expect(cssContent).toContain('--axdoro-border: #3E2C6A;');
-      expect(cssContent).toContain('--axdoro-border-strong: #6D52AB;');
-      expect(cssContent).toContain('--axdoro-ring: #A58CF4;');
+      expect(cssContent).toContain('--axdoro-bg: #FFFFFF;');
+      expect(cssContent).toContain('--axdoro-surface: #FFFFFF;');
+      expect(cssContent).toContain('--axdoro-surface-muted: #F7F7F7;');
+      expect(cssContent).toContain('--axdoro-text: #171717;');
+      expect(cssContent).toContain('--axdoro-text-muted: #666666;');
+      expect(cssContent).toContain('--axdoro-charcoal: #171717;');
+      expect(cssContent).toContain('--axdoro-purple: #171717;');
+      expect(cssContent).toContain('--axdoro-accent: #171717;');
+      expect(cssContent).toContain('--axdoro-accent-muted: #525252;');
+      expect(cssContent).toContain('--axdoro-accent-subtle: #F3F4F6;');
+      expect(cssContent).toContain('--axdoro-border: #E5E5E5;');
+      expect(cssContent).toContain('--axdoro-border-strong: #D4D4D4;');
+      expect(cssContent).toContain('--axdoro-ring: #171717;');
     });
 
     it('verifies action buttons and dark canvas hover adaptations in index.css', () => {
       const cssContent = fs.readFileSync(path.join(clientDir, 'src', 'index.css'), 'utf-8');
 
       expect(cssContent).toContain('.bg-axdoro-charcoal {');
-      expect(cssContent).toContain('background-color: #433075;');
+      expect(cssContent).toContain('background-color: #171717;');
       expect(cssContent).toContain('.bg-axdoro-charcoal:hover {');
-      expect(cssContent).toContain('background-color: #553E92;');
+      expect(cssContent).toContain('background-color: #2E2E2E;');
       expect(cssContent).toContain('.hover\\:text-black:hover {');
       expect(cssContent).toContain('color: var(--axdoro-accent) !important;');
     });
@@ -114,7 +116,7 @@ describe('AXDORO Permanent Theme — Deep Purple Verification', () => {
       expect(htmlContent).not.toContain('axdoro_theme_preview');
       expect(htmlContent).not.toContain('midnight-neon');
       expect(htmlContent).not.toContain('ice-white');
-      expect(htmlContent).toContain('<meta name="theme-color" content="#0D0D0D" />');
+      expect(htmlContent).toContain('<meta name="theme-color" content="#FFFFFF" />');
     });
 
     it('confirms index.css does not contain Theme B or Theme C schemas or the old admin isolation guard', () => {
@@ -137,25 +139,25 @@ describe('AXDORO Permanent Theme — Deep Purple Verification', () => {
         path.join(clientDir, 'src', 'components', 'Navbar.tsx'),
         'utf-8'
       );
-      expect(navbarContent).toContain('src="/logo-transparent.png"');
+      expect(navbarContent).toContain('src="/logo-dark.png"');
 
       const footerContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'Footer.tsx'),
         'utf-8'
       );
-      expect(footerContent).toContain('src="/logo-transparent.png"');
+      expect(footerContent).toContain('src="/logo-dark.png"');
 
       const adminLoginContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'admin', 'AdminLoginView.tsx'),
         'utf-8'
       );
-      expect(adminLoginContent).toContain('src="/logo-transparent.png"');
+      expect(adminLoginContent).toContain('src="/logo-dark.png"');
 
       const adminSidebarContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'admin', 'AdminSidebar.tsx'),
         'utf-8'
       );
-      expect(adminSidebarContent).toContain('src="/logo-transparent.png"');
+      expect(adminSidebarContent).toContain('src="/logo-dark.png"');
     });
 
     it('verifies product photography integrity rules remain strictly enforced', () => {
@@ -168,39 +170,29 @@ describe('AXDORO Permanent Theme — Deep Purple Verification', () => {
   });
 
   describe('WCAG 2.2 Color Contrast Compliance (AA & AAA)', () => {
-    it('validates Soft White (#FAFAFA) on Jet Black (#0D0D0D) canvas exceeds AA (4.5:1) and AAA (7.0:1)', () => {
-      const ratio = contrastRatio('#FAFAFA', '#0D0D0D');
-      expect(ratio).toBeGreaterThanOrEqual(18.0); // 18.65:1 (AAA passes)
+    it('validates Near-Black (#171717) on White (#FFFFFF) canvas exceeds AA (4.5:1) and AAA (7.0:1)', () => {
+      const ratio = contrastRatio('#171717', '#FFFFFF');
+      expect(ratio).toBeGreaterThanOrEqual(17.0); // 17.93:1 (AAA passes)
     });
 
-    it('validates Soft White (#FAFAFA) on Deep Purple (#433075) button exceeds AA (4.5:1) and AAA (7.0:1)', () => {
-      const ratio = contrastRatio('#FAFAFA', '#433075');
-      expect(ratio).toBeGreaterThanOrEqual(10.0); // 10.39:1 (AAA passes)
+    it('validates White text (#FFFFFF) on Charcoal/Black (#171717) button exceeds AA (4.5:1) and AAA (7.0:1)', () => {
+      const ratio = contrastRatio('#FFFFFF', '#171717');
+      expect(ratio).toBeGreaterThanOrEqual(17.0); // 17.93:1 (AAA passes)
     });
 
-    it('validates Lavender accent (#A58CF4) on Jet Black (#0D0D0D) canvas exceeds AA (4.5:1) and AAA (7.0:1)', () => {
-      const ratio = contrastRatio('#A58CF4', '#0D0D0D');
-      expect(ratio).toBeGreaterThanOrEqual(7.0); // 7.11:1 (AAA passes)
+    it('validates Neutral Grey text (#666666) on White (#FFFFFF) canvas exceeds AA (4.5:1)', () => {
+      const ratio = contrastRatio('#666666', '#FFFFFF');
+      expect(ratio).toBeGreaterThanOrEqual(5.5); // 5.74:1 (AA passes)
     });
 
-    it('validates Lavender accent (#A58CF4) on Deep Purple surface (#171224) exceeds AA (4.5:1)', () => {
-      const ratio = contrastRatio('#A58CF4', '#171224');
-      expect(ratio).toBeGreaterThanOrEqual(4.5); // 6.44:1 (AA passes)
+    it('validates Neutral Accent Muted (#525252) on White (#FFFFFF) canvas exceeds AA (4.5:1) and AAA (7.0:1)', () => {
+      const ratio = contrastRatio('#525252', '#FFFFFF');
+      expect(ratio).toBeGreaterThanOrEqual(7.5); // 7.81:1 (AAA passes)
     });
 
-    it('validates Lavender tint text (#C5B8EA) on Jet Black (#0D0D0D) canvas exceeds AA (4.5:1) and AAA (7.0:1)', () => {
-      const ratio = contrastRatio('#C5B8EA', '#0D0D0D');
-      expect(ratio).toBeGreaterThanOrEqual(10.0); // 10.57:1 (passes AAA 7.0:1)
-    });
-
-    it('validates focus ring (#A58CF4) against Jet Black (#0D0D0D) exceeds WCAG 2.2 non-text contrast (3.0:1)', () => {
-      const ratio = contrastRatio('#A58CF4', '#0D0D0D');
-      expect(ratio).toBeGreaterThanOrEqual(3.0); // 7.11:1 (passes 3:1)
-    });
-
-    it('validates form control boundary (#6D52AB) against Jet Black (#0D0D0D) exceeds WCAG 2.2 non-text contrast (3.0:1)', () => {
-      const ratio = contrastRatio('#6D52AB', '#0D0D0D');
-      expect(ratio).toBeGreaterThanOrEqual(3.0); // 3.25:1 (passes 3:1)
+    it('validates focus ring (#171717) against White (#FFFFFF) canvas exceeds WCAG 2.2 non-text contrast (3.0:1)', () => {
+      const ratio = contrastRatio('#171717', '#FFFFFF');
+      expect(ratio).toBeGreaterThanOrEqual(3.0); // 17.93:1 (passes 3:1)
     });
   });
 });

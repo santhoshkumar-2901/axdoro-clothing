@@ -73,7 +73,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <img
-                src="/logo-transparent.png"
+                src="/logo-dark.png"
                 alt="AXDORO"
                 width={128}
                 height={32}
