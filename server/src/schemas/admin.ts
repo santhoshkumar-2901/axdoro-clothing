@@ -216,8 +216,46 @@ export const productCreateSchema = z.object({
   isFeatured: z.boolean().default(false),
   isNewArrival: z.boolean().default(false),
   fabricSpec: z.string().trim().max(50).optional().nullable(),
+  stagingSessionId: z.string().uuid('Invalid staging session ID').optional().nullable(),
   variants: z.array(productVariantSchema).min(1, 'At least one variant is required'),
   images: z.array(productImageSchema).default([]),
+});
+
+export const productUpdateVariantItemSchema = z.object({
+  id: z.string().uuid('Invalid variant ID').optional(),
+  size: z.string().trim().min(1, 'Size is required').max(20, 'Size must not exceed 20 characters'),
+  color: z.string().trim().min(1, 'Color is required').max(50, 'Color must not exceed 50 characters'),
+  colorHex: z.string().trim().regex(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Invalid hex color code').optional().nullable(),
+  sku: z.string().trim().min(1).max(100).optional(),
+  pricePaise: z.coerce.number().int().min(0, 'Price must be non-negative'),
+  comparisonPricePaise: z.coerce.number().int().min(0, 'Comparison price must be non-negative').optional().nullable(),
+  stockQuantity: z.coerce.number().int().min(0, 'Stock quantity must be non-negative'),
+  isActive: z.boolean().default(true),
+});
+
+export const productUpdateImageItemSchema = z.object({
+  id: z.string().uuid('Invalid image ID').optional(),
+  imageUrl: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid image URL',
+        });
+      }
+    }),
+  publicId: z.string().trim().max(255).optional().nullable(),
+  altText: z.string().trim().max(255).optional().nullable(),
+  displayOrder: z.coerce.number().int().min(0, 'displayOrder cannot be negative').default(0),
+  isPrimary: z.boolean().default(false),
+  width: z.coerce.number().int().positive().optional().nullable(),
+  height: z.coerce.number().int().positive().optional().nullable(),
+  format: z.string().trim().max(20).optional().nullable(),
+  bytes: z.coerce.number().int().positive().optional().nullable(),
+  color: z.string().trim().max(50).optional().nullable(),
 });
 
 export const productUpdateSchema = z.object({
@@ -235,6 +273,10 @@ export const productUpdateSchema = z.object({
   isFeatured: z.boolean().optional(),
   isNewArrival: z.boolean().optional(),
   fabricSpec: z.string().trim().max(50).optional().nullable(),
+  expectedUpdatedAt: z.string().optional().nullable(),
+  stagingSessionId: z.string().uuid('Invalid staging session ID').optional().nullable(),
+  variants: z.array(productUpdateVariantItemSchema).optional(),
+  images: z.array(productUpdateImageItemSchema).optional(),
 });
 
 export const stockAdjustmentSchema = z

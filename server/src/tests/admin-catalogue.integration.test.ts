@@ -1738,4 +1738,493 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
       expect(Number(enqCount.rows[0].count)).toBe(0);
     });
   });
+
+  // =========================================================================
+  // Phase 2: Atomic Product Edit & Safeguards Integration Tests
+  // =========================================================================
+  describe('Phase 2: Atomic Product Edit & Mandatory Safeguards', () => {
+    let editCatId: string;
+
+    beforeEach(async () => {
+      const catRes = await testPool.query(
+        `INSERT INTO categories (name, slug, description, display_order)
+         VALUES ('Edit Category', 'edit-cat-${Date.now()}', 'Category for edit tests', 1)
+         RETURNING id;`
+      );
+      editCatId = catRes.rows[0].id;
+    });
+
+    it('Scenario 1: Atomic single-endpoint update preserves variant IDs, SKUs, and updates stock & price in-place', async () => {
+      // 1. Create initial product with 2 variants
+      const createRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Classic Linen Shirt',
+          slug: `classic-linen-shirt-${Date.now()}`,
+          description: 'Initial description',
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Navy', sku: `LINEN-M-NVY-${Date.now()}`, pricePaise: 79900, stockQuantity: 20 },
+            { size: 'L', color: 'Navy', sku: `LINEN-L-NVY-${Date.now()}`, pricePaise: 79900, stockQuantity: 15 },
+          ],
+        });
+      expect(createRes.status).toBe(201);
+      const prodId = createRes.body.product.id;
+      const originalVarM = createRes.body.product.variants.find((v: any) => v.size === 'M');
+      const originalVarL = createRes.body.product.variants.find((v: any) => v.size === 'L');
+      expect(originalVarM).toBeDefined();
+      expect(originalVarL).toBeDefined();
+
+      // 2. Perform atomic edit: update name, modify var M in-place, and add a brand new variant
+      const editRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Updated Classic Linen Shirt',
+          description: 'Updated premium description',
+          status: 'published',
+          variants: [
+            {
+              id: originalVarM.id,
+              size: 'M',
+              color: 'Navy',
+              sku: originalVarM.sku,
+              pricePaise: 89900, // Updated price
+              stockQuantity: 45, // Updated stock
+              isActive: true,
+            },
+            {
+              // Genuinely new variant without id
+              size: 'XL',
+              color: 'Navy',
+              pricePaise: 89900,
+              stockQuantity: 30,
+              isActive: true,
+            },
+          ],
+        });
+      expect(editRes.status).toBe(200);
+
+      // 3. Verify variant M ID and SKU are strictly preserved, while price and stock were updated
+      const updatedVarRes = await testPool.query(
+        `SELECT id, sku, size, color, price_paise, stock_quantity, is_active FROM product_variants WHERE product_id = $1 ORDER BY size;`,
+        [prodId]
+      );
+      const var1 = updatedVarRes.rows.find((r) => r.id === originalVarM.id);
+      expect(var1).toBeDefined();
+      expect(var1!.sku).toBe(originalVarM.sku); // Safeguard 8: SKU preserved
+      expect(Number(var1!.price_paise)).toBe(89900);
+      expect(var1!.stock_quantity).toBe(45);
+      expect(var1!.is_active).toBe(true);
+
+      // 4. Verify variant L (omitted from payload) was soft-deactivated (is_active = false)
+      const var2 = updatedVarRes.rows.find((r) => r.id === originalVarL.id);
+      expect(var2).toBeDefined();
+      expect(var2!.is_active).toBe(false); // Safeguard 8: soft-deactivated
+      expect(var2!.sku).toBe(originalVarL.sku); // SKU preserved
+
+      // 5. Verify the new XL variant was inserted with a unique collision-resistant SKU
+      const newVar = updatedVarRes.rows.find((r) => r.size === 'XL');
+      expect(newVar).toBeDefined();
+      expect(newVar!.sku).toBeTruthy();
+      expect(newVar!.sku).not.toBe(originalVarM.sku);
+      expect(newVar!.sku).not.toBe(originalVarL.sku);
+    });
+
+    it('Scenario 2: Soft-deactivates removed variants (is_active = false) preserving historical order references', async () => {
+      // 1. Create product with variant
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Historic Oxford Shirt',
+          slug: `historic-oxford-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'White', sku: `HIST-OXF-M-${Date.now()}`, pricePaise: 99900, stockQuantity: 50 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const variantId = prodRes.body.product.variants[0].id;
+
+      // 2. Place an order referencing this variant
+      const order = await createOrder({
+        customerName: 'Historical Buyer',
+        customerEmail: 'buyer@historical.test',
+        customerPhone: '9876543210',
+        shippingAddressLine1: '456 Heritage Way',
+        shippingCity: 'Mumbai',
+        shippingState: 'Maharashtra',
+        shippingPincode: '400001',
+        items: [
+          {
+            variantId,
+            quantity: 2,
+            pricePaise: 99900,
+          },
+        ],
+      });
+      expect(order).toBeDefined();
+
+      // Verify order_items row exists
+      const itemBefore = await testPool.query('SELECT * FROM order_items WHERE variant_id = $1;', [variantId]);
+      expect(itemBefore.rows).toHaveLength(1);
+
+      // 3. Edit product omitting the ordered variant (admin removed it from color group)
+      const editRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Historic Oxford Shirt - Revised',
+          variants: [
+            // Only adding a new size, removing M
+            { size: 'L', color: 'White', pricePaise: 99900, stockQuantity: 25, isActive: true },
+          ],
+        });
+      expect(editRes.status).toBe(200);
+
+      // 4. Verify original variant still exists in DB, soft-deactivated with is_active = false
+      const varAfter = await testPool.query('SELECT id, is_active FROM product_variants WHERE id = $1;', [variantId]);
+      expect(varAfter.rows).toHaveLength(1);
+      expect(varAfter.rows[0].is_active).toBe(false);
+
+      // 5. Verify historical order_items reference remains 100% intact!
+      const itemAfter = await testPool.query('SELECT * FROM order_items WHERE variant_id = $1;', [variantId]);
+      expect(itemAfter.rows).toHaveLength(1);
+      expect(itemAfter.rows[0].order_id).toBe(order.id);
+    });
+
+    it('Scenario 3: Safeguard 9: Strict Optimistic Concurrency Control with exact millisecond precision', async () => {
+      // 1. Create product
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Concurrency Product',
+          slug: `concurrency-prod-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Grey', sku: `CONC-GRY-${Date.now()}`, pricePaise: 69900, stockQuantity: 10 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const initialVar = prodRes.body.product.variants[0];
+
+      // Fetch the exact persisted product details (including updatedAt)
+      const getRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(getRes.status).toBe(200);
+      const originalUpdatedAt = getRes.body.data.updatedAt || getRes.body.data.updated_at;
+      expect(originalUpdatedAt).toBeTruthy();
+      const originalTime = new Date(originalUpdatedAt).getTime();
+
+      // Test 1: A stale timestamp older by exactly 1 millisecond is rejected with HTTP 409
+      const staleBy1Ms = new Date(originalTime - 1).toISOString();
+      const res1Ms = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Stale by 1ms Update',
+          expectedUpdatedAt: staleBy1Ms,
+          variants: [{ id: initialVar.id, size: 'M', color: 'Grey', pricePaise: 69900, stockQuantity: 99, isActive: true }],
+        });
+      expect(res1Ms.status).toBe(409);
+      expect(res1Ms.body.error).toContain('CONCURRENT_MUTATION_CONFLICT');
+
+      // Test 2: A stale timestamp older by less than 1,000 milliseconds (500ms) is rejected with HTTP 409
+      const staleBy500Ms = new Date(originalTime - 500).toISOString();
+      const res500Ms = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Stale by 500ms Update',
+          expectedUpdatedAt: staleBy500Ms,
+          variants: [{ id: initialVar.id, size: 'M', color: 'Grey', pricePaise: 69900, stockQuantity: 99, isActive: true }],
+        });
+      expect(res500Ms.status).toBe(409);
+      expect(res500Ms.body.error).toContain('CONCURRENT_MUTATION_CONFLICT');
+
+      // Test 3: Missing or null expectedUpdatedAt in Edit Product update path is rejected with HTTP 409
+      const resNullExpected = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Missing expectedUpdatedAt Update',
+          expectedUpdatedAt: null,
+          variants: [{ id: initialVar.id, size: 'M', color: 'Grey', pricePaise: 69900, stockQuantity: 99, isActive: true }],
+        });
+      expect(resNullExpected.status).toBe(409);
+      expect(resNullExpected.body.error).toContain('CONCURRENT_MUTATION_CONFLICT');
+
+      // Verify that the rejected updates left product metadata, variants, and stock unchanged
+      const verifyUnchangedRes = await testPool.query(
+        `SELECT name FROM products WHERE id = $1;`,
+        [prodId]
+      );
+      expect(verifyUnchangedRes.rows[0].name).toBe('Concurrency Product');
+      const verifyVarUnchanged = await testPool.query(
+        `SELECT stock_quantity FROM product_variants WHERE id = $1;`,
+        [initialVar.id]
+      );
+      expect(verifyVarUnchanged.rows[0].stock_quantity).toBe(10);
+
+      // Test 4: An unchanged expectedUpdatedAt succeeds
+      const validEditRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'First Legitimate Update',
+          expectedUpdatedAt: originalUpdatedAt,
+          variants: [{ id: initialVar.id, size: 'M', color: 'Grey', pricePaise: 69900, stockQuantity: 15, isActive: true }],
+        });
+      expect(validEditRes.status).toBe(200);
+      expect(validEditRes.body.product.name).toBe('First Legitimate Update');
+      expect(validEditRes.body.product.variants[0].stockQuantity).toBe(15);
+
+      // Test 5: Two sequential updates using the same original timestamp cannot both succeed
+      // A second administrator attempting to save with the original timestamp is rejected with HTTP 409
+      const secondConcurrentRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Second Overwriting Update',
+          expectedUpdatedAt: originalUpdatedAt, // Stale! Still using original timestamp
+          variants: [{ id: initialVar.id, size: 'M', color: 'Grey', pricePaise: 69900, stockQuantity: 30, isActive: true }],
+        });
+      expect(secondConcurrentRes.status).toBe(409);
+      expect(secondConcurrentRes.body.error).toContain('CONCURRENT_MUTATION_CONFLICT');
+
+      // Test 6: Verify rejected second update left product metadata, variants, and audit logs intact
+      const finalProdRes = await request(app)
+        .get(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(finalProdRes.body.data.name).toBe('First Legitimate Update');
+      expect(finalProdRes.body.data.variants[0].stockQuantity).toBe(15); // NOT 30!
+    });
+
+    it('Scenario 4: Rollback on failure: entire transaction rolls back if variant constraints are violated', async () => {
+      // 1. Create product
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Atomic Rollback Product',
+          slug: `atomic-rollback-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Beige', sku: `ROLLBACK-M-${Date.now()}`, pricePaise: 89900, stockQuantity: 10 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+      const prodId = prodRes.body.product.id;
+      const origVar = prodRes.body.product.variants[0];
+
+      // 2. Submit edit with comparisonPricePaise < pricePaise (constraint violation)
+      const invalidEditRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Illegal Name Change',
+          variants: [
+            {
+              id: origVar.id,
+              size: 'M',
+              color: 'Beige',
+              pricePaise: 89900,
+              comparisonPricePaise: 49900, // Invalid: comparison price < selling price!
+              stockQuantity: 99,
+              isActive: true,
+            },
+          ],
+        });
+
+      expect(invalidEditRes.status).toBe(400);
+
+      // 3. Verify product name, stock, and price were NOT modified (transaction rolled back completely)
+      const checkRes = await testPool.query(
+        `SELECT p.name, pv.stock_quantity, pv.price_paise
+         FROM products p
+         JOIN product_variants pv ON pv.product_id = p.id
+         WHERE p.id = $1;`,
+        [prodId]
+      );
+      expect(checkRes.rows[0].name).toBe('Atomic Rollback Product');
+      expect(checkRes.rows[0].stock_quantity).toBe(10);
+      expect(Number(checkRes.rows[0].price_paise)).toBe(89900);
+    });
+
+    it('Scenario 5: Safeguards 1 & 3: Rejects foreign variant IDs and image IDs with 400 Security violation', async () => {
+      // 1. Create Product A and Product B
+      const prodARes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Product Alpha',
+          slug: `prod-alpha-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Black', sku: `ALPHA-M-${Date.now()}`, pricePaise: 59900, stockQuantity: 10 },
+          ],
+        });
+      const prodBRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Product Beta',
+          slug: `prod-beta-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Black', sku: `BETA-M-${Date.now()}`, pricePaise: 59900, stockQuantity: 10 },
+          ],
+        });
+      const prodAId = prodARes.body.product.id;
+      const prodBVariantId = prodBRes.body.product.variants[0].id;
+
+      // 2. Attempt to update Product A with Product B's variant ID
+      const hackRes = await request(app)
+        .put(`/api/admin/products/${prodAId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Hijacked Product Alpha',
+          variants: [
+            {
+              id: prodBVariantId, // Foreign variant ID!
+              size: 'M',
+              color: 'Black',
+              pricePaise: 59900,
+              stockQuantity: 10,
+              isActive: true,
+            },
+          ],
+        });
+
+      expect(hackRes.status).toBe(400);
+      expect(hackRes.body.error).toContain('Security violation');
+    });
+
+    it('Scenario 6: Safeguards 5 & 6: Zero image products supported, rejects multiple primary images', async () => {
+      // 1. Create product with zero images
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Zero Image Product',
+          slug: `zero-img-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'S', color: 'White', sku: `ZERO-IMG-${Date.now()}`, pricePaise: 49900, stockQuantity: 5 },
+          ],
+        });
+      const prodId = prodRes.body.product.id;
+
+      // 2. Update with zero images: must succeed (Safeguard 6)
+      const zeroImgEdit = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Zero Image Product - Updated',
+          images: [],
+        });
+      expect(zeroImgEdit.status).toBe(200);
+
+      // 3. Update with multiple primary images: must fail (Safeguard 5)
+      const multiPrimaryEdit = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          images: [
+            {
+              imageUrl: 'https://images.unsplash.com/photo-1',
+              displayOrder: 0,
+              isPrimary: true,
+            },
+            {
+              imageUrl: 'https://images.unsplash.com/photo-2',
+              displayOrder: 1,
+              isPrimary: true, // Duplicate primary!
+            },
+          ],
+        });
+      expect(multiPrimaryEdit.status).toBe(400);
+      expect(multiPrimaryEdit.body.error).toContain('Only one image can be designated as the primary image');
+    });
+
+    it('Scenario 7: Safeguard 4: Validates newly staged image belongs to authenticated admin active staging session', async () => {
+      // 1. Create product
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Staged Image Edit Product',
+          slug: `staged-img-edit-${Date.now()}`,
+          categoryId: editCatId,
+          status: 'published',
+          variants: [
+            { size: 'M', color: 'Red', sku: `STAGED-M-${Date.now()}`, pricePaise: 69900, stockQuantity: 10 },
+          ],
+        });
+      const prodId = prodRes.body.product.id;
+
+      // 2. Create staging session
+      const sessRes = await request(app)
+        .post('/api/admin/products/staging-sessions')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(sessRes.status).toBe(201);
+      const sessionId = sessRes.body.data.sessionId;
+
+      // Register an asset for this session
+      const assetPublicId = `axdoro/products/staged/edit_test_${Date.now()}`;
+      await testPool.query(
+        `INSERT INTO product_staged_assets (session_id, public_id, claim_status)
+         VALUES ($1, $2, 'UNCLAIMED');`,
+        [sessionId, assetPublicId]
+      );
+
+      // 3. Edit product attaching this staged asset
+      const editRes = await request(app)
+        .put(`/api/admin/products/${prodId}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          stagingSessionId: sessionId,
+          images: [
+            {
+              imageUrl: `https://res.cloudinary.com/test/image/upload/${assetPublicId}.jpg`,
+              publicId: assetPublicId,
+              altText: 'Staged Red Shirt',
+              displayOrder: 0,
+              isPrimary: true,
+              color: 'Red',
+            },
+          ],
+        });
+      expect(editRes.status).toBe(200);
+
+      // 4. Verify session transitioned to COMMITTED atomically
+      const sessCheck = await testPool.query(
+        `SELECT status FROM product_staging_sessions WHERE id = $1;`,
+        [sessionId]
+      );
+      expect(sessCheck.rows[0].status).toBe('COMMITTED');
+
+      // 5. Verify image was registered in product_images
+      const imgCheck = await testPool.query(
+        `SELECT id, public_id, is_primary FROM product_images WHERE product_id = $1;`,
+        [prodId]
+      );
+      expect(imgCheck.rows).toHaveLength(1);
+      expect(imgCheck.rows[0].public_id).toBe(assetPublicId);
+      expect(imgCheck.rows[0].is_primary).toBe(true);
+    });
+  });
 });

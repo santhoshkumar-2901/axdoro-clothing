@@ -5,6 +5,7 @@ import { requireAdmin } from '../../middleware/adminAuth.js';
 import {
   processCloudinaryCleanupQueue,
   reconcileCloudinaryPendingTags,
+  reconcileStagedProductUploads,
 } from '../../services/cloudinary-cleanup.service.js';
 
 export const adminMaintenanceRouter = Router();
@@ -43,12 +44,14 @@ const handleCleanup = async (_req: Request, res: Response, next: NextFunction) =
   try {
     const queueResult = await processCloudinaryCleanupQueue(20);
     const reconcileResult = await reconcileCloudinaryPendingTags();
+    const stagedProductResult = await reconcileStagedProductUploads();
 
     res.json({
       status: 'success',
       data: {
         queue: queueResult,
         reconciliation: reconcileResult,
+        stagedProducts: stagedProductResult,
       },
     });
   } catch (err) {

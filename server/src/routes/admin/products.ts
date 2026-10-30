@@ -30,6 +30,12 @@ import {
   generateUploadSignature,
   isCloudinaryConfigured,
 } from '../../services/cloudinary.service.js';
+import {
+  createStagingSession,
+  heartbeatStagingSession,
+  abandonStagingSession,
+  preRegisterStagedAsset,
+} from '../../services/product-staging.service.js';
 
 export const adminProductsRouter = Router();
 
@@ -110,11 +116,41 @@ adminProductsRouter.post('/', async (req: Request, res: Response, next: NextFunc
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('duplicate key value') || msg.includes('chk_product_slug')) {
+    if ((err as any)?.statusCode) {
+      res.status((err as any).statusCode).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
+    if (
+      msg.includes('staging session') ||
+      msg.includes('claimed for deletion') ||
+      msg.includes('does not belong to this staging session')
+    ) {
+      const statusCode = msg.includes('Access denied') ? 403 : msg.includes('expired') ? 410 : 400;
+      res.status(statusCode).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
+    if (
+      msg.includes('duplicate key value') ||
+      msg.includes('chk_product_slug') ||
+      msg.includes('product_variants_sku_key') ||
+      msg.includes('sku')
+    ) {
+      const isSkuConflict = msg.includes('product_variants_sku_key') || msg.includes('sku');
+      const conflictMsg = isSkuConflict
+        ? 'A product variant with this SKU already exists in the catalogue. Please adjust the slug or color name to ensure uniqueness.'
+        : 'A product with this slug already exists in the catalogue.';
       res.status(409).json({
         status: 'error',
-        error: 'A product with this slug or SKU already exists',
-        message: 'A product with this slug or SKU already exists',
+        error: conflictMsg,
+        message: conflictMsg,
       });
       return;
     }
@@ -144,7 +180,49 @@ adminProductsRouter.put('/:id', async (req: Request, res: Response, next: NextFu
       data: updated,
       product: updated,
     });
-  } catch (err) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if ((err as any)?.statusCode) {
+      res.status((err as any).statusCode).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
+    if (
+      msg.includes('staging session') ||
+      msg.includes('claimed for deletion') ||
+      msg.includes('does not belong to this staging session')
+    ) {
+      const statusCode = msg.includes('Access denied') ? 403 : msg.includes('expired') ? 410 : 400;
+      res.status(statusCode).json({
+        status: 'error',
+        error: msg,
+        message: msg,
+      });
+      return;
+    }
+    if (
+      msg.includes('duplicate key value') ||
+      msg.includes('chk_product_slug') ||
+      msg.includes('product_variants_sku_key') ||
+      msg.includes('uq_product_variant_size_color')
+    ) {
+      const isSkuConflict = msg.includes('product_variants_sku_key');
+      const isVariantComboConflict = msg.includes('uq_product_variant_size_color');
+      const conflictMsg = isSkuConflict
+        ? 'A product variant with this SKU already exists in the catalogue. Please adjust the slug or color name to ensure uniqueness.'
+        : isVariantComboConflict
+        ? 'A product variant with this size and color combination already exists for this product.'
+        : 'A product with this slug already exists in the catalogue.';
+      res.status(409).json({
+        status: 'error',
+        error: conflictMsg,
+        message: conflictMsg,
+      });
+      return;
+    }
     next(err);
   }
 });
@@ -322,8 +400,112 @@ adminProductsRouter.put('/:id/variants/:variantId', async (req: Request, res: Re
 });
 
 // -------------------------------------------------------------
+// Product Staging Session Routes
+// -------------------------------------------------------------
+
+// POST /api/admin/products/staging-sessions — Create a new active staging session
+adminProductsRouter.post('/staging-sessions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await createStagingSession(req.admin!.id);
+    res.status(201).json({
+      status: 'success',
+      data: {
+        sessionId: result.id,
+        expiresAt: result.expiresAt,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/admin/products/staging-sessions/:id/heartbeat — Extend active staging session by 2 hours
+adminProductsRouter.post('/staging-sessions/:id/heartbeat', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await heartbeatStagingSession(req.params.id, req.admin!.id);
+    res.json({
+      status: 'success',
+      data: {
+        sessionId: result.id,
+        expiresAt: result.expiresAt,
+      },
+    });
+  } catch (err: unknown) {
+    const statusCode = (err as any)?.statusCode || 500;
+    res.status(statusCode).json({
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+// POST /api/admin/products/staging-sessions/:id/abandon — Mark session abandoned when user cancels
+adminProductsRouter.post('/staging-sessions/:id/abandon', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await abandonStagingSession(req.params.id, req.admin!.id);
+    res.json({
+      status: 'success',
+      message: 'Staging session marked abandoned',
+    });
+  } catch (err: unknown) {
+    const statusCode = (err as any)?.statusCode || 500;
+    res.status(statusCode).json({
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+// -------------------------------------------------------------
 // Product Image Management Routes
 // -------------------------------------------------------------
+
+// POST /api/admin/products/upload-signature — Staged Cloudinary upload params for new products
+adminProductsRouter.post('/upload-signature', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isCloudinaryConfigured()) {
+      res.status(503).json({
+        status: 'error',
+        code: 'CLOUDINARY_NOT_CONFIGURED',
+        error: 'Cloudinary credentials are not configured on this server',
+        message: 'Cloudinary credentials (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET) must be set in server environment variables.',
+      });
+      return;
+    }
+
+    const sessionId = (req.body?.sessionId || req.query?.sessionId) as string | undefined;
+    if (!sessionId) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Active staging session ID is required for product staged uploads',
+        message: 'Active staging session ID is required for product staged uploads',
+      });
+      return;
+    }
+
+    const config = generateUploadSignature({
+      folder: 'axdoro/products/staged',
+    });
+
+    // Pre-register publicId against active staging session before returning signature
+    await preRegisterStagedAsset(sessionId, req.admin!.id, config.publicId);
+
+    res.json({
+      status: 'success',
+      data: config,
+      ...config,
+    });
+  } catch (err: unknown) {
+    const statusCode = (err as any)?.statusCode || 500;
+    res.status(statusCode).json({
+      status: 'error',
+      error: err instanceof Error ? err.message : String(err),
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
 
 // POST /api/admin/products/:id/images/signature
 adminProductsRouter.post('/:id/images/signature', async (req: Request, res: Response, next: NextFunction) => {

@@ -301,8 +301,35 @@ export interface CreateProductPayload {
   isFeatured: boolean;
   isNewArrival: boolean;
   fabricSpec?: string | null;
+  stagingSessionId?: string | null;
   variants: CreateProductVariantPayload[];
   images?: CreateProductImagePayload[];
+}
+
+export interface UpdateProductVariantItemPayload {
+  id?: string;
+  size: string;
+  color: string;
+  colorHex?: string | null;
+  sku?: string;
+  pricePaise: number;
+  comparisonPricePaise?: number | null;
+  stockQuantity: number;
+  isActive: boolean;
+}
+
+export interface UpdateProductImageItemPayload {
+  id?: string;
+  imageUrl: string;
+  publicId?: string | null;
+  altText?: string | null;
+  displayOrder: number;
+  isPrimary: boolean;
+  width?: number | null;
+  height?: number | null;
+  format?: string | null;
+  bytes?: number | null;
+  color?: string | null;
 }
 
 export interface UpdateProductPayload {
@@ -314,6 +341,10 @@ export interface UpdateProductPayload {
   isFeatured?: boolean;
   isNewArrival?: boolean;
   fabricSpec?: string | null;
+  expectedUpdatedAt?: string | null;
+  stagingSessionId?: string | null;
+  variants?: UpdateProductVariantItemPayload[];
+  images?: UpdateProductImageItemPayload[];
 }
 
 export interface UpdateProductVariantPayload {
@@ -701,19 +732,73 @@ export async function adminGetProductDetails(id: string): Promise<AdminProductDe
   return json.data;
 }
 
-export async function adminGetUploadSignature(productId: string): Promise<CloudinarySignature> {
-  const res = await fetch(`/api/admin/products/${productId}/images/signature`, {
+export async function adminCreateStagingSession(): Promise<{ sessionId: string; expiresAt: string }> {
+  const res = await fetch('/api/admin/products/staging-sessions', {
     method: 'POST',
     headers: csrfHeaders(),
     credentials: 'include',
   });
   const json = await res.json();
   if (!res.ok) {
-    const err = new Error(json.message || 'Failed to generate image upload signature');
+    throw new Error(json.message || 'Failed to create product staging session');
+  }
+  return json.data;
+}
+
+export async function adminHeartbeatStagingSession(sessionId: string): Promise<{ sessionId: string; expiresAt: string }> {
+  const res = await fetch(`/api/admin/products/staging-sessions/${encodeURIComponent(sessionId)}/heartbeat`, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const err = new Error(json.message || 'Failed to heartbeat product staging session');
+    (err as any).status = res.status;
+    throw err;
+  }
+  return json.data;
+}
+
+export async function adminAbandonStagingSession(sessionId: string): Promise<void> {
+  try {
+    await fetch(`/api/admin/products/staging-sessions/${encodeURIComponent(sessionId)}/abandon`, {
+      method: 'POST',
+      headers: csrfHeaders(),
+      credentials: 'include',
+    });
+  } catch {
+    // Fire-and-forget: ignore network errors when abandoning on dialog close
+  }
+}
+
+export async function adminGetProductUploadSignature(
+  options?: string | { productId?: string; sessionId?: string }
+): Promise<CloudinarySignature> {
+  const productId = typeof options === 'string' ? options : options?.productId;
+  const sessionId = typeof options === 'object' ? options?.sessionId : undefined;
+
+  const endpoint = productId
+    ? `/api/admin/products/${productId}/images/signature`
+    : '/api/admin/products/upload-signature';
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: sessionId ? JSON.stringify({ sessionId }) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    const err = new Error(json.message || 'Failed to generate product image upload signature');
     (err as any).code = json.code;
     throw err;
   }
   return json.data;
+}
+
+export async function adminGetUploadSignature(productId: string): Promise<CloudinarySignature> {
+  return adminGetProductUploadSignature(productId);
 }
 
 export async function adminGetCategoryUploadSignature(categoryId?: string): Promise<CloudinarySignature> {

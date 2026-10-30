@@ -5,7 +5,14 @@ import {
   deleteCloudinaryAsset,
   tagCloudinaryAsset,
   listCloudinaryResourcesByTag,
+  listCloudinaryResourcesByPrefix,
 } from './cloudinary.service.js';
+import {
+  claimStagedAssetForDeletion,
+  markStagedAssetDeleted,
+  releaseStagedAssetClaim,
+  isAssetInActiveStagingSession,
+} from './product-staging.service.js';
 
 export interface CleanupJobRow {
   id: string;
@@ -79,6 +86,49 @@ export async function isAssetReferencedByActiveEnquiry(
 }
 
 /**
+ * Checks whether an asset's public_id is actively referenced by any product image in PostgreSQL.
+ * Guarantees that product catalogue images are never deleted by cleanup routines.
+ */
+export async function isAssetReferencedByProductImages(
+  publicId: string,
+  clientOrPool?: Pool | PoolClient | null
+): Promise<boolean> {
+  const sql = `SELECT id FROM product_images WHERE public_id = $1 LIMIT 1;`;
+  const res = clientOrPool
+    ? await clientOrPool.query(sql, [publicId])
+    : await query(sql, [publicId]);
+  return res.rows.length > 0;
+}
+
+/**
+ * Checks whether an asset's public_id is actively referenced by any category in PostgreSQL.
+ */
+export async function isAssetReferencedByCategory(
+  publicId: string,
+  clientOrPool?: Pool | PoolClient | null
+): Promise<boolean> {
+  const sql = `SELECT id FROM categories WHERE public_id = $1 LIMIT 1;`;
+  const res = clientOrPool
+    ? await clientOrPool.query(sql, [publicId])
+    : await query(sql, [publicId]);
+  return res.rows.length > 0;
+}
+
+/**
+ * Comprehensive safety check: verifies whether a public_id is actively referenced
+ * anywhere in the database (enquiries, product_images, or categories).
+ */
+export async function isAssetReferencedInDatabase(
+  publicId: string,
+  clientOrPool?: Pool | PoolClient | null
+): Promise<boolean> {
+  if (await isAssetReferencedByActiveEnquiry(publicId, clientOrPool)) return true;
+  if (await isAssetReferencedByProductImages(publicId, clientOrPool)) return true;
+  if (await isAssetReferencedByCategory(publicId, clientOrPool)) return true;
+  return false;
+}
+
+/**
  * Immediately attempts to process a single cleanup job post-commit.
  *
  * Requirements strictly enforced:
@@ -88,7 +138,7 @@ export async function isAssetReferencedByActiveEnquiry(
  * 4. The result is recorded in a separate short transaction.
  * 5. Every state update validates both job ID and the current claim_token.
  * 6. A stale worker cannot overwrite a newer worker's state.
- * 7. Active enquiry artwork cannot be deleted by cleanup or orphan reconciliation.
+ * 7. Active enquiry artwork and catalogue images cannot be deleted by cleanup or orphan reconciliation.
  */
 export async function processSingleCleanupJob(jobId: string): Promise<{
   success: boolean;
@@ -112,14 +162,14 @@ export async function processSingleCleanupJob(jobId: string): Promise<{
         return { status: job.status, job };
       }
 
-      // Safety Guard: verify that no active enquiry references this artwork asset
-      const isReferenced = await isAssetReferencedByActiveEnquiry(job.public_id, dbClient);
+      // Safety Guard: verify that no database record (enquiry, product image, category) references this asset
+      const isReferenced = await isAssetReferencedInDatabase(job.public_id, dbClient);
       if (isReferenced) {
         await dbClient.query(
           `UPDATE cloudinary_cleanup_jobs
            SET status = 'ABORTED',
                claim_token = NULL,
-               last_error = 'Asset actively referenced by existing enquiry. Deletion aborted for safety.',
+               last_error = 'Asset actively referenced in database. Deletion aborted for safety.',
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $1;`,
           [jobId]
@@ -277,13 +327,13 @@ export async function processCloudinaryCleanupQueue(batchSize: number = 10): Pro
   for (const job of claimedJobs) {
     const claimToken = job.claim_token;
     try {
-      const isReferenced = await isAssetReferencedByActiveEnquiry(job.public_id);
+      const isReferenced = await isAssetReferencedInDatabase(job.public_id);
       if (isReferenced) {
         await query(
           `UPDATE cloudinary_cleanup_jobs
            SET status = 'ABORTED',
                claim_token = NULL,
-               last_error = 'Asset actively referenced by existing enquiry. Deletion aborted for safety.',
+               last_error = 'Asset actively referenced in database. Deletion aborted for safety.',
                updated_at = CURRENT_TIMESTAMP
            WHERE id = $1 AND claim_token = $2;`,
           [job.id, claimToken]
@@ -566,4 +616,162 @@ export async function retryCleanupJobs(jobId?: string): Promise<number> {
      RETURNING id;`
   );
   return res.rowCount || 0;
+}
+
+/**
+ * Safely reconciles abandoned staged product uploads in `axdoro/products/staged`.
+ *
+ * Safety rules:
+ * - Assets younger than conservative retention threshold (minAgeMs, default 1 hour) are skipped
+ *   to protect active or in-progress product creation sessions.
+ * - Never deletes an asset referenced by product_images, categories, or enquiries.
+ * - Database query failures skip deletion fail-safe.
+ * - Deletes individual assets one-by-one; never performs broad folder deletion.
+ * - Bounded batch limit respects Cloudinary Admin API rate limits.
+ * - Idempotent and safe under concurrent execution.
+ */
+export async function reconcileStagedProductUploads(options?: {
+  minAgeMs?: number;
+  limit?: number;
+  maxPages?: number;
+  cursor?: string;
+  scanLimit?: number;
+}): Promise<{
+  scanned: number;
+  deletedOrphans: number;
+  skippedActiveOrRecent: number;
+  errors: number;
+  nextCursor?: string | null;
+  hasMore?: boolean;
+}> {
+  const minAgeMs = options?.minAgeMs ?? 60 * 60 * 1000; // 1 hour conservative threshold
+  const limit = options?.limit ?? 50;
+  const maxPages = options?.maxPages ?? 5; // Scan up to 5 pages per run (prevents pagination starvation)
+  const cursor = options?.cursor;
+  const scanLimit = options?.scanLimit;
+
+  let scanned = 0;
+  let deletedOrphans = 0;
+  let skippedActiveOrRecent = 0;
+  let errors = 0;
+  let nextCursor: string | null = null;
+  let hasMore = false;
+
+  try {
+    const stagedResources = await listCloudinaryResourcesByPrefix('axdoro/products/staged', {
+      maxResults: limit,
+      maxPages,
+      cursor,
+      scanLimit,
+      type: 'upload',
+    });
+    scanned = stagedResources.length;
+    nextCursor = stagedResources.nextCursor ?? null;
+    hasMore = Boolean(stagedResources.hasMore);
+
+    const now = Date.now();
+    for (const res of stagedResources) {
+      try {
+        const createdAt = new Date(res.created_at).getTime();
+
+        // 1. Skip recent uploads: must exceed retention threshold (protects active dialogs)
+        if (now - createdAt < minAgeMs) {
+          skippedActiveOrRecent++;
+          continue;
+        }
+
+        // 2. Query PostgreSQL to verify whether any product_images, categories, or enquiries reference this asset
+        let isReferenced = false;
+        try {
+          isReferenced = await isAssetReferencedInDatabase(res.public_id);
+        } catch (dbErr) {
+          // Fail-safe: database error must never trigger asset deletion
+          console.error(`[Reconcile Staged Products] DB lookup failed for asset ${res.public_id}; skipping:`, dbErr);
+          errors++;
+          continue;
+        }
+
+        if (isReferenced) {
+          // Actively referenced by product_images or another entity: preserve safely!
+          skippedActiveOrRecent++;
+          continue;
+        }
+
+        // 3. Verify whether asset belongs to an active, unexpired staging session
+        let inActiveSession = false;
+        try {
+          inActiveSession = await isAssetInActiveStagingSession(res.public_id);
+        } catch (sessionErr) {
+          console.error(`[Reconcile Staged Products] Staging session check failed for ${res.public_id}; skipping:`, sessionErr);
+          errors++;
+          continue;
+        }
+
+        if (inActiveSession) {
+          skippedActiveOrRecent++;
+          continue;
+        }
+
+        // 4. Concurrency-safe atomic claim for deletion
+        let claimResult;
+        try {
+          claimResult = await claimStagedAssetForDeletion(res.public_id);
+        } catch (claimErr) {
+          console.error(`[Reconcile Staged Products] Claim error for ${res.public_id}; skipping:`, claimErr);
+          errors++;
+          continue;
+        }
+
+        if (!claimResult.claimed) {
+          // Asset was claimed by another worker, referenced, or in an active session
+          skippedActiveOrRecent++;
+          continue;
+        }
+
+        // 5. Confirmed orphan claimed atomically: perform Cloudinary deletion outside DB transaction
+        const claimToken = claimResult.claimToken!;
+        let deleted = false;
+        try {
+          deleted = await deleteCloudinaryAsset(res.public_id, {
+            type: res.type || 'upload',
+            resourceType: res.resource_type || 'image',
+          });
+        } catch (delErr) {
+          console.warn(`[Reconcile Staged Products] Cloudinary deletion failed for ${res.public_id}:`, delErr);
+        }
+
+        if (deleted) {
+          deletedOrphans++;
+          try {
+            await markStagedAssetDeleted(res.public_id, claimToken);
+          } catch (markErr) {
+            console.warn(`[Reconcile Staged Products] Failed to mark asset ${res.public_id} as deleted in DB:`, markErr);
+          }
+        } else {
+          // Cloudinary deletion failed: release claim so subsequent runs can retry
+          errors++;
+          try {
+            await releaseStagedAssetClaim(res.public_id, claimToken);
+          } catch (relErr) {
+            console.warn(`[Reconcile Staged Products] Failed to release claim for ${res.public_id}:`, relErr);
+          }
+        }
+      } catch (assetErr) {
+        console.warn(`[Reconcile Staged Products Error for ${res.public_id}]`, assetErr);
+        errors++;
+      }
+    }
+  } catch (err) {
+    console.error('[Reconcile Staged Products Failed]', err);
+    errors++;
+  }
+
+  return {
+    scanned,
+    deletedOrphans,
+    skippedActiveOrRecent,
+    errors,
+    nextCursor,
+    hasMore,
+  };
 }

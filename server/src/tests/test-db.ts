@@ -96,7 +96,7 @@ export async function truncateTestCatalogue(): Promise<void> {
   validateTestDatabaseTarget(testConnectionString);
   const client = await testPool.connect();
   try {
-    await client.query('TRUNCATE TABLE product_images, product_variants, products, categories CASCADE');
+    await client.query('TRUNCATE TABLE product_staged_assets, product_staging_sessions, product_images, product_variants, products, categories CASCADE');
   } finally {
     client.release();
   }

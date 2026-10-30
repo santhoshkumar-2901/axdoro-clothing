@@ -397,3 +397,131 @@ export async function listCloudinaryResourcesByTag(
     return [];
   }
 }
+
+export interface ListCloudinaryResourcesOptions {
+  resourceType?: string;
+  type?: string;
+  maxResults?: number;
+  maxPages?: number;
+  cursor?: string;
+  scanLimit?: number;
+}
+
+export interface CloudinaryResourcesList extends Array<CloudinaryTaggedResource> {
+  nextCursor?: string | null;
+  hasMore?: boolean;
+}
+
+/**
+ * Lists resources matching a specific folder or public_id prefix using Cloudinary's Admin API.
+ * Authenticates using HTTP Basic Auth (API Key & Secret).
+ *
+ * Requirements strictly enforced:
+ * - Supports Cloudinary Admin API `next_cursor` pagination across multiple pages.
+ * - Prevents starvation beyond first 50 items when earlier items are legitimate referenced assets.
+ * - Bounded by `maxPages` (default 1, configurable) and `scanLimit` (optional upper bound).
+ * - Correctly handles missing, repeated, or invalid cursors (guards against infinite loops).
+ * - Preserves resource type and upload type filtering.
+ * - Handles HTTP errors, timeouts, and rate limits safely without throwing or deleting assets.
+ * - Returns an array compatible with CloudinaryTaggedResource[] with optional `.nextCursor` and `.hasMore`.
+ */
+export async function listCloudinaryResourcesByPrefix(
+  prefix: string,
+  options?: ListCloudinaryResourcesOptions
+): Promise<CloudinaryResourcesList> {
+  const emptyList: CloudinaryResourcesList = [];
+  emptyList.nextCursor = null;
+  emptyList.hasMore = false;
+
+  if (!isCloudinaryConfigured()) return emptyList;
+  if (!prefix) return emptyList;
+
+  const cloudName = env.CLOUDINARY_CLOUD_NAME!;
+  const apiKey = env.CLOUDINARY_API_KEY!;
+  const apiSecret = env.CLOUDINARY_API_SECRET!;
+  const resourceType = options?.resourceType || 'image';
+  const type = options?.type || 'upload';
+  const maxResults = Math.min(Math.max(options?.maxResults || 100, 10), 500);
+  const maxPages = Math.max(options?.maxPages || 1, 1);
+  const scanLimit = options?.scanLimit;
+
+  const basicAuth = Buffer.from(`${apiKey}:${apiSecret}`).toString('base64');
+
+  const accumulated: CloudinaryResourcesList = [];
+  let currentCursor: string | undefined = options?.cursor?.trim() || undefined;
+  const seenCursors = new Set<string>();
+  let pageCount = 0;
+  let hasMore = false;
+  let finalCursor: string | null = null;
+
+  while (pageCount < maxPages) {
+    pageCount++;
+
+    let url = `https://api.cloudinary.com/v1_1/${cloudName}/resources/${resourceType}/${type}?prefix=${encodeURIComponent(prefix)}&max_results=${maxResults}`;
+    if (currentCursor) {
+      url += `&next_cursor=${encodeURIComponent(currentCursor)}`;
+    }
+
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+        },
+      });
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          console.warn(`[Cloudinary] Rate limit exceeded listing resources by prefix '${prefix}' (HTTP 429).`);
+        } else {
+          console.warn(`[Cloudinary] Failed to list resources by prefix '${prefix}': HTTP ${res.status}`);
+        }
+        // Fail-safe: stop paging without failing catastrophically
+        break;
+      }
+
+      const data = (await res.json()) as {
+        resources?: CloudinaryTaggedResource[];
+        next_cursor?: string | null;
+      };
+
+      const pageResources = data.resources || [];
+      accumulated.push(...pageResources);
+
+      const nextCursor = typeof data.next_cursor === 'string' ? data.next_cursor.trim() : null;
+
+      if (nextCursor) {
+        // Prevent infinite loops from missing, repeated or cycling cursors
+        if (seenCursors.has(nextCursor) || nextCursor === currentCursor) {
+          console.warn(`[Cloudinary] Repeated or cycling cursor '${nextCursor}' detected for prefix '${prefix}'; terminating pagination.`);
+          hasMore = false;
+          finalCursor = null;
+          break;
+        }
+        seenCursors.add(nextCursor);
+        currentCursor = nextCursor;
+        finalCursor = nextCursor;
+        hasMore = true;
+      } else {
+        hasMore = false;
+        finalCursor = null;
+        break; // Reached end of resources
+      }
+
+      // Respect bounded scan limit if configured
+      if (scanLimit && accumulated.length >= scanLimit) {
+        hasMore = true;
+        break;
+      }
+    } catch (err: unknown) {
+      console.error(
+        `[Cloudinary] Network error listing resources by prefix '${prefix}':`,
+        err instanceof Error ? err.message : String(err)
+      );
+      break;
+    }
+  }
+
+  accumulated.nextCursor = finalCursor;
+  accumulated.hasMore = hasMore;
+  return accumulated;
+}

@@ -406,6 +406,59 @@ export async function adminCreateProduct(
   actor: AdminUserDTO
 ): Promise<{ id: string; slug: string }> {
   return await withTransaction(async (client) => {
+    // 0. Staging session validation (if provided)
+    if (data.stagingSessionId) {
+      const sessionRes = await client.query<{
+        id: string;
+        admin_id: string | null;
+        status: string;
+        expires_at: Date;
+      }>(
+        `SELECT id, admin_id, status, expires_at FROM product_staging_sessions WHERE id = $1 FOR UPDATE;`,
+        [data.stagingSessionId]
+      );
+
+      if (sessionRes.rows.length === 0) {
+        throw new Error('Staging session not found');
+      }
+
+      const session = sessionRes.rows[0];
+      if (session.admin_id && session.admin_id !== actor.id) {
+        throw new Error('Access denied: Staging session belongs to another administrator');
+      }
+
+      if (session.status !== 'ACTIVE') {
+        throw new Error(`Cannot complete product creation: Staging session has status '${session.status}'`);
+      }
+
+      if (new Date(session.expires_at).getTime() <= Date.now()) {
+        throw new Error('Cannot complete product creation: Staging session has expired');
+      }
+
+      // Verify that all submitted image publicIds belong to this session and are NOT claimed for deletion
+      for (const img of data.images) {
+        if (img.publicId) {
+          const assetRes = await client.query<{
+            session_id: string;
+            claim_status: string;
+          }>(
+            `SELECT session_id, claim_status FROM product_staged_assets WHERE public_id = $1 FOR UPDATE;`,
+            [img.publicId]
+          );
+
+          if (assetRes.rows.length > 0) {
+            const asset = assetRes.rows[0];
+            if (asset.session_id !== data.stagingSessionId) {
+              throw new Error(`Security violation: Image asset '${img.publicId}' belongs to a different staging session`);
+            }
+            if (asset.claim_status === 'CLAIMED_FOR_DELETION' || asset.claim_status === 'DELETED') {
+              throw new Error(`Cannot commit product: Image asset '${img.publicId}' has already been claimed for deletion`);
+            }
+          }
+        }
+      }
+    }
+
     // 1. Insert product
     const prodRes = await client.query<{ id: string }>(
       `INSERT INTO products (
@@ -470,7 +523,17 @@ export async function adminCreateProduct(
       );
     }
 
-    // 4. Audit log
+    // 4. Mark staging session COMMITTED atomically
+    if (data.stagingSessionId) {
+      await client.query(
+        `UPDATE product_staging_sessions
+         SET status = 'COMMITTED', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1;`,
+        [data.stagingSessionId]
+      );
+    }
+
+    // 5. Audit log
     await createAuditLog({
       adminId: actor.id,
       adminEmail: actor.email,
@@ -497,6 +560,14 @@ export async function adminGetProductById(id: string, client?: any): Promise<any
   );
   if (prodRes.rows.length === 0) return null;
   const product = prodRes.rows[0];
+  product.updatedAt = product.updated_at instanceof Date ? product.updated_at.toISOString() : String(product.updated_at);
+  product.createdAt = product.created_at instanceof Date ? product.created_at.toISOString() : String(product.created_at);
+  product.categoryId = product.category_id;
+  product.categoryName = product.category_name;
+  product.categorySlug = product.category_slug;
+  product.isFeatured = product.is_featured;
+  product.isNewArrival = product.is_new_arrival;
+  product.fabricSpec = product.fabric_spec;
 
   const varRes = await runner(
     `SELECT * FROM product_variants WHERE product_id = $1 ORDER BY size ASC;`,
@@ -538,62 +609,455 @@ export async function adminGetProductById(id: string, client?: any): Promise<any
   return product;
 }
 
+function computeSlugChecksum(slug: string): string {
+  const normalized = (slug || 'AXDORO').trim().toLowerCase();
+  let hash = 2166136261;
+  for (let i = 0; i < normalized.length; i++) {
+    hash ^= normalized.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return ((hash >>> 0) % 60466176).toString(36).toUpperCase().padStart(5, '0');
+}
+
+function generateVariantSku(
+  baseSlug: string,
+  size: string,
+  color: string,
+  existingSkus: Set<string>
+): string {
+  const cleanSlug = (baseSlug || 'AXDORO')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 14) || 'AXDORO';
+  const slugChecksum = computeSlugChecksum(baseSlug);
+  const cleanSize = size.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) || 'M';
+  const cleanColor = color.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16) || 'STD';
+  const baseSku = `AX-${cleanSlug}-${slugChecksum}-${cleanSize}-${cleanColor}`;
+  if (!existingSkus.has(baseSku)) {
+    existingSkus.add(baseSku);
+    return baseSku;
+  }
+  let counter = 2;
+  while (true) {
+    const candidate = `${baseSku}-${counter}`;
+    if (!existingSkus.has(candidate)) {
+      existingSkus.add(candidate);
+      return candidate;
+    }
+    counter++;
+  }
+}
+
 export async function adminUpdateProduct(
   id: string,
   data: z.infer<typeof productUpdateSchema>,
   actor: AdminUserDTO
-): Promise<void> {
-  const setClauses: string[] = [];
-  const params: unknown[] = [id];
-
-  if (data.name !== undefined) {
-    params.push(data.name);
-    setClauses.push(`name = $${params.length}`);
-  }
-  if (data.slug !== undefined) {
-    params.push(data.slug);
-    setClauses.push(`slug = $${params.length}`);
-  }
-  if (data.description !== undefined) {
-    params.push(data.description);
-    setClauses.push(`description = $${params.length}`);
-  }
-  if (data.categoryId !== undefined) {
-    params.push(data.categoryId);
-    setClauses.push(`category_id = $${params.length}`);
-  }
-  if (data.status !== undefined) {
-    params.push(data.status);
-    setClauses.push(`status = $${params.length}`);
-  }
-  if (data.isFeatured !== undefined) {
-    params.push(data.isFeatured);
-    setClauses.push(`is_featured = $${params.length}`);
-  }
-  if (data.isNewArrival !== undefined) {
-    params.push(data.isNewArrival);
-    setClauses.push(`is_new_arrival = $${params.length}`);
-  }
-  if (data.fabricSpec !== undefined) {
-    params.push(data.fabricSpec || null);
-    setClauses.push(`fabric_spec = $${params.length}`);
-  }
-
-  if (setClauses.length === 0) return;
-
+): Promise<any> {
   return await withTransaction(async (client) => {
-    const sql = `UPDATE products SET ${setClauses.join(', ')} WHERE id = $1;`;
-    await client.query(sql, params);
+    // 1. Lock and verify product record (Pessimistic concurrency lock)
+    const prodRes = await client.query<{ id: string; slug: string; updated_at: Date }>(
+      `SELECT id, slug, updated_at FROM products WHERE id = $1 FOR UPDATE;`,
+      [id]
+    );
+    if (prodRes.rows.length === 0) {
+      const err = new Error(`Product not found: '${id}'`);
+      (err as any).statusCode = 404;
+      throw err;
+    }
+    const currentProduct = prodRes.rows[0];
 
+    // Safeguard 9: Optimistic concurrency check against concurrent administrator mutations
+    if (data.expectedUpdatedAt !== undefined) {
+      if (!data.expectedUpdatedAt) {
+        const err = new Error(
+          'CONCURRENT_MUTATION_CONFLICT: Missing expectedUpdatedAt for product edit. Please reload before saving.'
+        );
+        (err as any).statusCode = 409;
+        throw err;
+      }
+      const expectedTime = new Date(data.expectedUpdatedAt).getTime();
+      if (isNaN(expectedTime)) {
+        const err = new Error(
+          'CONCURRENT_MUTATION_CONFLICT: Invalid expectedUpdatedAt timestamp format.'
+        );
+        (err as any).statusCode = 409;
+        throw err;
+      }
+      const actualTime = new Date(currentProduct.updated_at).getTime();
+      if (expectedTime !== actualTime) {
+        const err = new Error(
+          'CONCURRENT_MUTATION_CONFLICT: Product has been modified by another administrator. Please reload before saving.'
+        );
+        (err as any).statusCode = 409;
+        throw err;
+      }
+    }
+
+    // 2. Update basic product metadata if provided
+    const setClauses: string[] = [];
+    const params: unknown[] = [id];
+
+    if (data.name !== undefined) {
+      params.push(data.name);
+      setClauses.push(`name = $${params.length}`);
+    }
+    if (data.slug !== undefined) {
+      params.push(data.slug);
+      setClauses.push(`slug = $${params.length}`);
+    }
+    if (data.description !== undefined) {
+      params.push(data.description);
+      setClauses.push(`description = $${params.length}`);
+    }
+    if (data.categoryId !== undefined) {
+      params.push(data.categoryId);
+      setClauses.push(`category_id = $${params.length}`);
+    }
+    if (data.status !== undefined) {
+      params.push(data.status);
+      setClauses.push(`status = $${params.length}`);
+    }
+    if (data.isFeatured !== undefined) {
+      params.push(data.isFeatured);
+      setClauses.push(`is_featured = $${params.length}`);
+    }
+    if (data.isNewArrival !== undefined) {
+      params.push(data.isNewArrival);
+      setClauses.push(`is_new_arrival = $${params.length}`);
+    }
+    if (data.fabricSpec !== undefined) {
+      params.push(data.fabricSpec || null);
+      setClauses.push(`fabric_spec = $${params.length}`);
+    }
+
+    // Always advance updated_at on product commit to serialize concurrent versions
+    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+    await client.query(`UPDATE products SET ${setClauses.join(', ')} WHERE id = $1;`, params);
+
+    // 3. Staging Session Validation (if stagingSessionId passed)
+    if (data.stagingSessionId) {
+      const sessionRes = await client.query<{
+        id: string;
+        admin_id: string | null;
+        status: string;
+        expires_at: Date;
+      }>(
+        `SELECT id, admin_id, status, expires_at FROM product_staging_sessions WHERE id = $1 FOR UPDATE;`,
+        [data.stagingSessionId]
+      );
+      if (sessionRes.rows.length === 0) {
+        const err = new Error('Staging session not found');
+        (err as any).statusCode = 404;
+        throw err;
+      }
+      const session = sessionRes.rows[0];
+      if (session.admin_id && session.admin_id !== actor.id) {
+        const err = new Error('Access denied: Staging session belongs to another administrator');
+        (err as any).statusCode = 403;
+        throw err;
+      }
+      if (session.status !== 'ACTIVE') {
+        const err = new Error(`Cannot complete product update: Staging session has status '${session.status}'`);
+        (err as any).statusCode = 409;
+        throw err;
+      }
+      if (new Date(session.expires_at).getTime() <= Date.now()) {
+        const err = new Error('Cannot complete product update: Staging session has expired');
+        (err as any).statusCode = 410;
+        throw err;
+      }
+    }
+
+    // 4. Variant Reconciliation
+    if (data.variants !== undefined) {
+      // Fetch and lock current variants
+      const currentVarRes = await client.query<{
+        id: string;
+        sku: string;
+        size: string;
+        color: string;
+        color_hex: string | null;
+        price_paise: number;
+        comparison_price_paise: number | null;
+        stock_quantity: number;
+        is_active: boolean;
+      }>(
+        `SELECT id, sku, size, color, color_hex, price_paise, comparison_price_paise, stock_quantity, is_active
+         FROM product_variants WHERE product_id = $1 FOR UPDATE;`,
+        [id]
+      );
+      const existingVariantsMap = new Map<string, (typeof currentVarRes.rows)[0]>();
+      const existingSkus = new Set<string>();
+
+      for (const row of currentVarRes.rows) {
+        existingVariantsMap.set(row.id, row);
+        existingSkus.add(row.sku);
+      }
+
+      // Safeguard 5: Check duplicate variant IDs and combinations in payload
+      const seenVariantIds = new Set<string>();
+      const seenCombos = new Set<string>();
+
+      for (const v of data.variants) {
+        if (v.id) {
+          if (seenVariantIds.has(v.id)) {
+            const err = new Error(`Duplicate variant ID '${v.id}' in payload`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          seenVariantIds.add(v.id);
+
+          // Safeguard 1: Validate variant ID belongs to this product
+          if (!existingVariantsMap.has(v.id)) {
+            const err = new Error(`Security violation: Variant '${v.id}' does not belong to this product`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+        }
+
+        const combo = `${v.size.trim().toUpperCase()}::${v.color.trim().toLowerCase()}`;
+        if (seenCombos.has(combo)) {
+          const err = new Error(`Duplicate variant combination: Size "${v.size}" in Color "${v.color}"`);
+          (err as any).statusCode = 400;
+          throw err;
+        }
+        seenCombos.add(combo);
+
+        if (v.comparisonPricePaise && v.comparisonPricePaise < v.pricePaise) {
+          const err = new Error(
+            `Comparison price (${v.comparisonPricePaise}) cannot be less than selling price (${v.pricePaise})`
+          );
+          (err as any).statusCode = 400;
+          throw err;
+        }
+      }
+
+      // Track handled IDs
+      const handledVariantIds = new Set<string>();
+      const effectiveSlug = data.slug || currentProduct.slug;
+
+      for (const v of data.variants) {
+        if (v.id && existingVariantsMap.has(v.id)) {
+          // Safeguard 8: Preserve existing SKU and variant ID; update stock and price in-place
+          handledVariantIds.add(v.id);
+          await client.query(
+            `UPDATE product_variants
+             SET size = $1,
+                 color = $2,
+                 color_hex = $3,
+                 price_paise = $4,
+                 comparison_price_paise = $5,
+                 stock_quantity = $6,
+                 is_active = $7,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $8 AND product_id = $9;`,
+            [
+              v.size.trim(),
+              v.color.trim(),
+              v.colorHex?.trim() || null,
+              v.pricePaise,
+              v.comparisonPricePaise ?? null,
+              v.stockQuantity,
+              v.isActive, // Safeguard 2: preserves inactive if v.isActive is false
+              v.id,
+              id,
+            ]
+          );
+        } else {
+          // Genuinely new variant: generate collision-resistant SKU
+          const sku =
+            v.sku?.trim().toUpperCase() ||
+            generateVariantSku(effectiveSlug, v.size.trim(), v.color.trim(), existingSkus);
+          existingSkus.add(sku);
+
+          await client.query(
+            `INSERT INTO product_variants (
+               product_id, size, color, color_hex, sku, price_paise, comparison_price_paise, stock_quantity, is_active
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);`,
+            [
+              id,
+              v.size.trim(),
+              v.color.trim(),
+              v.colorHex?.trim() || null,
+              sku,
+              v.pricePaise,
+              v.comparisonPricePaise ?? null,
+              v.stockQuantity,
+              v.isActive ?? true,
+            ]
+          );
+        }
+      }
+
+      // Safeguard 4 & 8: Soft-deactivate removed variants (never hard-delete, preserving order_items)
+      for (const existingVar of currentVarRes.rows) {
+        if (!handledVariantIds.has(existingVar.id)) {
+          await client.query(
+            `UPDATE product_variants SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND product_id = $2;`,
+            [existingVar.id, id]
+          );
+        }
+      }
+    }
+
+    // 5. Image Reconciliation
+    if (data.images !== undefined) {
+      // Safeguard 5: Reject duplicate image IDs, duplicate public IDs, and validate display orders
+      const seenImageIds = new Set<string>();
+      const seenPublicIds = new Set<string>();
+      let primaryCount = 0;
+
+      for (const img of data.images) {
+        if (img.id) {
+          if (seenImageIds.has(img.id)) {
+            const err = new Error(`Duplicate image ID '${img.id}' in payload`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          seenImageIds.add(img.id);
+        }
+        if (img.publicId) {
+          if (seenPublicIds.has(img.publicId)) {
+            const err = new Error(`Duplicate public_id '${img.publicId}' in payload`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          seenPublicIds.add(img.publicId);
+        }
+        if (img.isPrimary) {
+          primaryCount++;
+        }
+      }
+
+      // Safeguard 5 & 6: Exactly one primary image if images exist; zero primary if zero images
+      if (data.images.length > 0) {
+        if (primaryCount > 1) {
+          const err = new Error('Only one image can be designated as the primary image');
+          (err as any).statusCode = 400;
+          throw err;
+        }
+        if (primaryCount === 0) {
+          data.images[0].isPrimary = true;
+        }
+      }
+
+      // Fetch current images
+      const currentImgRes = await client.query<{ id: string; public_id: string | null }>(
+        `SELECT id, public_id FROM product_images WHERE product_id = $1;`,
+        [id]
+      );
+      const existingImagesMap = new Map<string, (typeof currentImgRes.rows)[0]>();
+      for (const row of currentImgRes.rows) {
+        existingImagesMap.set(row.id, row);
+      }
+
+      // Safeguard 3: Validate ownership of every existing image ID against edited product
+      for (const img of data.images) {
+        if (img.id && !existingImagesMap.has(img.id)) {
+          const err = new Error(`Security violation: Image '${img.id}' does not belong to this product`);
+          (err as any).statusCode = 400;
+          throw err;
+        }
+      }
+
+      // Safeguard 4: Validate that every new staged image belongs to authenticated admin's staging session
+      for (const img of data.images) {
+        if (!img.id && img.publicId) {
+          if (!data.stagingSessionId) {
+            const err = new Error('Active staging session ID is required for newly uploaded images');
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          const assetRes = await client.query<{ session_id: string; claim_status: string }>(
+            `SELECT session_id, claim_status FROM product_staged_assets WHERE public_id = $1 FOR UPDATE;`,
+            [img.publicId]
+          );
+          if (assetRes.rows.length === 0 || assetRes.rows[0].session_id !== data.stagingSessionId) {
+            const err = new Error(`Security violation: Image asset '${img.publicId}' does not belong to this staging session`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          if (assetRes.rows[0].claim_status === 'CLAIMED_FOR_DELETION' || assetRes.rows[0].claim_status === 'DELETED') {
+            const err = new Error(`Cannot commit product: Image asset '${img.publicId}' has already been claimed for deletion`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+        }
+      }
+
+      // Enforce partial unique index: clear is_primary first
+      await client.query(`UPDATE product_images SET is_primary = false WHERE product_id = $1;`, [id]);
+
+      // Safeguard 7: Remove unselected existing images from database without touching Cloudinary
+      const retainedImageIds = new Set(data.images.filter((i) => Boolean(i.id)).map((i) => i.id!));
+      for (const currentImg of currentImgRes.rows) {
+        if (!retainedImageIds.has(currentImg.id)) {
+          await client.query(`DELETE FROM product_images WHERE id = $1 AND product_id = $2;`, [currentImg.id, id]);
+        }
+      }
+
+      // Update retained existing images or insert newly staged images
+      for (const img of data.images) {
+        if (img.id && existingImagesMap.has(img.id)) {
+          await client.query(
+            `UPDATE product_images
+             SET alt_text = $1,
+                 display_order = $2,
+                 is_primary = $3,
+                 color = $4
+             WHERE id = $5 AND product_id = $6;`,
+            [img.altText || null, img.displayOrder, img.isPrimary, img.color || null, img.id, id]
+          );
+        } else {
+          await client.query(
+            `INSERT INTO product_images (
+               product_id, image_url, alt_text, display_order, is_primary, public_id, width, height, format, bytes, color
+             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);`,
+            [
+              id,
+              img.imageUrl,
+              img.altText || null,
+              img.displayOrder,
+              img.isPrimary,
+              img.publicId || null,
+              img.width || null,
+              img.height || null,
+              img.format || null,
+              img.bytes || null,
+              img.color || null,
+            ]
+          );
+        }
+      }
+    }
+
+    // 6. Atomically commit staging session if provided
+    if (data.stagingSessionId) {
+      await client.query(
+        `UPDATE product_staging_sessions
+         SET status = 'COMMITTED', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1;`,
+        [data.stagingSessionId]
+      );
+    }
+
+    // 7. Audit log
     await createAuditLog({
       adminId: actor.id,
       adminEmail: actor.email,
       action: 'PRODUCT_UPDATE',
       entityType: 'product',
       entityId: id,
-      details: data,
+      details: {
+        slug: data.slug || currentProduct.slug,
+        name: data.name,
+        variantCount: data.variants?.length,
+        imageCount: data.images?.length,
+      },
       client,
     });
+
+    return await adminGetProductById(id, client);
   });
 }
 
