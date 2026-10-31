@@ -120,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <>
-      <nav className="sticky top-0 z-40 bg-axdoro-bg/95 backdrop-blur-md border-b border-axdoro-border transition-colors">
+      <nav className="sticky top-0 z-40 bg-axdoro-bg/95 backdrop-blur-md transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Balanced 3-column grid for perfect center logo alignment across all devices */}
           <div className="grid grid-cols-3 items-center h-20">

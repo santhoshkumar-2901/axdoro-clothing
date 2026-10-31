@@ -591,20 +591,43 @@ export async function adminGetAuditLogs(): Promise<AdminAuditLog[]> {
   return json.data;
 }
 
+export interface AdminOrderItem {
+  id: string;
+  orderId?: string;
+  productId?: string | null;
+  variantId?: string | null;
+  productName: string;
+  productSlug?: string;
+  variantSku?: string | null;
+  variantSize?: string | null;
+  variantColor?: string | null;
+  unitPricePaise: number;
+  quantity: number;
+  lineTotalPaise: number;
+}
+
 export interface AdminOrder {
   id: string;
   orderNumber: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  shippingAddressLine1?: string;
+  shippingAddressLine2?: string | null;
   shippingCity: string;
   shippingState: string;
+  shippingPincode?: string;
+  subtotalPaise?: number;
+  discountPaise?: number;
+  shippingFeePaise?: number;
   totalPaise: number;
   paymentMethod: string;
   paymentStatus: string;
   orderStatus: string;
+  notes?: string | null;
   createdAt: string;
   acknowledgedAt?: string | null;
+  items?: AdminOrderItem[];
 }
 
 export interface AdminBadgeCounts {
@@ -642,6 +665,16 @@ export async function adminGetOrders(status?: string): Promise<AdminOrder[]> {
   });
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to fetch orders');
+  return json.data;
+}
+
+export async function adminGetOrderById(orderId: string): Promise<AdminOrder> {
+  const res = await fetch(`/api/admin/orders/${orderId}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to fetch order details');
   return json.data;
 }
 

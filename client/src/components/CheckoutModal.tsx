@@ -702,7 +702,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                           <div className="truncate">
                             <span className="font-bold text-axdoro-charcoal block truncate">{item.product.name}</span>
                             <span className="text-[11px] text-axdoro-text-muted">
-                              Size: {item.selectedSize} &bull; Qty: {item.quantity}
+                              Size: {item.selectedSize}{item.selectedGsm ? ` • GSM: ${item.selectedGsm}` : ''} &bull; Qty: {item.quantity}
                             </span>
                           </div>
                         </div>

@@ -38,6 +38,9 @@ import {
   Loader2,
   X,
   MessageSquare,
+  Eye,
+  Package,
+  MapPin,
 } from 'lucide-react';
 import { getOrderWhatsAppNotification } from '../../utils/whatsapp.ts';
 import { useScrollLock } from '../../utils/scrollLock.ts';
@@ -153,6 +156,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     isNotFound?: boolean;
   } | null>(null);
   const [downloadingArtworkId, setDownloadingArtworkId] = useState<string | null>(null);
+
+  // Order details modal state
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<AdminOrder | null>(null);
+  useScrollLock(Boolean(selectedOrderDetails));
 
   // Sync tab with browser URL history (popstate)
   useEffect(() => {
@@ -459,6 +466,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setTimeout(() => setActionSuccess(null), 3000);
       const o = await adminGetOrders();
       setOrders(o);
+      setSelectedOrderDetails((prev) => (prev && prev.id === orderId ? o.find((x) => x.id === orderId) || prev : prev));
       fetchBadgeCounts();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to acknowledge order');
@@ -475,6 +483,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       setTimeout(() => setActionSuccess(null), 3500);
       const o = await adminGetOrders();
       setOrders(o);
+      setSelectedOrderDetails((prev) => (prev && prev.id === orderId ? o.find((x) => x.id === orderId) || prev : prev));
       fetchBadgeCounts();
       onCatalogueMutated?.();
     } catch (err) {
@@ -879,10 +888,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                     <TableRow>
                       <TableHead>Order #</TableHead>
                       <TableHead>Customer</TableHead>
+                      <TableHead className="min-w-[200px]">Items Ordered</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Payment</TableHead>
                       <TableHead>Fulfillment Status</TableHead>
                       <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -910,6 +921,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                             {order.customerPhone} &bull; {order.customerEmail}
                           </div>
                         </TableCell>
+                        <TableCell className="max-w-[240px]">
+                          {order.items && order.items.length > 0 ? (
+                            <div className="space-y-1">
+                              {order.items.slice(0, 2).map((item) => (
+                                <div key={item.id} className="text-xs flex items-center justify-between gap-1.5">
+                                  <div className="truncate" title={item.productName}>
+                                    <span className="font-semibold text-axdoro-charcoal">{item.productName}</span>
+                                    {(item.variantSize || item.variantColor) && (
+                                      <span className="text-[10px] text-axdoro-text-muted ml-1">
+                                        ({[item.variantSize, item.variantColor].filter(Boolean).join(' / ')})
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="shrink-0 text-[10px] font-mono font-bold text-axdoro-charcoal bg-axdoro-surface-muted px-1.5 py-0.5 rounded border border-axdoro-border">
+                                    &times;{item.quantity}
+                                  </span>
+                                </div>
+                              ))}
+                              {order.items.length > 2 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedOrderDetails(order)}
+                                  className="text-[10px] font-semibold text-axdoro-accent hover:underline cursor-pointer block"
+                                >
+                                  +{order.items.length - 2} more item{order.items.length - 2 > 1 ? 's' : ''}...
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-axdoro-text-muted italic">No items</span>
+                          )}
+                        </TableCell>
                         <TableCell className="font-mono font-bold text-axdoro-accent">
                           ₹{(order.totalPaise / 100).toFixed(2)}
                         </TableCell>
@@ -917,7 +960,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           <Badge
                             variant={order.paymentStatus === 'PAID' ? 'success' : 'warning'}
                           >
-                            {order.paymentMethod} &bull; {order.paymentStatus}
+                            {order.paymentStatus}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -989,6 +1032,19 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                         </TableCell>
                         <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
                           {new Date(order.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedOrderDetails(order)}
+                            className="h-7 px-2 text-xs gap-1 font-semibold border-axdoro-border text-axdoro-charcoal hover:bg-axdoro-surface-muted cursor-pointer"
+                            title="View order details"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Details</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1439,6 +1495,260 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   'Permanently Delete'
                 )}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order Details Modal */}
+      {selectedOrderDetails && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="order-details-dialog-title"
+        >
+          <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated max-w-2xl w-full overflow-hidden my-auto flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-axdoro-border px-6 py-4 shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-axdoro-accent/10 border border-axdoro-accent/20 flex items-center justify-center text-axdoro-accent">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 id="order-details-dialog-title" className="text-base font-bold text-axdoro-charcoal font-mono">
+                      {selectedOrderDetails.orderNumber}
+                    </h3>
+                    {!selectedOrderDetails.acknowledgedAt &&
+                      selectedOrderDetails.orderStatus !== 'CANCELLED' &&
+                      selectedOrderDetails.orderStatus !== 'DELIVERED' && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white shadow-xs">
+                          NEW
+                        </span>
+                      )}
+                  </div>
+                  <p className="text-[11px] text-axdoro-text-muted">
+                    Placed on {new Date(selectedOrderDetails.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrderDetails(null)}
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close details"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 space-y-6 overflow-y-auto">
+              {/* Customer & Shipping Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-axdoro-bg border border-axdoro-border text-xs space-y-2">
+                  <span className="text-[11px] font-bold text-axdoro-text-muted uppercase tracking-wider">
+                    Customer Info
+                  </span>
+                  <div className="font-bold text-sm text-axdoro-charcoal">
+                    {selectedOrderDetails.customerName}
+                  </div>
+                  <div className="space-y-0.5 text-axdoro-charcoal/80">
+                    <div><span className="text-axdoro-text-muted">Phone:</span> {selectedOrderDetails.customerPhone}</div>
+                    <div><span className="text-axdoro-text-muted">Email:</span> {selectedOrderDetails.customerEmail}</div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-axdoro-bg border border-axdoro-border text-xs space-y-2">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-axdoro-text-muted uppercase tracking-wider">
+                    <MapPin className="w-3.5 h-3.5" />
+                    <span>Shipping Address</span>
+                  </div>
+                  <div className="text-axdoro-charcoal leading-relaxed">
+                    {selectedOrderDetails.shippingAddressLine1 && (
+                      <div>{selectedOrderDetails.shippingAddressLine1}</div>
+                    )}
+                    {selectedOrderDetails.shippingAddressLine2 && (
+                      <div>{selectedOrderDetails.shippingAddressLine2}</div>
+                    )}
+                    <div>
+                      {selectedOrderDetails.shippingCity}, {selectedOrderDetails.shippingState}
+                      {selectedOrderDetails.shippingPincode ? ` - ${selectedOrderDetails.shippingPincode}` : ''}
+                    </div>
+                  </div>
+                  {selectedOrderDetails.notes && (
+                    <div className="pt-1.5 border-t border-axdoro-border/60 text-axdoro-text-muted text-[11px]">
+                      <span className="font-semibold text-axdoro-charcoal">Notes:</span> {selectedOrderDetails.notes}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Ordered Table */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-axdoro-text-muted">
+                    Items ({selectedOrderDetails.items?.length || 0})
+                  </h4>
+                  <Badge variant={selectedOrderDetails.paymentStatus === 'PAID' ? 'success' : 'warning'}>
+                    {selectedOrderDetails.paymentStatus}
+                  </Badge>
+                </div>
+
+                <div className="border border-axdoro-border rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-axdoro-surface-muted/50 border-b border-axdoro-border text-[11px] font-semibold text-axdoro-text-muted">
+                      <tr>
+                        <th className="py-2.5 px-3">Product</th>
+                        <th className="py-2.5 px-3">Specs / SKU</th>
+                        <th className="py-2.5 px-3 text-right">Price</th>
+                        <th className="py-2.5 px-3 text-center">Qty</th>
+                        <th className="py-2.5 px-3 text-right">Line Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-axdoro-border bg-axdoro-surface">
+                      {selectedOrderDetails.items && selectedOrderDetails.items.length > 0 ? (
+                        selectedOrderDetails.items.map((item) => (
+                          <tr key={item.id} className="hover:bg-axdoro-surface-muted/30">
+                            <td className="py-3 px-3">
+                              <div className="font-semibold text-axdoro-charcoal">{item.productName}</div>
+                            </td>
+                            <td className="py-3 px-3 text-axdoro-text-muted font-mono text-[11px]">
+                              <div>
+                                {[item.variantSize, item.variantColor].filter(Boolean).join(' / ') || 'Standard'}
+                              </div>
+                              {item.variantSku && (
+                                <div className="text-[10px] text-axdoro-text-muted/70">SKU: {item.variantSku}</div>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono text-axdoro-charcoal">
+                              ₹{(item.unitPricePaise / 100).toFixed(2)}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono font-bold text-axdoro-charcoal">
+                              {item.quantity}
+                            </td>
+                            <td className="py-3 px-3 text-right font-mono font-bold text-axdoro-accent">
+                              ₹{(item.lineTotalPaise / 100).toFixed(2)}
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-axdoro-text-muted italic">
+                            No items recorded for this order.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Financial Breakdown */}
+              <div className="flex justify-end">
+                <div className="w-full sm:w-64 space-y-1.5 p-3.5 rounded-xl bg-axdoro-bg border border-axdoro-border text-xs">
+                  {selectedOrderDetails.subtotalPaise !== undefined && (
+                    <div className="flex justify-between text-axdoro-text-muted">
+                      <span>Subtotal:</span>
+                      <span className="font-mono">₹{(selectedOrderDetails.subtotalPaise / 100).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {selectedOrderDetails.discountPaise ? (
+                    <div className="flex justify-between text-emerald-600">
+                      <span>Discount:</span>
+                      <span className="font-mono">-₹{(selectedOrderDetails.discountPaise / 100).toFixed(2)}</span>
+                    </div>
+                  ) : null}
+                  {selectedOrderDetails.shippingFeePaise !== undefined && (
+                    <div className="flex justify-between text-axdoro-text-muted">
+                      <span>Shipping:</span>
+                      <span className="font-mono">
+                        {selectedOrderDetails.shippingFeePaise === 0
+                          ? 'FREE'
+                          : `₹${(selectedOrderDetails.shippingFeePaise / 100).toFixed(2)}`}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-1.5 border-t border-axdoro-border font-bold text-sm text-axdoro-charcoal">
+                    <span>Grand Total:</span>
+                    <span className="font-mono text-axdoro-accent">₹{(selectedOrderDetails.totalPaise / 100).toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer with Status Management & WhatsApp */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs font-semibold text-axdoro-charcoal shrink-0">Status:</span>
+                <select
+                  disabled={updatingOrderId === selectedOrderDetails.id}
+                  value={selectedOrderDetails.orderStatus}
+                  onChange={(e) => handleUpdateOrderStatus(selectedOrderDetails.id, e.target.value)}
+                  className="bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal text-xs rounded-lg px-2.5 py-1.5 font-semibold focus:outline-none focus:ring-1 focus:ring-axdoro-accent cursor-pointer shadow-sm w-full sm:w-auto"
+                >
+                  <option value="PENDING">PENDING</option>
+                  <option value="CONFIRMED">CONFIRMED</option>
+                  <option value="PROCESSING">PROCESSING</option>
+                  <option value="SHIPPED">SHIPPED</option>
+                  <option value="DELIVERED">DELIVERED</option>
+                  <option value="CANCELLED">CANCELLED</option>
+                </select>
+
+                {!selectedOrderDetails.acknowledgedAt &&
+                  selectedOrderDetails.orderStatus !== 'CANCELLED' &&
+                  selectedOrderDetails.orderStatus !== 'DELIVERED' && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={acknowledgingOrderId === selectedOrderDetails.id}
+                      onClick={() => handleAcknowledgeOrder(selectedOrderDetails.id)}
+                      className="text-xs h-8 px-2.5 border-red-500/30 text-red-600 hover:bg-red-50 cursor-pointer shrink-0 font-semibold"
+                    >
+                      {acknowledgingOrderId === selectedOrderDetails.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        'Acknowledge'
+                      )}
+                    </Button>
+                  )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {(() => {
+                  const notification = getOrderWhatsAppNotification(selectedOrderDetails);
+                  return (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!notification.isEligible}
+                      onClick={() => handleNotifyCustomerWhatsApp(selectedOrderDetails)}
+                      title={notification.tooltip}
+                      className={`text-xs h-8 gap-1.5 font-semibold cursor-pointer ${
+                        notification.isEligible
+                          ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20'
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      <span>WhatsApp Customer</span>
+                    </Button>
+                  );
+                })()}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedOrderDetails(null)}
+                  className="h-8 text-xs cursor-pointer"
+                >
+                  Close
+                </Button>
+              </div>
             </div>
           </div>
         </div>

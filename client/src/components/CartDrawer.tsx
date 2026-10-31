@@ -219,6 +219,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </h4>
                       <p className="text-[11px] text-axdoro-text-muted mt-0.5">
                         Size: <span className="text-axdoro-charcoal font-semibold">{item.selectedSize}</span> &bull; Color: <span className="text-axdoro-charcoal font-semibold">{item.selectedColor}</span>
+                        {item.selectedGsm && (
+                          <> &bull; GSM: <span className="text-axdoro-charcoal font-semibold">{item.selectedGsm}</span></>
+                        )}
                       </p>
                       <p className="text-xs font-extrabold text-axdoro-charcoal mt-1.5">
                         {formatPaiseToINR(item.pricePaise || item.product.price * 100)}

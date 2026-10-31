@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category, SortOption } from '../types/product.ts';
 import { fetchCategoryBySlug, fetchProducts } from '../api/catalogue.ts';
-import { ProductCard } from './ProductCard.tsx';
 import {
   ChevronRight,
   ArrowLeft,
@@ -10,9 +9,11 @@ import {
   AlertCircle,
   Loader2,
   FolderTree,
+  ImageOff,
 } from 'lucide-react';
 import { Button } from './ui/button.tsx';
 import { Badge } from './ui/badge.tsx';
+import { sortProductSizes } from '../utils/sizes.ts';
 
 interface CategoryPageProps {
   slug: string;
@@ -26,7 +27,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
   slug,
   onNavigate,
   onQuickView,
-  onAddToCart,
+  onAddToCart: _onAddToCart,
   onOpenBulk,
 }) => {
   const [category, setCategory] = useState<Category | null>(null);
@@ -169,15 +170,14 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
                 e.currentTarget.src = fallback;
               }
             }}
-            className="w-full h-full object-cover object-center opacity-15 filter blur-sm scale-105 transition-all duration-700"
+            className="w-full h-full object-cover object-center transition-all duration-700"
           />
-          {/* Light directional gradient overlay: directional left-to-right protects text area */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#F7F7F7] via-[#F7F7F7]/85 to-[#F7F7F7]/40" />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#F7F7F7] via-transparent to-transparent opacity-80" />
+          {/* Subtle gradient overlay allowing the picture to be visible while maintaining text readability */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#F7F7F7]/70 via-[#F7F7F7]/40 to-transparent" />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14 sm:py-20">
-          <div className="max-w-2xl space-y-3">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
+          <div className="max-w-xl space-y-3 p-6 sm:p-7 rounded-2xl bg-white/80 backdrop-blur-md border border-white/60 shadow-sm">
             <div className="flex items-center gap-2.5">
               <span className="text-[10px] font-mono tracking-widest text-axdoro-charcoal uppercase font-bold px-2 py-0.5 rounded bg-white/90 backdrop-blur-md border border-neutral-200 shadow-sm">
                 Collection
@@ -237,15 +237,84 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-0">
-            {products.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                onQuickView={onQuickView}
-                onAddToCart={onAddToCart}
-              />
-            ))}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
+            {products.map((product) => {
+              const discountPercent = product.originalPrice
+                ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+                : 0;
+
+              return (
+                <article
+                  key={product.id}
+                  onClick={() => onQuickView(product)}
+                  className="group bg-white rounded-lg overflow-hidden border border-neutral-200 hover:border-neutral-400 transition-all cursor-pointer flex flex-col justify-between"
+                >
+                  {/* Product Image */}
+                  <div className="relative aspect-[3/4] bg-neutral-100 overflow-hidden">
+                    {product.images && product.images.length > 0 ? (
+                      <img
+                        src={product.images[0]}
+                        alt={product.name}
+                        loading="lazy"
+                        className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-neutral-400 p-2 text-center">
+                        <ImageOff className="w-6 h-6 mb-1" />
+                        <span className="text-[10px]">No Image</span>
+                      </div>
+                    )}
+
+                    {/* Subtle Discount Pill */}
+                    {discountPercent > 0 && (
+                      <div className="absolute top-2 left-2 z-10">
+                        <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold tracking-wide">
+                          {discountPercent}% OFF
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Information */}
+                  <div className="p-3 flex-1 flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono tracking-wider text-neutral-400 uppercase block">
+                        {product.category?.name || category?.name || slug}
+                      </span>
+                      <h4 className="font-semibold text-xs sm:text-sm text-neutral-900 group-hover:text-axdoro-purple transition-colors line-clamp-1 mt-0.5">
+                        {product.name}
+                      </h4>
+                    </div>
+
+                    {/* Sizes preview if available */}
+                    {product.sizes && product.sizes.length > 0 && (
+                      <div className="flex items-center gap-1 mt-2 flex-wrap">
+                        {sortProductSizes(product.sizes).slice(0, 4).map((s) => (
+                          <span
+                            key={s}
+                            className="text-[9px] text-neutral-600 bg-neutral-100 px-1 py-0.5 rounded"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Pricing */}
+                    <div className="flex items-baseline gap-1.5 mt-2.5 pt-2 border-t border-neutral-100">
+                      <span className="font-bold text-sm text-neutral-900">
+                        &#8377;{product.price}
+                      </span>
+                      {product.originalPrice && (
+                        <span className="text-[11px] text-neutral-400 line-through">
+                          &#8377;{product.originalPrice}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
 

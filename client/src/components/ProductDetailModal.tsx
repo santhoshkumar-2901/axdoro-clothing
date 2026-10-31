@@ -4,6 +4,20 @@ import { X, Check, ShoppingBag, Layers, AlertCircle, Plus, Minus, ImageOff } fro
 import { useScrollLock } from '../utils/scrollLock.ts';
 import { sortProductSizes } from '../utils/sizes.ts';
 
+export const TSHIRT_GSM_OPTIONS = ['180', '190', '200', '210', '220'] as const;
+
+export function isTShirtProduct(product: Product | null): boolean {
+  if (!product) return false;
+  const slug = product.category?.slug?.toLowerCase() || '';
+  const name = product.category?.name?.toLowerCase() || '';
+  return (
+    slug === 't-shirts' ||
+    slug === 'tshirts' ||
+    name.includes('t-shirt') ||
+    name.includes('tshirt')
+  );
+}
+
 interface ProductDetailModalProps {
   product: Product | null;
   onClose: () => void;
@@ -12,7 +26,8 @@ interface ProductDetailModalProps {
     size: string,
     color: string,
     quantity: number,
-    variant?: ProductVariant
+    variant?: ProductVariant,
+    gsm?: string
   ) => void;
   onOpenBulkWithProduct: (product: Product) => void;
 }
@@ -90,9 +105,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
+  const [selectedGsm, setSelectedGsm] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [quantityInput, setQuantityInput] = useState('1');
   const [sizeError, setSizeError] = useState(false);
+  const [gsmError, setGsmError] = useState(false);
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [imageError, setImageError] = useState(false);
 
@@ -102,9 +119,11 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
       setSelectedImageIndex(0);
       setSelectedSize('');
       setSelectedColor(product.colors?.[0]?.name || 'Standard');
+      setSelectedGsm('');
       setQuantity(1);
       setQuantityInput('1');
       setSizeError(false);
+      setGsmError(false);
       setAddedSuccess(false);
       setImageError(false);
     }
@@ -206,16 +225,35 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   };
 
   const handleAddToCart = () => {
+    const isTShirt = isTShirtProduct(product);
+    let hasError = false;
+
     if (!selectedSize && product.sizes.length > 0) {
       setSizeError(true);
-      return;
+      hasError = true;
+    } else {
+      setSizeError(false);
     }
-    if (isEntirelyOutOfStock || isSelectedVariantOutOfStock) {
+
+    if (isTShirt && !selectedGsm) {
+      setGsmError(true);
+      hasError = true;
+    } else {
+      setGsmError(false);
+    }
+
+    if (hasError || isEntirelyOutOfStock || isSelectedVariantOutOfStock) {
       return;
     }
 
-    setSizeError(false);
-    onAddToCart(product, selectedSize || 'Standard', selectedColor || 'Standard', quantity, matchingVariant);
+    onAddToCart(
+      product,
+      selectedSize || 'Standard',
+      selectedColor || 'Standard',
+      quantity,
+      matchingVariant,
+      isTShirt ? selectedGsm : undefined
+    );
     setAddedSuccess(true);
     setTimeout(() => setAddedSuccess(false), 2000);
   };
@@ -384,6 +422,48 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                           }`}
                         >
                           {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* GSM Selector (T-Shirts Only) */}
+              {isTShirtProduct(product) && (
+                <div className="mt-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-bold text-axdoro-charcoal uppercase tracking-wider">
+                      Select GSM <span className="text-red-500">*</span>
+                    </label>
+                    {gsmError && (
+                      <span className="text-[11px] text-red-600 font-semibold flex items-center gap-1" role="alert">
+                        <AlertCircle className="w-3.5 h-3.5" /> Please choose a GSM option
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2.5" role="radiogroup" aria-label="Available GSM options">
+                    {TSHIRT_GSM_OPTIONS.map((gsm) => {
+                      const isSelected = selectedGsm === gsm;
+                      return (
+                        <button
+                          key={gsm}
+                          type="button"
+                          role="radio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            setSelectedGsm(gsm);
+                            setGsmError(false);
+                          }}
+                          className={`min-w-16 h-10 px-3.5 rounded-lg text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent ${
+                            isSelected
+                              ? 'bg-axdoro-charcoal text-white border-2 border-axdoro-charcoal shadow-subtle'
+                              : gsmError
+                              ? 'bg-axdoro-surface border-2 border-red-500/80 text-axdoro-charcoal hover:border-red-600'
+                              : 'bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal hover:border-axdoro-charcoal'
+                          }`}
+                        >
+                          {`${gsm} GSM`}
                         </button>
                       );
                     })}

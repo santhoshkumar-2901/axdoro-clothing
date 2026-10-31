@@ -50,10 +50,7 @@ describe('Category Banner Contrast & WCAG 2.2 Verification', () => {
 
     it('implements directional light gradient overlays using #F7F7F7', () => {
       expect(categoryPageContent).toContain(
-        'bg-gradient-to-r from-[#F7F7F7] via-[#F7F7F7]/85 to-[#F7F7F7]/40'
-      );
-      expect(categoryPageContent).toContain(
-        'bg-gradient-to-t from-[#F7F7F7] via-transparent to-transparent opacity-80'
+        'bg-gradient-to-r from-[#F7F7F7]/70 via-[#F7F7F7]/40 to-transparent'
       );
     });
 

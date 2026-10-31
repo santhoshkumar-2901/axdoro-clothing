@@ -109,9 +109,13 @@ export default function App(): React.JSX.Element {
     size: string,
     color: string,
     quantity: number = 1,
-    variant?: ProductVariant
+    variant?: ProductVariant,
+    gsm?: string
   ) => {
-    const instanceId = variant ? `${product.id}-${variant.id}` : `${product.id}-${size}-${color}`;
+    const gsmSuffix = gsm ? `-gsm${gsm}` : '';
+    const instanceId = variant
+      ? `${product.id}-${variant.id}${gsmSuffix}`
+      : `${product.id}-${size}-${color}${gsmSuffix}`;
     const pricePaise = variant ? variant.pricePaise : (product.pricePaise || product.price * 100);
     setCartItems((prev) => {
       const existing = prev.find((item) => item.id === instanceId);
@@ -130,6 +134,7 @@ export default function App(): React.JSX.Element {
           variantId: variant?.id,
           selectedSize: size,
           selectedColor: color,
+          selectedGsm: gsm,
           pricePaise,
           quantity,
         },

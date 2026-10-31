@@ -617,7 +617,29 @@ export async function listOrders(params: {
   `;
 
   const listRes = await query<any>(listSql, dataParams);
-  const orders = listRes.rows.map((row) => mapOrderRow(row));
+  if (listRes.rows.length === 0) {
+    return { orders: [], totalCount, totalPages };
+  }
+
+  const orderIds = listRes.rows.map((r) => r.id);
+  const itemsRes = await query<any>(
+    `SELECT * FROM order_items WHERE order_id = ANY($1::uuid[]) ORDER BY created_at ASC`,
+    [orderIds]
+  );
+
+  const itemsByOrderId = new Map<string, any[]>();
+  for (const item of itemsRes.rows) {
+    const existing = itemsByOrderId.get(item.order_id);
+    if (existing) {
+      existing.push(item);
+    } else {
+      itemsByOrderId.set(item.order_id, [item]);
+    }
+  }
+
+  const orders = listRes.rows.map((row) =>
+    mapOrderRow(row, itemsByOrderId.get(row.id) || [])
+  );
 
   return { orders, totalCount, totalPages };
 }

@@ -686,4 +686,45 @@ describe('Phase 4 — COD Orders & Order Management Integration Tests (axdoro_te
     // Verify rate limit headers are present
     expect(validRes.headers['ratelimit-limit']).toBeDefined();
   });
+
+  // 17. Admin order listing includes populated items with product and variant details
+  it('includes populated items with product name, size, color, quantity, and line totals in GET /api/admin/orders', async () => {
+    // Create an order with 2 items of testVariantId
+    await request(app)
+      .post('/api/orders')
+      .send({
+        customerName: 'Item Listing Buyer',
+        customerEmail: 'itemlisting@example.com',
+        customerPhone: '+919876543210',
+        shippingAddressLine1: '100 Commercial Street',
+        shippingCity: 'Bengaluru',
+        shippingState: 'Karnataka',
+        shippingPincode: '560001',
+        paymentMethod: 'COD',
+        items: [{ variantId: testVariantId, quantity: 2 }],
+        idempotencyKey: 'idem-item-listing-test',
+      });
+
+    const res = await request(app)
+      .get('/api/admin/orders')
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('success');
+    expect(res.body.data.length).toBeGreaterThan(0);
+
+    const targetOrder = res.body.data.find(
+      (o: any) => o.customerEmail === 'itemlisting@example.com'
+    );
+    expect(targetOrder).toBeDefined();
+    expect(Array.isArray(targetOrder.items)).toBe(true);
+    expect(targetOrder.items).toHaveLength(1);
+    expect(targetOrder.items[0].productName).toBe('Classic Oversized Tee');
+    expect(targetOrder.items[0].variantSize).toBe('M');
+    expect(targetOrder.items[0].variantColor).toBe('Black');
+    expect(targetOrder.items[0].variantSku).toBe('AXD-COT-BLK-M');
+    expect(targetOrder.items[0].quantity).toBe(2);
+    expect(targetOrder.items[0].unitPricePaise).toBe(unitPricePaise);
+    expect(targetOrder.items[0].lineTotalPaise).toBe(2 * unitPricePaise);
+  });
 });

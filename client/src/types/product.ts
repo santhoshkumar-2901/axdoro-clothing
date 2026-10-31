@@ -80,6 +80,7 @@ export interface CartItem {
   variantId?: string;
   selectedSize: string;
   selectedColor: string;
+  selectedGsm?: string;
   pricePaise: number; // Integer paise used for internal cart math
   quantity: number;
 }
