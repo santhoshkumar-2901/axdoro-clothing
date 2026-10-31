@@ -724,3 +724,106 @@ export async function getPublicHomepageCollectionBySlug(slug: string): Promise<H
   const all = await getPublicHomepageCollections();
   return all.find((c) => c.slug === slug) || null;
 }
+
+export interface PublicCategorySectionDTO {
+  id: string;
+  categoryId: string;
+  category: {
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+  };
+  isEnabled: boolean;
+  displayOrder: number;
+  heading: string;
+  subtitle: string | null;
+  categoryCards: Array<{
+    id: string;
+    label: string;
+    sublabel?: string | null;
+    imageUrl: string;
+    destinationType: 'category' | 'query';
+    destinationCategorySlug?: string | null;
+    query?: string | null;
+  }>;
+  posterImageUrl: string | null;
+  posterHeading: string | null;
+  posterSubtitle: string | null;
+  posterDestinationUrl: string | null;
+  productLimit: number;
+  viewAllLabel: string;
+  viewAllDestination: string | null;
+}
+
+export async function getPublicCategorySections(): Promise<PublicCategorySectionDTO[]> {
+  const sql = `
+    SELECT
+      cs.id,
+      cs.category_id,
+      c.id AS cat_id,
+      c.name AS cat_name,
+      c.slug AS cat_slug,
+      c.description AS cat_description,
+      cs.is_enabled,
+      cs.display_order,
+      cs.heading,
+      cs.subtitle,
+      cs.category_cards,
+      cs.poster_image_url,
+      cs.poster_heading,
+      cs.poster_subtitle,
+      cs.poster_destination_url,
+      cs.product_limit,
+      cs.view_all_label,
+      cs.view_all_destination
+    FROM category_sections cs
+    JOIN categories c ON c.id = cs.category_id
+    WHERE cs.is_enabled = true AND c.is_active = true
+    ORDER BY cs.display_order ASC, c.display_order ASC, cs.created_at ASC, c.slug ASC;
+  `;
+
+  const res = await query<{
+    id: string;
+    category_id: string;
+    cat_id: string;
+    cat_name: string;
+    cat_slug: string;
+    cat_description: string | null;
+    is_enabled: boolean;
+    display_order: number;
+    heading: string;
+    subtitle: string | null;
+    category_cards: unknown;
+    poster_image_url: string | null;
+    poster_heading: string | null;
+    poster_subtitle: string | null;
+    poster_destination_url: string | null;
+    product_limit: number;
+    view_all_label: string;
+    view_all_destination: string | null;
+  }>(sql);
+
+  return res.rows.map((row) => ({
+    id: row.id,
+    categoryId: row.category_id,
+    category: {
+      id: row.cat_id,
+      slug: row.cat_slug,
+      name: row.cat_name,
+      description: row.cat_description,
+    },
+    isEnabled: row.is_enabled,
+    displayOrder: row.display_order,
+    heading: row.heading,
+    subtitle: row.subtitle,
+    categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as PublicCategorySectionDTO['categoryCards']) : [],
+    posterImageUrl: row.poster_image_url,
+    posterHeading: row.poster_heading,
+    posterSubtitle: row.poster_subtitle,
+    posterDestinationUrl: row.poster_destination_url,
+    productLimit: row.product_limit,
+    viewAllLabel: row.view_all_label || 'View All',
+    viewAllDestination: row.view_all_destination || `/category/${row.cat_slug}`,
+  }));
+}

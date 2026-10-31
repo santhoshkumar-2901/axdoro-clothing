@@ -14,9 +14,11 @@ export interface Category {
 export interface CategoryShortcutItem {
   id: string;
   label: string;
-  sublabel?: string;
+  sublabel?: string | null;
   imageUrl: string;
-  query?: string;
+  query?: string | null;
+  destinationType?: 'category' | 'query';
+  destinationCategorySlug?: string | null;
 }
 
 export interface ProductVariant {

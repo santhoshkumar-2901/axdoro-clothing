@@ -207,6 +207,59 @@ export interface AdminCategory {
   createdAt: string;
   imageUrl?: string | null;
   publicId?: string | null;
+  section?: {
+    id: string;
+    isEnabled: boolean;
+    displayOrder: number;
+    heading: string;
+  } | null;
+}
+
+export interface CategorySectionCard {
+  id: string;
+  label: string;
+  sublabel?: string | null;
+  imageUrl: string;
+  destinationType: 'category' | 'query';
+  destinationCategorySlug?: string | null;
+  query?: string | null;
+}
+
+export interface AdminCategorySection {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  categorySlug: string;
+  categoryIsActive: boolean;
+  isEnabled: boolean;
+  displayOrder: number;
+  heading: string;
+  subtitle: string | null;
+  categoryCards: CategorySectionCard[];
+  posterImageUrl: string | null;
+  posterHeading: string | null;
+  posterSubtitle: string | null;
+  posterDestinationUrl: string | null;
+  productLimit: number;
+  viewAllLabel: string;
+  viewAllDestination: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertCategorySectionPayload {
+  isEnabled: boolean;
+  displayOrder: number;
+  heading: string;
+  subtitle?: string | null;
+  categoryCards: CategorySectionCard[];
+  posterImageUrl?: string | null;
+  posterHeading?: string | null;
+  posterSubtitle?: string | null;
+  posterDestinationUrl?: string | null;
+  productLimit: number;
+  viewAllLabel: string;
+  viewAllDestination?: string | null;
 }
 
 export async function adminGetCategories(): Promise<AdminCategory[]> {
@@ -217,6 +270,55 @@ export async function adminGetCategories(): Promise<AdminCategory[]> {
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch categories');
   return json.data || json.categories || [];
+}
+
+export async function adminGetCategorySection(categoryId: string): Promise<AdminCategorySection | null> {
+  const res = await fetch(`/api/admin/categories/${categoryId}/section`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (res.status === 404) {
+    return null;
+  }
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch category section');
+  return json.data || json.section;
+}
+
+export async function adminUpsertCategorySection(
+  categoryId: string,
+  payload: UpsertCategorySectionPayload
+): Promise<AdminCategorySection> {
+  const res = await fetch(`/api/admin/categories/${categoryId}/section`, {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to save category section');
+  return json.data || json.section;
+}
+
+export async function adminDeleteCategorySection(categoryId: string): Promise<void> {
+  const res = await fetch(`/api/admin/categories/${categoryId}/section`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to delete category section');
+}
+
+export async function adminReorderCategorySections(orderedSectionIds: string[]): Promise<void> {
+  const res = await fetch('/api/admin/categories/sections/reorder', {
+    method: 'PUT',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify({ orderedSectionIds }),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to reorder category sections');
 }
 
 export interface CreateCategoryPayload {

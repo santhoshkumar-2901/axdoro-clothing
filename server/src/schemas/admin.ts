@@ -479,3 +479,159 @@ export const paymentQrUpdateSchema = z.object({
     .nullable(),
 });
 
+/**
+ * Validates navigation destination URLs for client navigation.
+ * Internal relative paths must start with / (not //).
+ * If external is allowed, must be https:// and not target private/loopback addresses.
+ * Rejects javascript:, data:, and malformed strings.
+ */
+export function isValidDestinationUrl(rawUrl: string, allowExternal = false): { valid: boolean; reason?: string } {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return { valid: false, reason: 'Destination URL is required' };
+  }
+  const trimmed = rawUrl.trim();
+  if (trimmed.length > 500) {
+    return { valid: false, reason: 'Destination URL exceeds maximum length of 500 characters' };
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
+    return { valid: false, reason: 'Unsafe pseudo-protocol rejected' };
+  }
+  if (lower.startsWith('//')) {
+    return { valid: false, reason: 'Protocol-relative URLs are not allowed' };
+  }
+
+  // Internal relative path
+  if (trimmed.startsWith('/')) {
+    if (/[\s<>"'{}|\\^`]/i.test(trimmed)) {
+      return { valid: false, reason: 'Internal destination URL contains invalid characters' };
+    }
+    return { valid: true };
+  }
+
+  if (!allowExternal) {
+    return { valid: false, reason: 'Destination must be an internal relative path starting with /' };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { valid: false, reason: 'Malformed URL format' };
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return { valid: false, reason: 'External destination URLs must use https:// protocol' };
+  }
+
+  if (parsed.username || parsed.password) {
+    return { valid: false, reason: 'URL must not contain embedded user credentials' };
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '169.254.169.254' ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname)
+  ) {
+    return { valid: false, reason: 'Private and loopback network destinations are not allowed' };
+  }
+
+  return { valid: true };
+}
+
+export const categoryCardSchema = z.object({
+  id: z.string().trim().min(1, 'Card ID is required').max(100),
+  label: z.string().trim().min(1, 'Card label is required').max(100),
+  sublabel: z.string().trim().max(100).optional().nullable(),
+  imageUrl: z.string().trim().superRefine((val, ctx) => {
+    const result = isValidProductImageUrl(val);
+    if (!result.valid) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: result.reason || 'Invalid card image URL',
+      });
+    }
+  }),
+  destinationType: z.enum(['category', 'query']).default('query'),
+  destinationCategorySlug: z
+    .string()
+    .trim()
+    .max(50)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Category slug must be lowercase alphanumeric with hyphens')
+    .optional()
+    .nullable(),
+  query: z.string().trim().max(100).optional().nullable(),
+});
+
+export const categorySectionUpsertSchema = z.object({
+  isEnabled: z.boolean().default(true),
+  displayOrder: z.coerce.number().int().min(0, 'Display order cannot be negative').default(0),
+  heading: z.string().trim().min(1, 'Heading is required').max(150, 'Heading cannot exceed 150 characters'),
+  subtitle: z.string().trim().max(1000, 'Subtitle cannot exceed 1000 characters').optional().nullable(),
+  categoryCards: z.array(categoryCardSchema).default([]),
+  posterImageUrl: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid poster image URL',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+  posterHeading: z.string().trim().max(150, 'Poster heading cannot exceed 150 characters').optional().nullable(),
+  posterSubtitle: z.string().trim().max(1000, 'Poster subtitle cannot exceed 1000 characters').optional().nullable(),
+  posterDestinationUrl: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      const result = isValidDestinationUrl(val, true);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid poster destination URL',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+  productLimit: z.coerce.number().int().min(1, 'Product limit must be at least 1').max(20, 'Product limit cannot exceed 20').default(4),
+  viewAllLabel: z.string().trim().min(1, 'View all label is required').max(50).default('View All'),
+  viewAllDestination: z
+    .string()
+    .trim()
+    .superRefine((val, ctx) => {
+      if (!val) return;
+      const result = isValidDestinationUrl(val, false);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'View all destination must be an internal relative path starting with /',
+        });
+      }
+    })
+    .optional()
+    .nullable(),
+});
+
+export const categorySectionReorderSchema = z.object({
+  orderedSectionIds: z
+    .array(z.string().uuid('Each section ID must be a valid UUID'))
+    .min(1, 'At least one section ID is required')
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: 'Duplicate section IDs are not allowed in reorder request',
+    }),
+});
+

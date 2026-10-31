@@ -14,6 +14,7 @@ import {
   Upload,
   Link as LinkIcon,
   Trash2,
+  LayoutTemplate,
 } from 'lucide-react';
 import {
   AdminCategory,
@@ -24,6 +25,8 @@ import {
   CreateCategoryPayload,
   UpdateCategoryPayload,
 } from '../../api/admin.ts';
+import { CategorySectionModal } from './CategorySectionModal.tsx';
+import { CategorySectionReorderModal } from './CategorySectionReorderModal.tsx';
 import { Button } from '../ui/button.tsx';
 import { Input, Label } from '../ui/input.tsx';
 import { Badge } from '../ui/badge.tsx';
@@ -94,9 +97,15 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const [imageModalSuccess, setImageModalSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Category Section modal state
+  const [selectedSectionCategory, setSelectedSectionCategory] = useState<AdminCategory | null>(null);
+  const [isSectionModalOpen, setIsSectionModalOpen] = useState<boolean>(false);
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState<boolean>(false);
+
   // Global reference-counted scroll lock while add or edit category dialog is open
   useScrollLock(isAddOpen || Boolean(editingCategory));
   useScrollLock(Boolean(imageModalCategory));
+  useScrollLock(isSectionModalOpen || isReorderModalOpen);
 
   // Quick toggle loading state
   const [togglingCategoryId, setTogglingCategoryId] = useState<string | null>(null);
@@ -448,13 +457,26 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
           </p>
         </div>
 
-        <Button
-          onClick={handleOpenAddModal}
-          className="flex items-center gap-2 text-xs font-semibold py-2 px-4 shadow-sm"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Add Category</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsReorderModalOpen(true)}
+            className="flex items-center gap-2 text-xs font-semibold py-2 px-3 shadow-xs border-axdoro-border text-axdoro-charcoal hover:bg-axdoro-surface-muted"
+            title="Reorder Homepage Category Sections"
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            <span>Reorder Sections</span>
+          </Button>
+
+          <Button
+            onClick={handleOpenAddModal}
+            className="flex items-center gap-2 text-xs font-semibold py-2 px-4 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Category</span>
+          </Button>
+        </div>
       </div>
 
       {/* Notifications */}
@@ -515,6 +537,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                   <TableHead className="font-semibold text-xs">Description</TableHead>
                   <TableHead className="text-center font-semibold text-xs">Products</TableHead>
                   <TableHead className="text-center font-semibold text-xs">Status</TableHead>
+                  <TableHead className="text-center font-semibold text-xs">Homepage Section</TableHead>
                   <TableHead className="text-right font-semibold text-xs pr-6">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -583,8 +606,34 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                           </Badge>
                         )}
                       </TableCell>
+                      <TableCell className="text-center">
+                        {cat.section ? (
+                          <Badge
+                            variant={cat.section.isEnabled ? 'success' : 'outline'}
+                            className={`gap-1 text-[11px] py-0.5 ${!cat.section.isEnabled ? 'text-axdoro-text-muted border-axdoro-border' : ''}`}
+                          >
+                            <LayoutTemplate className="w-3 h-3" />
+                            #{cat.section.displayOrder} {cat.section.isEnabled ? 'Enabled' : 'Disabled'}
+                          </Badge>
+                        ) : (
+                          <span className="text-[11px] text-axdoro-text-muted italic">Not configured</span>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right pr-6">
                         <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedSectionCategory(cat);
+                              setIsSectionModalOpen(true);
+                            }}
+                            className="h-8 text-xs font-semibold px-2.5 text-axdoro-purple hover:text-axdoro-purple hover:bg-axdoro-purple/10 border-axdoro-border"
+                            title="Manage Homepage Category Section"
+                          >
+                            <LayoutTemplate className="w-3.5 h-3.5 mr-1" /> Section
+                          </Button>
+
                           <Button
                             variant="outline"
                             size="sm"
@@ -1185,6 +1234,31 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
           </div>
         </div>
       )}
+      {/* Homepage Category Section Modal */}
+      <CategorySectionModal
+        category={selectedSectionCategory}
+        isOpen={isSectionModalOpen}
+        onClose={() => {
+          setIsSectionModalOpen(false);
+          setSelectedSectionCategory(null);
+        }}
+        onSaved={() => {
+          loadCategories();
+          onCategoryMutated?.();
+        }}
+        allCategories={categories}
+      />
+
+      {/* Homepage Category Sections Reorder Modal */}
+      <CategorySectionReorderModal
+        isOpen={isReorderModalOpen}
+        onClose={() => setIsReorderModalOpen(false)}
+        onReordered={() => {
+          loadCategories();
+          onCategoryMutated?.();
+        }}
+        categories={categories}
+      />
     </div>
   );
 };

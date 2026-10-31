@@ -6,6 +6,7 @@ import {
   productUpdateSchema,
   categoryCreateSchema,
   categoryUpdateSchema,
+  categorySectionUpsertSchema,
   productVariantSchema,
   productImageAddSchema,
   productImageUpdateSchema,
@@ -26,6 +27,12 @@ export interface AdminCategoryRow {
   createdAt: string;
   imageUrl?: string | null;
   publicId?: string | null;
+  section?: {
+    id: string;
+    isEnabled: boolean;
+    displayOrder: number;
+    heading: string;
+  } | null;
 }
 
 export interface AdminProductSummary {
@@ -109,10 +116,15 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
       c.image_url,
       c.public_id,
       c.created_at,
-      COUNT(p.id)::int AS product_count
+      COUNT(DISTINCT p.id)::int AS product_count,
+      cs.id AS section_id,
+      cs.is_enabled AS section_is_enabled,
+      cs.display_order AS section_display_order,
+      cs.heading AS section_heading
     FROM categories c
     LEFT JOIN products p ON p.category_id = c.id
-    GROUP BY c.id
+    LEFT JOIN category_sections cs ON cs.category_id = c.id
+    GROUP BY c.id, cs.id, cs.is_enabled, cs.display_order, cs.heading
     ORDER BY c.display_order ASC, c.name ASC;
   `;
   const res = await query<{
@@ -126,6 +138,10 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
     public_id: string | null;
     created_at: Date;
     product_count: number;
+    section_id: string | null;
+    section_is_enabled: boolean | null;
+    section_display_order: number | null;
+    section_heading: string | null;
   }>(sql);
 
   return res.rows.map((row) => ({
@@ -139,6 +155,14 @@ export async function adminGetCategories(): Promise<AdminCategoryRow[]> {
     createdAt: row.created_at.toISOString(),
     imageUrl: row.image_url || null,
     publicId: row.public_id || null,
+    section: row.section_id
+      ? {
+          id: row.section_id,
+          isEnabled: !!row.section_is_enabled,
+          displayOrder: row.section_display_order ?? 0,
+          heading: row.section_heading || '',
+        }
+      : null,
   }));
 }
 
@@ -275,6 +299,348 @@ export async function adminUpdateCategory(
       console.warn(`[Cloudinary] Asset deletion warning for category asset '${oldPublicId}':`, err);
     }
   }
+}
+
+// -------------------------------------------------------------
+// Category Section Management (Homepage Sections)
+// -------------------------------------------------------------
+
+export interface AdminCategorySectionDTO {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  categorySlug: string;
+  categoryIsActive: boolean;
+  isEnabled: boolean;
+  displayOrder: number;
+  heading: string;
+  subtitle: string | null;
+  categoryCards: Array<{
+    id: string;
+    label: string;
+    sublabel?: string | null;
+    imageUrl: string;
+    destinationType: 'category' | 'query';
+    destinationCategorySlug?: string | null;
+    query?: string | null;
+  }>;
+  posterImageUrl: string | null;
+  posterHeading: string | null;
+  posterSubtitle: string | null;
+  posterDestinationUrl: string | null;
+  productLimit: number;
+  viewAllLabel: string;
+  viewAllDestination: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function adminGetCategorySection(categoryId: string): Promise<AdminCategorySectionDTO | null> {
+  const sql = `
+    SELECT
+      cs.id,
+      cs.category_id,
+      c.name AS category_name,
+      c.slug AS category_slug,
+      c.is_active AS category_is_active,
+      cs.is_enabled,
+      cs.display_order,
+      cs.heading,
+      cs.subtitle,
+      cs.category_cards,
+      cs.poster_image_url,
+      cs.poster_heading,
+      cs.poster_subtitle,
+      cs.poster_destination_url,
+      cs.product_limit,
+      cs.view_all_label,
+      cs.view_all_destination,
+      cs.created_at,
+      cs.updated_at
+    FROM category_sections cs
+    JOIN categories c ON c.id = cs.category_id
+    WHERE cs.category_id = $1;
+  `;
+  const res = await query<{
+    id: string;
+    category_id: string;
+    category_name: string;
+    category_slug: string;
+    category_is_active: boolean;
+    is_enabled: boolean;
+    display_order: number;
+    heading: string;
+    subtitle: string | null;
+    category_cards: unknown;
+    poster_image_url: string | null;
+    poster_heading: string | null;
+    poster_subtitle: string | null;
+    poster_destination_url: string | null;
+    product_limit: number;
+    view_all_label: string;
+    view_all_destination: string | null;
+    created_at: Date;
+    updated_at: Date;
+  }>(sql, [categoryId]);
+
+  if (res.rows.length === 0) {
+    return null;
+  }
+
+  const row = res.rows[0];
+  return {
+    id: row.id,
+    categoryId: row.category_id,
+    categoryName: row.category_name,
+    categorySlug: row.category_slug,
+    categoryIsActive: row.category_is_active,
+    isEnabled: row.is_enabled,
+    displayOrder: row.display_order,
+    heading: row.heading,
+    subtitle: row.subtitle,
+    categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as AdminCategorySectionDTO['categoryCards']) : [],
+    posterImageUrl: row.poster_image_url,
+    posterHeading: row.poster_heading,
+    posterSubtitle: row.poster_subtitle,
+    posterDestinationUrl: row.poster_destination_url,
+    productLimit: row.product_limit,
+    viewAllLabel: row.view_all_label,
+    viewAllDestination: row.view_all_destination,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+export async function adminUpsertCategorySection(
+  categoryId: string,
+  data: z.infer<typeof categorySectionUpsertSchema>,
+  actor: AdminUserDTO
+): Promise<AdminCategorySectionDTO> {
+  return await withTransaction(async (client) => {
+    // 1. Verify category exists
+    const catRes = await client.query<{ id: string; name: string; slug: string; is_active: boolean }>(
+      `SELECT id, name, slug, is_active FROM categories WHERE id = $1;`,
+      [categoryId]
+    );
+    if (catRes.rows.length === 0) {
+      throw new Error('CATEGORY_NOT_FOUND');
+    }
+    const cat = catRes.rows[0];
+
+    // 2. Validate destinationCategorySlug references if specified
+    const categorySlugs = data.categoryCards
+      .filter((card) => card.destinationType === 'category' && card.destinationCategorySlug)
+      .map((card) => card.destinationCategorySlug as string);
+
+    if (categorySlugs.length > 0) {
+      const distinctSlugs = [...new Set(categorySlugs)];
+      const slugCheck = await client.query<{ slug: string }>(
+        `SELECT slug FROM categories WHERE slug = ANY($1::text[]);`,
+        [distinctSlugs]
+      );
+      const foundSlugs = new Set(slugCheck.rows.map((r) => r.slug));
+      for (const slug of distinctSlugs) {
+        if (!foundSlugs.has(slug)) {
+          throw new Error(`REFERENCED_CATEGORY_NOT_FOUND:${slug}`);
+        }
+      }
+    }
+
+    // 3. Check existing section for audit log action distinction
+    const existingSectionRes = await client.query<{ id: string }>(
+      `SELECT id FROM category_sections WHERE category_id = $1 FOR UPDATE;`,
+      [categoryId]
+    );
+    const isUpdate = existingSectionRes.rows.length > 0;
+
+    // 4. Default view_all_destination to /category/<slug> if not supplied
+    const viewAllDestination = data.viewAllDestination || `/category/${cat.slug}`;
+
+    // 5. Upsert section
+    const upsertSql = `
+      INSERT INTO category_sections (
+        category_id,
+        is_enabled,
+        display_order,
+        heading,
+        subtitle,
+        category_cards,
+        poster_image_url,
+        poster_heading,
+        poster_subtitle,
+        poster_destination_url,
+        product_limit,
+        view_all_label,
+        view_all_destination
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ON CONFLICT (category_id) DO UPDATE SET
+        is_enabled = EXCLUDED.is_enabled,
+        display_order = EXCLUDED.display_order,
+        heading = EXCLUDED.heading,
+        subtitle = EXCLUDED.subtitle,
+        category_cards = EXCLUDED.category_cards,
+        poster_image_url = EXCLUDED.poster_image_url,
+        poster_heading = EXCLUDED.poster_heading,
+        poster_subtitle = EXCLUDED.poster_subtitle,
+        poster_destination_url = EXCLUDED.poster_destination_url,
+        product_limit = EXCLUDED.product_limit,
+        view_all_label = EXCLUDED.view_all_label,
+        view_all_destination = EXCLUDED.view_all_destination,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *;
+    `;
+
+    const upsertRes = await client.query(upsertSql, [
+      categoryId,
+      data.isEnabled,
+      data.displayOrder,
+      data.heading,
+      data.subtitle || null,
+      JSON.stringify(data.categoryCards),
+      data.posterImageUrl || null,
+      data.posterHeading || null,
+      data.posterSubtitle || null,
+      data.posterDestinationUrl || null,
+      data.productLimit,
+      data.viewAllLabel,
+      viewAllDestination,
+    ]);
+
+    const row = upsertRes.rows[0];
+
+    // 6. Record audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: isUpdate ? 'CATEGORY_SECTION_UPDATE' : 'CATEGORY_SECTION_CREATE',
+      entityType: 'category_section',
+      entityId: row.id,
+      details: {
+        categoryId,
+        categorySlug: cat.slug,
+        heading: data.heading,
+        isEnabled: data.isEnabled,
+        displayOrder: data.displayOrder,
+      },
+      client,
+    });
+
+    return {
+      id: row.id,
+      categoryId: row.category_id,
+      categoryName: cat.name,
+      categorySlug: cat.slug,
+      categoryIsActive: cat.is_active,
+      isEnabled: row.is_enabled,
+      displayOrder: row.display_order,
+      heading: row.heading,
+      subtitle: row.subtitle,
+      categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as AdminCategorySectionDTO['categoryCards']) : [],
+      posterImageUrl: row.poster_image_url,
+      posterHeading: row.poster_heading,
+      posterSubtitle: row.poster_subtitle,
+      posterDestinationUrl: row.poster_destination_url,
+      productLimit: row.product_limit,
+      viewAllLabel: row.view_all_label,
+      viewAllDestination: row.view_all_destination,
+      createdAt: row.created_at.toISOString(),
+      updatedAt: row.updated_at.toISOString(),
+    };
+  });
+}
+
+export async function adminDeleteCategorySection(
+  categoryId: string,
+  actor: AdminUserDTO
+): Promise<{ id: string; categoryId: string }> {
+  return await withTransaction(async (client) => {
+    // 1. Verify category exists
+    const catRes = await client.query<{ id: string; name: string }>(
+      `SELECT id, name FROM categories WHERE id = $1;`,
+      [categoryId]
+    );
+    if (catRes.rows.length === 0) {
+      throw new Error('CATEGORY_NOT_FOUND');
+    }
+
+    // 2. Lock and delete category section
+    const delRes = await client.query<{ id: string; heading: string }>(
+      `DELETE FROM category_sections WHERE category_id = $1 RETURNING id, heading;`,
+      [categoryId]
+    );
+
+    if (delRes.rows.length === 0) {
+      throw new Error('CATEGORY_SECTION_NOT_FOUND');
+    }
+
+    const deleted = delRes.rows[0];
+
+    // 3. Record audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'CATEGORY_SECTION_DELETE',
+      entityType: 'category_section',
+      entityId: deleted.id,
+      details: {
+        categoryId,
+        categoryName: catRes.rows[0].name,
+        heading: deleted.heading,
+      },
+      client,
+    });
+
+    return {
+      id: deleted.id,
+      categoryId,
+    };
+  });
+}
+
+export async function adminReorderCategorySections(
+  orderedSectionIds: string[],
+  actor: AdminUserDTO
+): Promise<void> {
+  await withTransaction(async (client) => {
+    // 1. Check total count of sections
+    const countRes = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM category_sections;`
+    );
+    const totalCount = parseInt(countRes.rows[0].count, 10);
+
+    if (orderedSectionIds.length !== totalCount) {
+      throw new Error(`INCOMPLETE_REORDER_REQUEST: Expected ${totalCount} sections, got ${orderedSectionIds.length}`);
+    }
+
+    // 2. Lock and verify all provided IDs exist
+    const lockRes = await client.query<{ id: string }>(
+      `SELECT id FROM category_sections WHERE id = ANY($1::uuid[]) FOR UPDATE;`,
+      [orderedSectionIds]
+    );
+
+    if (lockRes.rows.length !== orderedSectionIds.length) {
+      throw new Error('INVALID_SECTION_IDS: One or more section IDs not found');
+    }
+
+    // 3. Update display order to 1..N
+    for (let i = 0; i < orderedSectionIds.length; i++) {
+      await client.query(
+        `UPDATE category_sections SET display_order = $1 WHERE id = $2;`,
+        [i + 1, orderedSectionIds[i]]
+      );
+    }
+
+    // 4. Record audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'CATEGORY_SECTIONS_REORDER',
+      entityType: 'category_section',
+      entityId: 'bulk',
+      details: { orderedSectionIds },
+      client,
+    });
+  });
 }
 
 // -------------------------------------------------------------

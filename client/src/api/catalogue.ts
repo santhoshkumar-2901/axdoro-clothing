@@ -1,4 +1,4 @@
-import { Product, Category, HomepageCollection, HeroSlide } from '../types/product.ts';
+import { Product, Category, HomepageCollection, HeroSlide, CategoryShortcutItem } from '../types/product.ts';
 
 export interface ProductsFetchParams {
   page?: number;
@@ -191,4 +191,43 @@ export async function fetchHomepageHero(): Promise<{ imageUrl: string | null; sl
     // Fail safely with default fallback
     return { imageUrl: null, slides: [] };
   }
+}
+
+export interface PublicCategorySection {
+  id: string;
+  categoryId: string;
+  category: {
+    id: string;
+    slug: string;
+    name: string;
+    description: string | null;
+  };
+  isEnabled: boolean;
+  displayOrder: number;
+  heading: string;
+  subtitle: string | null;
+  categoryCards: CategoryShortcutItem[];
+  posterImageUrl: string | null;
+  posterHeading: string | null;
+  posterSubtitle: string | null;
+  posterDestinationUrl: string | null;
+  productLimit: number;
+  viewAllLabel: string;
+  viewAllDestination: string | null;
+}
+
+export async function fetchHomepageCategorySections(): Promise<PublicCategorySection[]> {
+  const response = await fetch('/api/homepage/category-sections', {
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.message || `Failed to fetch homepage category sections (HTTP ${response.status})`);
+  }
+
+  const json = await response.json();
+  return json.data || json.sections || [];
 }

@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { getHomepageHeroSetting } from '../services/site-settings.service.js';
+import { getPublicCategorySections } from '../services/catalogue.service.js';
 
 export const homepageRouter = Router();
 
@@ -24,6 +25,20 @@ homepageRouter.get('/hero', async (_req: Request, res: Response, next: NextFunct
         imageUrl: hero.imageUrl,
         slides: publicSlides,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/homepage/category-sections — Return enabled category sections for active categories (public)
+homepageRouter.get('/category-sections', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sections = await getPublicCategorySections();
+    res.json({
+      status: 'success',
+      data: sections,
+      sections,
     });
   } catch (err) {
     next(err);

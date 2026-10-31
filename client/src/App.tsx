@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Category, CartItem, ProductVariant, HeroSlide, CategoryShortcutItem } from './types/product.ts';
-import { fetchProductBySlug, fetchCategories, fetchHomepageHero } from './api/catalogue.ts';
+import { Product, Category, CartItem, ProductVariant, HeroSlide } from './types/product.ts';
+import {
+  fetchProductBySlug,
+  fetchCategories,
+  fetchHomepageHero,
+  fetchHomepageCategorySections,
+  PublicCategorySection,
+} from './api/catalogue.ts';
 import { Navbar } from './components/Navbar.tsx';
 import { Hero } from './components/Hero.tsx';
 import { CategoryPage } from './components/CategoryPage.tsx';
@@ -14,126 +20,6 @@ import { BulkEnquiryModal } from './components/BulkEnquiryModal.tsx';
 import { CheckoutModal } from './components/CheckoutModal.tsx';
 import { AdminPortal } from './components/admin/AdminPortal.tsx';
 
-const PANTS_SHORTCUTS: CategoryShortcutItem[] = [
-  {
-    id: 'pants-bootcut',
-    label: 'Bootcut',
-    sublabel: 'Pants',
-    imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600&auto=format&fit=crop&q=80',
-    query: 'Bootcut',
-  },
-  {
-    id: 'pants-korean',
-    label: 'Korean',
-    sublabel: 'Trousers',
-    imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600&auto=format&fit=crop&q=80',
-    query: 'Korean',
-  },
-  {
-    id: 'pants-gurkha',
-    label: 'Gurkha',
-    sublabel: 'Pants',
-    imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600&auto=format&fit=crop&q=80',
-    query: 'Gurkha',
-  },
-  {
-    id: 'pants-pleated',
-    label: 'Pleated',
-    sublabel: 'Pants',
-    imageUrl: 'https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=600&auto=format&fit=crop&q=80',
-    query: 'Pleated',
-  },
-  {
-    id: 'pants-baggy-jeans',
-    label: 'Baggy',
-    sublabel: 'Jeans',
-    imageUrl: 'https://images.unsplash.com/photo-1604176354204-9268737828e4?w=600&auto=format&fit=crop&q=80',
-    query: 'Baggy',
-  },
-  {
-    id: 'pants-relaxed-loose',
-    label: 'Relaxed',
-    sublabel: 'Loose Fit',
-    imageUrl: 'https://images.unsplash.com/photo-1552374196-1ab2a1c593e8?w=600&auto=format&fit=crop&q=80',
-    query: 'Relaxed',
-  },
-  {
-    id: 'pants-wide-leg',
-    label: 'Wide Leg',
-    sublabel: 'Trousers',
-    imageUrl: 'https://images.unsplash.com/photo-1509631179647-0177331693ae?w=600&auto=format&fit=crop&q=80',
-    query: 'Wide Leg',
-  },
-  {
-    id: 'pants-straight-fit',
-    label: 'Straight Fit',
-    sublabel: 'Pants',
-    imageUrl: 'https://images.unsplash.com/photo-1479064555552-3ef4979f8908?w=600&auto=format&fit=crop&q=80',
-    query: 'Straight Fit',
-  },
-];
-
-const SHIRTS_SHORTCUTS: CategoryShortcutItem[] = [
-  {
-    id: 'shirts-oxford',
-    label: 'Oxford',
-    sublabel: 'Button-Down',
-    imageUrl: 'https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600&auto=format&fit=crop&q=80',
-    query: 'Oxford',
-  },
-  {
-    id: 'shirts-cuban',
-    label: 'Cuban Collar',
-    sublabel: 'Resort Shirt',
-    imageUrl: 'https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=600&auto=format&fit=crop&q=80',
-    query: 'Cuban',
-  },
-  {
-    id: 'shirts-linen',
-    label: 'Linen Blend',
-    sublabel: 'Overshirt',
-    imageUrl: 'https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=600&auto=format&fit=crop&q=80',
-    query: 'Linen',
-  },
-  {
-    id: 'shirts-overshirt',
-    label: 'Overshirt',
-    sublabel: 'Contemporary',
-    imageUrl: 'https://images.unsplash.com/photo-1603252109303-2751441dd157?w=600&auto=format&fit=crop&q=80',
-    query: 'Overshirt',
-  },
-];
-
-const TSHIRTS_SHORTCUTS: CategoryShortcutItem[] = [
-  {
-    id: 'tshirts-140gsm',
-    label: '140 GSM',
-    sublabel: 'Combed Cotton',
-    imageUrl: 'https://images.unsplash.com/photo-1581655353564-df123a1eb820?w=600&auto=format&fit=crop&q=80',
-    query: '140 GSM',
-  },
-  {
-    id: 'tshirts-crewneck',
-    label: 'Crewneck',
-    sublabel: 'Classic Tee',
-    imageUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80',
-    query: 'Crewneck',
-  },
-  {
-    id: 'tshirts-pocket',
-    label: 'Pocket Tee',
-    sublabel: 'Minimalist',
-    imageUrl: 'https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=600&auto=format&fit=crop&q=80',
-    query: 'Pocket',
-  },
-  {
-    id: 'tshirts-heavyweight',
-    label: 'Heavyweight',
-    sublabel: 'Relaxed Tee',
-    imageUrl: 'https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=600&auto=format&fit=crop&q=80',
-    query: 'Heavyweight',
-  },
-];
 export default function App(): React.JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>(() =>
     typeof window !== 'undefined' ? window.location.pathname : '/'
@@ -148,6 +34,9 @@ export default function App(): React.JSX.Element {
   const [catalogueVersion, setCatalogueVersion] = useState(0);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null | undefined>(undefined);
   const [heroSlides, setHeroSlides] = useState<HeroSlide[] | undefined>(undefined);
+  const [categorySections, setCategorySections] = useState<PublicCategorySection[]>([]);
+  const [sectionsLoading, setSectionsLoading] = useState<boolean>(true);
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
 
   // Sync route path on browser back/forward navigation
   useEffect(() => {
@@ -158,9 +47,11 @@ export default function App(): React.JSX.Element {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Fetch active categories and homepage hero on mount and when catalogue mutates
+  // Fetch active categories, hero, and homepage category sections on mount and when catalogue mutates
   useEffect(() => {
     let isCurrent = true;
+    setSectionsLoading(true);
+
     fetchCategories()
       .then((data) => {
         if (isCurrent) {
@@ -182,6 +73,22 @@ export default function App(): React.JSX.Element {
         if (isCurrent) {
           setHeroImageUrl(null);
           setHeroSlides([]);
+        }
+      });
+
+    fetchHomepageCategorySections()
+      .then((sections) => {
+        if (isCurrent) {
+          setCategorySections(sections);
+          setSectionsLoading(false);
+          setSectionsError(null);
+        }
+      })
+      .catch((err) => {
+        if (isCurrent) {
+          setCategorySections([]);
+          setSectionsLoading(false);
+          setSectionsError(err instanceof Error ? err.message : 'Failed to load category sections');
         }
       });
 
@@ -366,7 +273,11 @@ export default function App(): React.JSX.Element {
             {/* 3. Hero Campaign Section (30% Top Category Strip + 70% Main Hero) */}
             <Hero
               onExplore={() => {
-                const el = document.getElementById('pants-section') || document.getElementById('category-showcase');
+                const firstSectionSlug = categorySections[0]?.category?.slug;
+                const el =
+                  (firstSectionSlug && document.getElementById(`${firstSectionSlug}-section`)) ||
+                  document.getElementById('pants-section') ||
+                  document.getElementById('category-showcase');
                 if (el) el.scrollIntoView({ behavior: 'smooth' });
               }}
               onOpenBulk={handleOpenGeneralBulk}
@@ -376,53 +287,44 @@ export default function App(): React.JSX.Element {
               onNavigate={navigate}
             />
 
-            {/* 4. Pants Section with Shortcuts & 4-Product Carousel */}
-            <CategorySectionBlock
-              id="pants-section"
-              categorySlug="pants"
-              title="Pants & Trousers"
-              subtitle="Relaxed, pleated, and contemporary cuts engineered for all-day comfort"
-              shortcuts={PANTS_SHORTCUTS}
-              bannerImage="https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1600&auto=format&fit=crop&q=80"
-              bannerTitle="Loose Fit Pleated Pants"
-              bannerSubtitle="Architectural drape cut from tailored cotton-blend foundations"
-              viewAllLink="/category/pants"
-              onQuickView={handleQuickView}
-              onAddToCart={handleAddToCart}
-              onNavigate={navigate}
-            />
-
-            {/* 5. Shirts Section ("TOPWEAR") */}
-            <CategorySectionBlock
-              id="shirts-section"
-              categorySlug="shirts"
-              title="Topwear & Shirts"
-              subtitle="Pinpoint Oxford, Cuban camp collar, and breathable linen silhouettes"
-              shortcuts={SHIRTS_SHORTCUTS}
-              bannerImage="https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=1600&auto=format&fit=crop&q=80"
-              bannerTitle="Curated Topwear"
-              bannerSubtitle="Tailored button-downs and resort collars"
-              viewAllLink="/category/shirts"
-              onQuickView={handleQuickView}
-              onAddToCart={handleAddToCart}
-              onNavigate={navigate}
-            />
-
-            {/* 6. T-Shirts Section */}
-            <CategorySectionBlock
-              id="tshirts-section"
-              categorySlug="t-shirts"
-              title="T-Shirts & Essentials"
-              subtitle="Combed breathable cotton tees cut in tailored regular and relaxed profiles"
-              shortcuts={TSHIRTS_SHORTCUTS}
-              bannerImage="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&auto=format&fit=crop&q=80"
-              bannerTitle="140 GSM Combed Cotton Essentials"
-              bannerSubtitle="Breathable everyday foundations engineered for all-day comfort and bespoke branding"
-              viewAllLink="/category/t-shirts"
-              onQuickView={handleQuickView}
-              onAddToCart={handleAddToCart}
-              onNavigate={navigate}
-            />
+            {/* Dynamic Homepage Category Sections */}
+            {sectionsLoading ? (
+              <div className="py-12 max-w-7xl mx-auto px-4" data-testid="category-sections-loading">
+                <div className="animate-pulse space-y-6">
+                  <div className="h-7 bg-neutral-200 rounded w-1/4 mx-auto" />
+                  <div className="h-4 bg-neutral-200 rounded w-1/3 mx-auto" />
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+                    {[1, 2, 3, 4].map((n) => (
+                      <div key={n} className="bg-neutral-200 rounded-lg aspect-[3/4]" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : sectionsError ? (
+              // Handled gracefully: Never silently fall back to hardcoded sections that resurrect disabled/deleted sections!
+              null
+            ) : categorySections.length > 0 ? (
+              categorySections.map((section) => (
+                <CategorySectionBlock
+                  key={section.id}
+                  id={`${section.category.slug}-section`}
+                  categorySlug={section.category.slug}
+                  title={section.heading}
+                  subtitle={section.subtitle || undefined}
+                  shortcuts={section.categoryCards}
+                  bannerImage={section.posterImageUrl || undefined}
+                  bannerTitle={section.posterHeading || undefined}
+                  bannerSubtitle={section.posterSubtitle || undefined}
+                  bannerDestinationUrl={section.posterDestinationUrl || undefined}
+                  productLimit={section.productLimit}
+                  viewAllLabel={section.viewAllLabel}
+                  viewAllLink={section.viewAllDestination || `/category/${section.category.slug}`}
+                  onQuickView={handleQuickView}
+                  onAddToCart={handleAddToCart}
+                  onNavigate={navigate}
+                />
+              ))
+            ) : null}
 
             {/* 5. Editorial Brand Story & Pillars */}
             <EditorialSection onOpenBulk={handleOpenGeneralBulk} />

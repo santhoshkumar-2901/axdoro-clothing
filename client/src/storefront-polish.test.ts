@@ -71,7 +71,7 @@ describe('Storefront Polish, Accessibility & SEO Verification (Phase 6)', () => 
     expect(componentContent).toContain('loading="lazy"');
   });
 
-  it('verifies Navbar includes Escape handling, logo dimensions, and focus-visible rings', () => {
+  it('verifies Navbar includes Escape handling, logo dimensions, left hamburger, centered logo, and right search/bag', () => {
     const componentContent = fs.readFileSync(
       path.join(clientDir, 'src', 'components', 'Navbar.tsx'),
       'utf-8'
@@ -83,15 +83,14 @@ describe('Storefront Polish, Accessibility & SEO Verification (Phase 6)', () => 
     expect(componentContent).toContain('aria-controls="mobile-navigation-menu"');
     expect(componentContent).toContain('id="mobile-navigation-menu"');
 
-    // Right-aligned navbar layout and Add to Bag control
-    expect(componentContent).toContain('hidden md:flex items-center gap-6 lg:gap-8');
-    expect(componentContent).toContain('Add to Bag');
+    // Menu accessibility
     expect(componentContent).toContain('role="menu"');
     expect(componentContent).toContain('role="menuitem"');
 
-    // Verify search icon and search button are removed from navbar
-    expect(componentContent).not.toContain('aria-label="Search Collection"');
-    expect(componentContent).not.toContain('<Search');
+    // Verify search and bag controls on navbar
+    expect(componentContent).toContain('aria-label="Search Collection"');
+    expect(componentContent).toContain('<Search');
+    expect(componentContent).toContain('<ShoppingBag');
   });
 
   it('verifies ProductCard includes explicit image dimensions to prevent layout shifts', () => {

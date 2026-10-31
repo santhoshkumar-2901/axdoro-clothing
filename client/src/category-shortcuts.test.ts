@@ -135,61 +135,69 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
     });
   });
 
-  describe('3. App.tsx Shortcuts Configuration & Jeans Architecture', () => {
+  describe('3. App.tsx Dynamic Category Sections & Database Seeding Preservation', () => {
     const appPath = path.join(clientDir, 'App.tsx');
     const appContent = fs.readFileSync(appPath, 'utf-8');
+    const repoRoot = path.resolve(clientDir, '../../');
+    const migrationPath = path.join(repoRoot, 'db/migrations/017_category_sections.sql');
+    const migrationContent = fs.readFileSync(migrationPath, 'utf-8');
 
-    it('configures all 8 required Pants shortcuts in App.tsx', () => {
-      expect(appContent).toContain("'Bootcut'");
-      expect(appContent).toContain("'Korean'");
-      expect(appContent).toContain("'Gurkha'");
-      expect(appContent).toContain("'Pleated'");
-      expect(appContent).toContain("'Baggy'");
-      expect(appContent).toContain("'Relaxed'");
-      expect(appContent).toContain("'Wide Leg'");
-      expect(appContent).toContain("'Straight Fit'");
+    it('loads category sections dynamically in App.tsx via fetchHomepageCategorySections', () => {
+      expect(appContent).toContain('fetchHomepageCategorySections');
+      expect(appContent).toContain('categorySections.map');
+      expect(appContent).toContain('CategorySectionBlock');
     });
 
-    it('configures all 4 required Shirts shortcuts in App.tsx', () => {
-      expect(appContent).toContain("'Oxford'");
-      expect(appContent).toContain("'Cuban Collar'");
-      expect(appContent).toContain("'Linen Blend'");
-      expect(appContent).toContain("'Overshirt'");
+    it('renders category sections dynamically from API data without hardcoded fallback resurrecting deleted sections', () => {
+      // Must not hardcode static shortcut constants in App.tsx
+      expect(appContent).not.toContain('const PANTS_SHORTCUTS');
+      expect(appContent).not.toContain('const SHIRTS_SHORTCUTS');
+      expect(appContent).not.toContain('const TSHIRTS_SHORTCUTS');
+
+      // Dynamically passes properties from PublicCategorySection
+      expect(appContent).toContain('shortcuts={section.categoryCards}');
+      expect(appContent).toContain('bannerImage={section.posterImageUrl || undefined}');
+      expect(appContent).toContain('bannerTitle={section.posterHeading || undefined}');
+      expect(appContent).toContain('bannerSubtitle={section.posterSubtitle || undefined}');
+      expect(appContent).toContain('bannerDestinationUrl={section.posterDestinationUrl || undefined}');
+      expect(appContent).toContain('productLimit={section.productLimit}');
+      expect(appContent).toContain('viewAllLabel={section.viewAllLabel}');
     });
 
-    it('configures all 4 required T-Shirts shortcuts in App.tsx', () => {
-      expect(appContent).toContain("'140 GSM'");
-      expect(appContent).toContain("'Crewneck'");
-      expect(appContent).toContain("'Pocket Tee'");
-      expect(appContent).toContain("'Heavyweight'");
+    it('verifies all 8 required Pants shortcuts are preserved in migration 017 seed data', () => {
+      expect(migrationContent).toContain('"label":"Bootcut"');
+      expect(migrationContent).toContain('"label":"Korean"');
+      expect(migrationContent).toContain('"label":"Gurkha"');
+      expect(migrationContent).toContain('"label":"Pleated"');
+      expect(migrationContent).toContain('"label":"Baggy"');
+      expect(migrationContent).toContain('"label":"Relaxed"');
+      expect(migrationContent).toContain('"label":"Wide Leg"');
+      expect(migrationContent).toContain('"label":"Straight Fit"');
     });
 
-    it('verifies Jeans fits cleanly into existing architecture without duplicate backend categories', () => {
-      // Jeans is incorporated as a cut shortcut (Baggy Jeans) in the Pants section
-      expect(appContent).toContain("id: 'pants-baggy-jeans'");
-      expect(appContent).toContain("sublabel: 'Jeans'");
-      // Does not introduce duplicate or invented categorySlug="jeans" section blocks
-      expect(appContent).not.toContain('categorySlug="jeans"');
+    it('verifies all 4 required Shirts shortcuts are preserved in migration 017 seed data', () => {
+      expect(migrationContent).toContain('"label":"Oxford"');
+      expect(migrationContent).toContain('"label":"Cuban Collar"');
+      expect(migrationContent).toContain('"label":"Linen Blend"');
+      expect(migrationContent).toContain('"label":"Overshirt"');
     });
 
-    it('verifies all category shortcut image URLs use secure, existing image sources', () => {
-      expect(appContent).toContain('PANTS_SHORTCUTS');
-      expect(appContent).toContain('SHIRTS_SHORTCUTS');
-      expect(appContent).toContain('TSHIRTS_SHORTCUTS');
-      expect(appContent).toContain('https://images.unsplash.com/photo-1541099649105-f69ad21f3246');
-      expect(appContent).toContain('https://images.unsplash.com/photo-1596755094514-f87e34085b2c');
-      expect(appContent).toContain('https://images.unsplash.com/photo-1581655353564-df123a1eb820');
+    it('verifies all 4 required T-Shirts shortcuts are preserved in migration 017 seed data', () => {
+      expect(migrationContent).toContain('"label":"140 GSM"');
+      expect(migrationContent).toContain('"label":"Crewneck"');
+      expect(migrationContent).toContain('"label":"Pocket Tee"');
+      expect(migrationContent).toContain('"label":"Heavyweight"');
     });
 
-    it('configures editorial banners for Pants, Shirts, and T-Shirts in App.tsx', () => {
-      // Pants banner
-      expect(appContent).toContain('bannerTitle="Loose Fit Pleated Pants"');
-      // Shirts banner
-      expect(appContent).toContain('bannerTitle="Curated Topwear"');
-      // T-Shirts banner
-      expect(appContent).toContain('bannerTitle="140 GSM Combed Cotton Essentials"');
-      // Lifestyle / Jeans banner removed per request
-      expect(appContent).not.toContain('Signature Daily Wear');
+    it('verifies Jeans is preserved as a cut shortcut (Baggy Jeans) in migration 017 seed data', () => {
+      expect(migrationContent).toContain('"id":"pants-baggy-jeans"');
+      expect(migrationContent).toContain('"sublabel":"Jeans"');
+    });
+
+    it('verifies editorial banners for Pants, Shirts, and T-Shirts are preserved in migration 017', () => {
+      expect(migrationContent).toContain('Loose Fit Pleated Pants');
+      expect(migrationContent).toContain('Curated Topwear');
+      expect(migrationContent).toContain('140 GSM Combed Cotton Essentials');
     });
   });
 

@@ -6,13 +6,16 @@ import { sortProductSizes } from '../utils/sizes.ts';
 
 export interface CategorySectionBlockProps {
   id?: string;
-  categorySlug: 'pants' | 'shirts' | 't-shirts';
+  categorySlug: string;
   title: string;
   subtitle?: string;
   bannerImage?: string;
   bannerTitle?: string;
   bannerSubtitle?: string;
+  bannerDestinationUrl?: string;
   shortcuts?: (string | CategoryShortcutItem)[];
+  productLimit?: number;
+  viewAllLabel?: string;
   viewAllLink: string;
   onQuickView: (product: Product) => void;
   onAddToCart: (product: Product, size: string, color: string) => void;
@@ -31,6 +34,8 @@ interface NormalizedShortcutItem {
   sublabel?: string;
   imageUrl: string;
   query: string;
+  destinationType?: 'category' | 'query';
+  destinationCategorySlug?: string | null;
 }
 
 export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
@@ -41,7 +46,10 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
   bannerImage,
   bannerTitle,
   bannerSubtitle,
+  bannerDestinationUrl,
   shortcuts = [],
+  productLimit = 4,
+  viewAllLabel = 'View All',
   viewAllLink,
   onQuickView,
   onNavigate,
@@ -58,14 +66,17 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
           label: sc,
           imageUrl: DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
           query: sc,
+          destinationType: 'query',
         };
       }
       return {
         id: sc.id || `sc-${idx}-${sc.label.toLowerCase().replace(/\s+/g, '-')}`,
         label: sc.label,
-        sublabel: sc.sublabel,
+        sublabel: sc.sublabel || undefined,
         imageUrl: sc.imageUrl || DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
         query: sc.query || (sc.sublabel ? `${sc.label} ${sc.sublabel}` : sc.label),
+        destinationType: sc.destinationType || 'query',
+        destinationCategorySlug: sc.destinationCategorySlug,
       };
     });
   }, [shortcuts, categorySlug]);
@@ -74,7 +85,8 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
     let isMounted = true;
     setIsLoading(true);
 
-    fetchProducts({ category: categorySlug, limit: 8 })
+    const fetchLimit = Math.max((productLimit || 4) * 2, 8);
+    fetchProducts({ category: categorySlug, limit: fetchLimit })
       .then((res) => {
         if (isMounted) {
           setProducts(res.products || []);
@@ -95,12 +107,14 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [categorySlug]);
+  }, [categorySlug, productLimit]);
 
-  // Gracefully filter products if an active shortcut matches title or description
+  // Filter products if an active shortcut matches title or description
+  // Never fall back silently to unrelated products when a filter matches zero items!
   const displayedProducts = React.useMemo(() => {
+    const limit = productLimit && productLimit > 0 ? productLimit : 4;
     if (!activeShortcut) {
-      return products.slice(0, 4);
+      return products.slice(0, limit);
     }
     const term = activeShortcut.toLowerCase();
     const filtered = products.filter(
@@ -108,15 +122,34 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
         p.name.toLowerCase().includes(term) ||
         (p.description && p.description.toLowerCase().includes(term))
     );
-    // If filter matches real products, show up to 4; otherwise fallback to general products without fabricating
-    return (filtered.length > 0 ? filtered : products).slice(0, 4);
-  }, [products, activeShortcut]);
+    return filtered.slice(0, limit);
+  }, [products, activeShortcut, productLimit]);
 
-  const handleShortcutClick = (query: string) => {
+  const handleShortcutClick = (item: NormalizedShortcutItem) => {
+    if (item.destinationType === 'category' && item.destinationCategorySlug) {
+      const targetPath = `/category/${item.destinationCategorySlug}`;
+      if (onNavigate) {
+        onNavigate(targetPath);
+      } else {
+        window.location.href = targetPath;
+      }
+      return;
+    }
+
+    const query = item.query || item.label;
     if (activeShortcut === query) {
       setActiveShortcut(null);
     } else {
       setActiveShortcut(query);
+    }
+  };
+
+  const handleBannerClick = () => {
+    if (!bannerDestinationUrl) return;
+    if (onNavigate && bannerDestinationUrl.startsWith('/')) {
+      onNavigate(bannerDestinationUrl);
+    } else {
+      window.location.href = bannerDestinationUrl;
     }
   };
 
@@ -132,17 +165,15 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
     <section id={id} className="py-10 sm:py-14 bg-[#FAF9F6] text-neutral-900 border-b border-neutral-200">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Section Header */}
-        <div className="mb-6 text-center sm:text-left flex flex-col sm:flex-row sm:items-end justify-between gap-2">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-900 uppercase">
-              {title}
-            </h2>
-            {subtitle && (
-              <p className="text-xs sm:text-sm text-neutral-500 mt-1">
-                {subtitle}
-              </p>
-            )}
-          </div>
+        <div className="mb-8 text-center max-w-2xl mx-auto">
+          <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-900 uppercase">
+            {title}
+          </h2>
+          {subtitle && (
+            <p className="text-xs sm:text-sm text-neutral-500 mt-1.5 leading-relaxed">
+              {subtitle}
+            </p>
+          )}
         </div>
 
         {/* Category Shortcuts Strip (Portrait Image Cards with Horizontal Scrolling) */}
@@ -159,7 +190,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => handleShortcutClick(item.query)}
+                    onClick={() => handleShortcutClick(item)}
                     aria-pressed={isActive}
                     aria-label={`${item.label}${item.sublabel ? ` ${item.sublabel}` : ''} filter`}
                     className={`group relative flex-shrink-0 w-28 sm:w-36 md:w-40 aspect-[3/4] rounded-xl overflow-hidden cursor-pointer text-left snap-start transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ${
@@ -219,11 +250,18 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
 
       {/* Editorial Feature Banner if provided (Full Viewport Width, Edge-to-Edge) */}
       {bannerImage && (
-        <div className="w-full relative aspect-[16/7] sm:aspect-[21/8] overflow-hidden bg-neutral-900 mb-8 sm:mb-10">
+        <div
+          onClick={handleBannerClick}
+          className={`w-full relative aspect-[16/7] sm:aspect-[21/8] overflow-hidden bg-neutral-900 mb-8 sm:mb-10 ${
+            bannerDestinationUrl ? 'cursor-pointer group' : ''
+          }`}
+        >
           <img
             src={bannerImage}
             alt={bannerTitle || title}
-            className="w-full h-full object-cover object-center"
+            className={`w-full h-full object-cover object-center ${
+              bannerDestinationUrl ? 'group-hover:scale-105 transition-transform duration-500' : ''
+            }`}
             loading="lazy"
           />
           {(bannerTitle || bannerSubtitle) && (
@@ -254,9 +292,27 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
             ))}
           </div>
         ) : displayedProducts.length === 0 ? (
-          <div className="py-12 text-center text-neutral-400 text-sm">
-            No items currently available in this category.
-          </div>
+          activeShortcut ? (
+            <div className="py-12 px-4 text-center rounded-xl border border-dashed border-neutral-300 bg-white shadow-xs">
+              <p className="text-sm font-semibold text-neutral-800">
+                No products found matching &ldquo;{activeShortcut}&rdquo; in {title}
+              </p>
+              <p className="text-xs text-neutral-500 mt-1 mb-4">
+                Try clearing the filter to view all available products.
+              </p>
+              <button
+                type="button"
+                onClick={() => setActiveShortcut(null)}
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-neutral-900 text-white text-xs font-semibold hover:bg-neutral-800 cursor-pointer transition-colors shadow-xs"
+              >
+                Clear filter
+              </button>
+            </div>
+          ) : (
+            <div className="py-12 text-center text-neutral-400 text-sm">
+              No items currently available in this category.
+            </div>
+          )
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-5">
             {displayedProducts.map((product) => {
@@ -346,7 +402,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
             onClick={handleViewAll}
             className="inline-flex items-center justify-center gap-2 px-8 py-3 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white text-xs font-bold uppercase tracking-widest transition-colors shadow-sm cursor-pointer"
           >
-            <span>View All</span>
+            <span>{viewAllLabel || 'View All'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
