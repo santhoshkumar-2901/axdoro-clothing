@@ -2273,11 +2273,13 @@ export async function adminDeleteProduct(
 
     const product = prodRes.rows[0];
 
-    // 3. Check for protected order items referencing the product or its variants
+    // 3. Check for active (undelivered) order items referencing the product or its variants
     const orderCheckRes = await client.query(
       `SELECT 1 FROM order_items oi
+       JOIN orders o ON oi.order_id = o.id
        LEFT JOIN product_variants pv ON oi.variant_id = pv.id
-       WHERE oi.product_id = $1 OR pv.product_id = $1
+       WHERE (oi.product_id = $1 OR pv.product_id = $1)
+         AND o.order_status NOT IN ('DELIVERED', 'CANCELLED')
        LIMIT 1;`,
       [id]
     );
@@ -2286,7 +2288,7 @@ export async function adminDeleteProduct(
       return {
         status: 'conflict' as const,
         message:
-          'Product cannot be deleted because it is referenced by historical customer orders. Please archive the product instead to preserve order integrity.',
+          'Product cannot be deleted because it is referenced by historical customer orders that are still active. Please ensure all orders are delivered or cancelled before deleting, or archive the product instead.',
       };
     }
 

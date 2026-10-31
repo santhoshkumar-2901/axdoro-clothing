@@ -153,6 +153,7 @@ export const Hero: React.FC<HeroProps> = ({
         return {
           id: s.id,
           imageUrl: hasCustomImage ? s.imageUrl!.trim() : defaultFallbackUrl,
+          imagePosition: s.imagePosition ?? 50,
         };
       });
     }
@@ -162,6 +163,7 @@ export const Hero: React.FC<HeroProps> = ({
       {
         id: 1,
         imageUrl: fallbackUrl || '/hero-bg.jpg',
+        imagePosition: 50,
       },
     ];
   }, [isSettingsResolved, validConfiguredSlides, heroImageUrl]);
@@ -514,7 +516,10 @@ export const Hero: React.FC<HeroProps> = ({
           <img
             src={imageSrc}
             alt={`AXDORO Featured Hero ${currentSlideIndex + 1}`}
-            className={`w-full h-full object-cover object-center transition-opacity duration-500 ${
+            style={{
+              objectPosition: `50% ${currentSlide?.imagePosition ?? 50}%`,
+            }}
+            className={`w-full h-full object-cover transition-opacity duration-500 ${
               isLoaded ? 'opacity-100' : 'opacity-0'
             }`}
             loading="eager"

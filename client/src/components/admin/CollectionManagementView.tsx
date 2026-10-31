@@ -10,6 +10,7 @@ import {
   Upload,
   Link as LinkIcon,
   RotateCcw,
+  Sliders,
 } from 'lucide-react';
 import {
   adminGetHomepageHero,
@@ -49,6 +50,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLabel: 'Explore Collection',
       ctaLink: '#collection-tabs',
       isEnabled: true,
+      imagePosition: 50,
     },
     {
       id: 2,
@@ -58,6 +60,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLabel: 'Shop Formals',
       ctaLink: '/category/formal',
       isEnabled: true,
+      imagePosition: 50,
     },
     {
       id: 3,
@@ -67,6 +70,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLabel: 'Enquire for Bulk Orders',
       ctaLink: 'bulk',
       isEnabled: true,
+      imagePosition: 50,
     },
   ];
 
@@ -305,6 +309,46 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     }
   };
 
+  const handleSlidePositionChange = (slotId: number, position: number) => {
+    // Instant live preview in local state
+    setHeroSlides((prev) =>
+      prev.map((s) => (s.id === slotId ? { ...s, imagePosition: position } : s))
+    );
+  };
+
+  const handleCommitSlidePosition = async (slotId: number, customPos?: number) => {
+    try {
+      setIsSavingHero(true);
+      setHeroError(null);
+      const targetSlide = heroSlides.find((s) => s.id === slotId);
+      const position = customPos !== undefined ? customPos : (targetSlide?.imagePosition ?? 50);
+
+      const updatedSlides = heroSlides.map((s) =>
+        s.id === slotId ? { ...s, imagePosition: position } : s
+      );
+
+      const updated = await adminUpdateHomepageHero({
+        slides: updatedSlides,
+      });
+
+      setHeroSetting(updated);
+      if (updated.slides) {
+        setHeroSlides(updated.slides);
+      }
+      setHeroSuccessMessage(`Slide ${slotId} alignment saved (${position}%).`);
+      onCollectionMutated?.();
+    } catch (err) {
+      setHeroError(err instanceof Error ? err.message : 'Failed to save slide alignment');
+    } finally {
+      setIsSavingHero(false);
+    }
+  };
+
+  const handleSetSlidePosition = async (slotId: number, position: number) => {
+    handleSlidePositionChange(slotId, position);
+    await handleCommitSlidePosition(slotId, position);
+  };
+
   const handleSaveAllSlides = async () => {
     try {
       setIsSavingHero(true);
@@ -513,7 +557,10 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     <img
                       src={activeSlide.imageUrl || '/hero-bg.jpg'}
                       alt={`Slide ${activeSlide.id} Preview`}
-                      className="w-full h-full object-cover object-[75%_center]"
+                      style={{
+                        objectPosition: `50% ${activeSlide.imagePosition ?? 50}%`,
+                      }}
+                      className="w-full h-full object-cover transition-[object-position] duration-150"
                       onError={(e) => {
                         const target = e.target as HTMLImageElement;
                         if (!target.src.endsWith('/hero-bg.jpg')) {
@@ -532,6 +579,86 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                         </Badge>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                {/* Vertical Framing / Alignment Controls (Presets + Fine-tuning Slider) */}
+                <div className="p-3.5 sm:p-4 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-axdoro-charcoal flex items-center gap-1.5">
+                        <Sliders className="w-3.5 h-3.5 text-axdoro-accent" />
+                        <span>Vertical Image Alignment</span>
+                      </span>
+                      <p className="text-[11px] text-axdoro-text-muted mt-0.5">
+                        Choose a preset or fine-tune with the slider to position heads, products, or text perfectly.
+                      </p>
+                    </div>
+
+                    {/* Quick Presets: Top, Center, Bottom */}
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-axdoro-border self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={() => handleSetSlidePosition(activeSlide.id, 0)}
+                        disabled={isSavingHero}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          (activeSlide.imagePosition ?? 50) === 0
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                      >
+                        Top
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetSlidePosition(activeSlide.id, 50)}
+                        disabled={isSavingHero}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          (activeSlide.imagePosition ?? 50) === 50
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                      >
+                        Center
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSetSlidePosition(activeSlide.id, 100)}
+                        disabled={isSavingHero}
+                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          (activeSlide.imagePosition ?? 50) === 100
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                      >
+                        Bottom
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 0-100% Fine-tuning slider with live preview */}
+                  <div className="flex items-center gap-3 pt-1">
+                    <span className="text-[11px] font-mono text-axdoro-text-muted w-12 flex-shrink-0">
+                      0% (Top)
+                    </span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      value={activeSlide.imagePosition ?? 50}
+                      onChange={(e) => handleSlidePositionChange(activeSlide.id, Number(e.target.value))}
+                      onPointerUp={() => handleCommitSlidePosition(activeSlide.id)}
+                      disabled={isSavingHero}
+                      className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
+                      aria-label="Slide vertical alignment position"
+                    />
+                    <span className="text-[11px] font-mono text-axdoro-text-muted w-14 text-right flex-shrink-0">
+                      100% (Btm)
+                    </span>
+                    <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
+                      {activeSlide.imagePosition ?? 50}%
+                    </span>
                   </div>
                 </div>
 
@@ -621,7 +748,10 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   <img
                     src={heroPreviewUrl || heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl || '/hero-bg.jpg'}
                     alt="Hero Preview"
-                    className="w-full h-full object-cover object-[75%_center]"
+                    style={{
+                      objectPosition: `50% ${heroSlides.find((s) => s.id === editingModalSlideId)?.imagePosition ?? 50}%`,
+                    }}
+                    className="w-full h-full object-cover transition-[object-position] duration-150"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       if (!target.src.endsWith('/hero-bg.jpg')) {

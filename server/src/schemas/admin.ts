@@ -404,6 +404,7 @@ export const heroSlideSchema = z.object({
       }
     }),
   isEnabled: z.boolean().default(true),
+  imagePosition: z.coerce.number().int().min(0).max(100).default(50).optional().nullable(),
 });
 
 export const homepageHeroUpdateSchema = z

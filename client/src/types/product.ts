@@ -140,6 +140,7 @@ export interface HeroSlide {
   ctaLabel: string;
   ctaLink: string;
   isEnabled: boolean;
+  imagePosition?: number;
 }
 
 export interface HomepageHeroSetting {
