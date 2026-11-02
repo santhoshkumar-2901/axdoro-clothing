@@ -12,6 +12,7 @@ export interface HeroSlide {
   ctaLink: string;
   isEnabled: boolean;
   imagePosition?: number;
+  imagePositionX?: number;
 }
 
 export interface HomepageHeroSetting {
@@ -34,6 +35,7 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     ctaLink: '#category-showcase',
     isEnabled: true,
     imagePosition: 50,
+    imagePositionX: 50,
   },
   {
     id: 2,
@@ -45,6 +47,7 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     ctaLink: '/category/t-shirts',
     isEnabled: false,
     imagePosition: 50,
+    imagePositionX: 50,
   },
   {
     id: 3,
@@ -56,6 +59,7 @@ export const DEFAULT_HERO_SLIDES: HeroSlide[] = [
     ctaLink: 'bulk',
     isEnabled: false,
     imagePosition: 50,
+    imagePositionX: 50,
   },
 ];
 
@@ -135,6 +139,10 @@ export function normalizeHomepageHeroSetting(
           typeof found.imagePosition === 'number' && !isNaN(found.imagePosition)
             ? Math.max(0, Math.min(100, Math.round(found.imagePosition)))
             : (defaultSlide.imagePosition ?? 50),
+        imagePositionX:
+          typeof found.imagePositionX === 'number' && !isNaN(found.imagePositionX)
+            ? Math.max(0, Math.min(100, Math.round(found.imagePositionX)))
+            : (defaultSlide.imagePositionX ?? 50),
       };
     });
 
@@ -202,6 +210,7 @@ export interface HeroSlideInput {
   ctaLink: string;
   isEnabled: boolean;
   imagePosition?: number | null;
+  imagePositionX?: number | null;
 }
 
 export async function updateHomepageHeroSetting(params: {
@@ -264,6 +273,10 @@ export async function updateHomepageHeroSetting(params: {
             typeof found.imagePosition === 'number' && !isNaN(found.imagePosition)
               ? Math.max(0, Math.min(100, Math.round(found.imagePosition)))
               : (defaultSlide.imagePosition ?? 50),
+          imagePositionX:
+            typeof found.imagePositionX === 'number' && !isNaN(found.imagePositionX)
+              ? Math.max(0, Math.min(100, Math.round(found.imagePositionX)))
+              : (defaultSlide.imagePositionX ?? 50),
         };
       });
     } else {

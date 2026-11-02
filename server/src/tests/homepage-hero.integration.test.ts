@@ -417,4 +417,100 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
       expect(res.status).toBe(400);
     });
   });
+
+  describe('9. 2D Focal Point Positioning (imagePositionX & imagePosition)', () => {
+    it('saves and exposes imagePositionX and imagePosition in public and admin endpoints', async () => {
+      const putRes = await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Cookie', adminCookies)
+        .set('x-csrf-token', csrfToken)
+        .send({
+          slides: [
+            {
+              id: 1,
+              heading: 'Slide 1 Custom Focal',
+              subtitle: 'Precision Tailoring',
+              ctaLabel: 'Explore',
+              ctaLink: '#collection-tabs',
+              isEnabled: true,
+              imagePosition: 25,
+              imagePositionX: 75,
+            },
+            {
+              id: 2,
+              heading: 'Slide 2 Center Focal',
+              subtitle: 'Comfort Cotton',
+              ctaLabel: 'Shop',
+              ctaLink: '/category/t-shirts',
+              isEnabled: false,
+              imagePosition: 50,
+              imagePositionX: 50,
+            },
+            {
+              id: 3,
+              heading: 'Slide 3 Bottom Left Focal',
+              subtitle: 'Bulk Enquiries',
+              ctaLabel: 'Bulk',
+              ctaLink: 'bulk',
+              isEnabled: false,
+              imagePosition: 100,
+              imagePositionX: 0,
+            },
+          ],
+        });
+
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.data.slides[0].imagePosition).toBe(25);
+      expect(putRes.body.data.slides[0].imagePositionX).toBe(75);
+      expect(putRes.body.data.slides[2].imagePosition).toBe(100);
+      expect(putRes.body.data.slides[2].imagePositionX).toBe(0);
+
+      // Verify public endpoint returns imagePosition and imagePositionX
+      const pubRes = await request(app).get('/api/homepage/hero');
+      expect(pubRes.status).toBe(200);
+      expect(pubRes.body.data.slides[0].imagePosition).toBe(25);
+      expect(pubRes.body.data.slides[0].imagePositionX).toBe(75);
+      expect(pubRes.body.data.slides[2].imagePosition).toBe(100);
+      expect(pubRes.body.data.slides[2].imagePositionX).toBe(0);
+    });
+
+    it('defaults imagePositionX and imagePosition to 50 when omitted or null', async () => {
+      const putRes = await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Cookie', adminCookies)
+        .set('x-csrf-token', csrfToken)
+        .send({
+          slides: [
+            {
+              id: 1,
+              heading: 'Slide 1 Without Focal',
+              subtitle: 'Precision Tailoring',
+              ctaLabel: 'Explore',
+              ctaLink: '#collection-tabs',
+              isEnabled: true,
+            },
+            {
+              id: 2,
+              heading: 'Slide 2 Without Focal',
+              subtitle: 'Comfort Cotton',
+              ctaLabel: 'Shop',
+              ctaLink: '/category/t-shirts',
+              isEnabled: false,
+            },
+            {
+              id: 3,
+              heading: 'Slide 3 Without Focal',
+              subtitle: 'Bulk Enquiries',
+              ctaLabel: 'Bulk',
+              ctaLink: 'bulk',
+              isEnabled: false,
+            },
+          ],
+        });
+
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.data.slides[0].imagePosition).toBe(50);
+      expect(putRes.body.data.slides[0].imagePositionX).toBe(50);
+    });
+  });
 });

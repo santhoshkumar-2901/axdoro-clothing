@@ -18,6 +18,7 @@ homepageRouter.get('/hero', async (_req: Request, res: Response, next: NextFunct
       ctaLink: s.ctaLink,
       isEnabled: s.isEnabled,
       imagePosition: s.imagePosition ?? 50,
+      imagePositionX: s.imagePositionX ?? 50,
     }));
 
     res.json({

@@ -14,6 +14,9 @@ import {
   Eye,
   EyeOff,
   FolderTree,
+  Monitor,
+  Tablet,
+  Smartphone,
 } from 'lucide-react';
 import {
   adminGetHomepageHero,
@@ -60,6 +63,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLink: '#collection-tabs',
       isEnabled: true,
       imagePosition: 50,
+      imagePositionX: 50,
     },
     {
       id: 2,
@@ -70,6 +74,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLink: '/category/formal',
       isEnabled: true,
       imagePosition: 50,
+      imagePositionX: 50,
     },
     {
       id: 3,
@@ -80,6 +85,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       ctaLink: 'bulk',
       isEnabled: true,
       imagePosition: 50,
+      imagePositionX: 50,
     },
   ];
 
@@ -99,6 +105,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   const [heroModalError, setHeroModalError] = useState<string | null>(null);
   const [heroError, setHeroError] = useState<string | null>(null);
   const [heroSuccessMessage, setHeroSuccessMessage] = useState<string | null>(null);
+  const [previewDevice, setPreviewDevice] = useState<'desktop' | 'tablet' | 'mobile'>('desktop');
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
   // Marquee state
@@ -361,22 +368,37 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
     }
   };
 
-  const handleSlidePositionChange = (slotId: number, position: number) => {
+  const handleSlidePositionChange = (slotId: number, axis: 'x' | 'y', position: number) => {
     // Instant live preview in local state
     setHeroSlides((prev) =>
-      prev.map((s) => (s.id === slotId ? { ...s, imagePosition: position } : s))
+      prev.map((s) =>
+        s.id === slotId
+          ? { ...s, [axis === 'x' ? 'imagePositionX' : 'imagePosition']: position }
+          : s
+      )
     );
   };
 
-  const handleCommitSlidePosition = async (slotId: number, customPos?: number) => {
+  const handleCommitSlidePosition = async (
+    slotId: number,
+    customAxis?: 'x' | 'y',
+    customPos?: number
+  ) => {
     try {
       setIsSavingHero(true);
       setHeroError(null);
       const targetSlide = heroSlides.find((s) => s.id === slotId);
-      const position = customPos !== undefined ? customPos : (targetSlide?.imagePosition ?? 50);
+      const posX =
+        customAxis === 'x' && customPos !== undefined
+          ? customPos
+          : (targetSlide?.imagePositionX ?? 50);
+      const posY =
+        customAxis === 'y' && customPos !== undefined
+          ? customPos
+          : (targetSlide?.imagePosition ?? 50);
 
       const updatedSlides = heroSlides.map((s) =>
-        s.id === slotId ? { ...s, imagePosition: position } : s
+        s.id === slotId ? { ...s, imagePositionX: posX, imagePosition: posY } : s
       );
 
       const updated = await adminUpdateHomepageHero({
@@ -387,18 +409,18 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       if (updated.slides) {
         setHeroSlides(updated.slides);
       }
-      setHeroSuccessMessage(`Slide ${slotId} alignment saved (${position}%).`);
+      setHeroSuccessMessage(`Slide ${slotId} focal point saved (X: ${posX}%, Y: ${posY}%).`);
       onCollectionMutated?.();
     } catch (err) {
-      setHeroError(err instanceof Error ? err.message : 'Failed to save slide alignment');
+      setHeroError(err instanceof Error ? err.message : 'Failed to save slide focal point');
     } finally {
       setIsSavingHero(false);
     }
   };
 
-  const handleSetSlidePosition = async (slotId: number, position: number) => {
-    handleSlidePositionChange(slotId, position);
-    await handleCommitSlidePosition(slotId, position);
+  const handleSetSlidePosition = async (slotId: number, axis: 'x' | 'y', position: number) => {
+    handleSlidePositionChange(slotId, axis, position);
+    await handleCommitSlidePosition(slotId, axis, position);
   };
 
   const handleSaveAllSlides = async () => {
@@ -417,6 +439,8 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
           ctaLabel: slide.ctaLabel?.trim() || fallback.ctaLabel,
           ctaLink: slide.ctaLink?.trim() || fallback.ctaLink,
           isEnabled: true,
+          imagePosition: typeof slide.imagePosition === 'number' ? slide.imagePosition : 50,
+          imagePositionX: typeof slide.imagePositionX === 'number' ? slide.imagePositionX : 50,
         };
       });
 
@@ -755,120 +779,288 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
 
             return (
               <div className="space-y-4 max-w-4xl mx-auto">
-                {/* Banner Preview */}
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold text-axdoro-charcoal flex items-center justify-between">
-                    <span>Live Banner Preview</span>
-                    <span className="text-[11px] font-mono text-axdoro-text-muted">Slide Slot {activeSlide.id}</span>
+                {/* Banner Preview with Responsive Viewport Controls */}
+                <div className="space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-axdoro-charcoal">Live Responsive Preview</span>
+                        <span className="text-[11px] font-mono text-axdoro-text-muted">Slide Slot {activeSlide.id}</span>
+                      </div>
+                      <p className="text-[11px] text-axdoro-text-muted mt-0.5">
+                        Simulate exact frontend cropping and proportions across devices.
+                      </p>
+                    </div>
+
+                    {/* Viewport Selector: Desktop, Tablet, Mobile */}
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-axdoro-border self-start sm:self-auto shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDevice('desktop')}
+                        aria-pressed={previewDevice === 'desktop'}
+                        className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          previewDevice === 'desktop'
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                        title="Desktop (1280px wide / ~2.54:1 aspect ratio)"
+                      >
+                        <Monitor className="w-3.5 h-3.5" />
+                        <span>Desktop</span>
+                        <span className="text-[10px] opacity-75 font-mono hidden md:inline">(1280px)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDevice('tablet')}
+                        aria-pressed={previewDevice === 'tablet'}
+                        className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          previewDevice === 'tablet'
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                        title="Tablet (768px wide / ~1.66:1 aspect ratio)"
+                      >
+                        <Tablet className="w-3.5 h-3.5" />
+                        <span>Tablet</span>
+                        <span className="text-[10px] opacity-75 font-mono hidden md:inline">(768px)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewDevice('mobile')}
+                        aria-pressed={previewDevice === 'mobile'}
+                        className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
+                          previewDevice === 'mobile'
+                            ? 'bg-axdoro-charcoal text-white shadow-xs'
+                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                        }`}
+                        title="Mobile (375px wide / ~1.12:1 aspect ratio)"
+                      >
+                        <Smartphone className="w-3.5 h-3.5" />
+                        <span>Mobile</span>
+                        <span className="text-[10px] opacity-75 font-mono hidden md:inline">(375px)</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="relative w-full h-56 sm:h-72 md:h-80 rounded-xl overflow-hidden border border-axdoro-border bg-axdoro-bg shadow-sm group">
-                    <img
-                      src={activeSlide.imageUrl || '/hero-bg.jpg'}
-                      alt={`Slide ${activeSlide.id} Preview`}
-                      style={{
-                        objectPosition: `50% ${activeSlide.imagePosition ?? 50}%`,
-                      }}
-                      className="w-full h-full object-cover transition-[object-position] duration-150"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        if (!target.src.endsWith('/hero-bg.jpg')) {
-                          target.src = '/hero-bg.jpg';
-                        }
-                      }}
-                    />
-                    <div className="absolute top-3 right-3 flex items-center gap-2">
-                      {activeSlide.imageUrl ? (
-                        <Badge variant="default" className="text-xs bg-axdoro-accent text-black font-semibold shadow-xs">
-                          Custom Banner Image
+                  {/* Device Simulation Frame matching frontend hero proportions */}
+                  <div className="w-full bg-neutral-100/70 p-3 sm:p-5 rounded-xl border border-dashed border-neutral-300 flex flex-col items-center justify-center min-h-[260px] transition-all">
+                    <div
+                      className={`relative rounded-xl overflow-hidden border border-axdoro-border bg-axdoro-bg shadow-sm transition-all duration-300 ${
+                        previewDevice === 'desktop'
+                          ? 'w-full aspect-[1280/504] max-h-72'
+                          : previewDevice === 'tablet'
+                          ? 'w-[440px] max-w-full aspect-[768/462]'
+                          : 'w-[270px] max-w-full aspect-[375/336]'
+                      }`}
+                    >
+                      <img
+                        src={activeSlide.imageUrl || '/hero-bg.jpg'}
+                        alt={`Slide ${activeSlide.id} Preview`}
+                        style={{
+                          objectPosition: `${activeSlide.imagePositionX ?? 50}% ${activeSlide.imagePosition ?? 50}%`,
+                        }}
+                        className="w-full h-full object-cover transition-[object-position] duration-150"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          if (!target.src.endsWith('/hero-bg.jpg')) {
+                            target.src = '/hero-bg.jpg';
+                          }
+                        }}
+                      />
+                      <div className="absolute top-2.5 right-2.5 flex items-center gap-2">
+                        {activeSlide.imageUrl ? (
+                          <Badge variant="default" className="text-[10px] bg-axdoro-accent text-black font-semibold shadow-xs">
+                            Custom Image
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px] bg-black/70 text-white border-white/20 shadow-xs">
+                            Default Asset
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] font-mono bg-black/60 text-white border-white/20 backdrop-blur-xs">
+                          {previewDevice === 'desktop'
+                            ? 'Desktop (~2.54:1)'
+                            : previewDevice === 'tablet'
+                            ? 'Tablet (~1.66:1)'
+                            : 'Mobile (~1.12:1)'}
                         </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs bg-black/70 text-white border-white/20 shadow-xs">
-                          Default Asset (/hero-bg.jpg)
-                        </Badge>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Vertical Framing / Alignment Controls (Presets + Fine-tuning Slider) */}
-                <div className="p-3.5 sm:p-4 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/30 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                {/* 2D Focal Framing Controls (Horizontal X + Vertical Y) */}
+                <div className="p-4 sm:p-5 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/30 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-axdoro-border/60 pb-3">
                     <div>
                       <span className="text-xs font-bold text-axdoro-charcoal flex items-center gap-1.5">
                         <Sliders className="w-3.5 h-3.5 text-axdoro-accent" />
-                        <span>Vertical Image Alignment</span>
+                        <span>Responsive Image Focal Point Positioning</span>
                       </span>
                       <p className="text-[11px] text-axdoro-text-muted mt-0.5">
-                        Choose a preset or fine-tune with the slider to position heads, products, or text perfectly.
+                        Adjust framing coordinates so clothing models and products remain centered on every screen size.
                       </p>
                     </div>
-
-                    {/* Quick Presets: Top, Center, Bottom */}
-                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-axdoro-border self-start sm:self-auto">
-                      <button
-                        type="button"
-                        onClick={() => handleSetSlidePosition(activeSlide.id, 0)}
-                        disabled={isSavingHero}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
-                          (activeSlide.imagePosition ?? 50) === 0
-                            ? 'bg-axdoro-charcoal text-white shadow-xs'
-                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
-                        }`}
-                      >
-                        Top
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSetSlidePosition(activeSlide.id, 50)}
-                        disabled={isSavingHero}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
-                          (activeSlide.imagePosition ?? 50) === 50
-                            ? 'bg-axdoro-charcoal text-white shadow-xs'
-                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
-                        }`}
-                      >
-                        Center
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSetSlidePosition(activeSlide.id, 100)}
-                        disabled={isSavingHero}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-colors cursor-pointer ${
-                          (activeSlide.imagePosition ?? 50) === 100
-                            ? 'bg-axdoro-charcoal text-white shadow-xs'
-                            : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
-                        }`}
-                      >
-                        Bottom
-                      </button>
+                    <div className="self-start sm:self-auto">
+                      <span className="text-[11px] font-mono font-bold text-axdoro-charcoal bg-white px-2.5 py-1 rounded-md border border-neutral-200">
+                        Focal Point: X: {activeSlide.imagePositionX ?? 50}%, Y: {activeSlide.imagePosition ?? 50}%
+                      </span>
                     </div>
                   </div>
 
-                  {/* 0-100% Fine-tuning slider with live preview */}
-                  <div className="flex items-center gap-3 pt-1">
-                    <span className="text-[11px] font-mono text-axdoro-text-muted w-12 flex-shrink-0">
-                      0% (Top)
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={activeSlide.imagePosition ?? 50}
-                      onChange={(e) => handleSlidePositionChange(activeSlide.id, Number(e.target.value))}
-                      onPointerUp={() => handleCommitSlidePosition(activeSlide.id)}
-                      disabled={isSavingHero}
-                      className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
-                      aria-label="Slide vertical alignment position"
-                    />
-                    <span className="text-[11px] font-mono text-axdoro-text-muted w-14 text-right flex-shrink-0">
-                      100% (Btm)
-                    </span>
-                    <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
-                      {activeSlide.imagePosition ?? 50}%
-                    </span>
+                  {/* Horizontal Focal Alignment (X-Axis) */}
+                  <div className="space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-xs font-semibold text-axdoro-charcoal flex items-center gap-1">
+                        <span>Horizontal Alignment (X-Axis)</span>
+                        <span className="text-[10px] font-normal text-axdoro-text-muted">— centers models on mobile/tablet viewports</span>
+                      </Label>
+
+                      {/* Presets: Left (0%), Center (50%), Right (100%) */}
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 0)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePositionX ?? 50) === 0
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Left (0%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 50)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePositionX ?? 50) === 50
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Center (50%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 100)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePositionX ?? 50) === 100
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Right (100%)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Horizontal Range Slider */}
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <span className="text-[11px] font-mono text-axdoro-text-muted w-14 flex-shrink-0">
+                        0% (Left)
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.imagePositionX ?? 50}
+                        onChange={(e) => handleSlidePositionChange(activeSlide.id, 'x', Number(e.target.value))}
+                        onPointerUp={() => handleCommitSlidePosition(activeSlide.id, 'x')}
+                        disabled={isSavingHero}
+                        className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
+                        aria-label="Slide horizontal alignment position"
+                      />
+                      <span className="text-[11px] font-mono text-axdoro-text-muted w-16 text-right flex-shrink-0">
+                        100% (Right)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
+                        {activeSlide.imagePositionX ?? 50}%
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Vertical Image Alignment (Y-Axis) */}
+                  <div className="space-y-2.5 pt-1 border-t border-axdoro-border/40">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-xs font-semibold text-axdoro-charcoal flex items-center gap-1">
+                        <span>Vertical Alignment (Y-Axis)</span>
+                        <span className="text-[10px] font-normal text-axdoro-text-muted">— preserves headroom or garment hemline</span>
+                      </Label>
+
+                      {/* Presets: Top (0%), Center (50%), Bottom (100%) */}
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 0)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePosition ?? 50) === 0
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Top (0%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 50)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePosition ?? 50) === 50
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Center (50%)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 100)}
+                          disabled={isSavingHero}
+                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                            (activeSlide.imagePosition ?? 50) === 100
+                              ? 'bg-axdoro-charcoal text-white shadow-xs'
+                              : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
+                          }`}
+                        >
+                          Bottom (100%)
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Vertical Range Slider */}
+                    <div className="flex items-center gap-3 pt-0.5">
+                      <span className="text-[11px] font-mono text-axdoro-text-muted w-14 flex-shrink-0">
+                        0% (Top)
+                      </span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={activeSlide.imagePosition ?? 50}
+                        onChange={(e) => handleSlidePositionChange(activeSlide.id, 'y', Number(e.target.value))}
+                        onPointerUp={() => handleCommitSlidePosition(activeSlide.id, 'y')}
+                        disabled={isSavingHero}
+                        className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
+                        aria-label="Slide vertical alignment position"
+                      />
+                      <span className="text-[11px] font-mono text-axdoro-text-muted w-16 text-right flex-shrink-0">
+                        100% (Btm)
+                      </span>
+                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
+                        {activeSlide.imagePosition ?? 50}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-axdoro-text-muted leading-relaxed bg-white/70 p-2.5 rounded-lg border border-neutral-200">
+                    <strong>Responsive Design Note:</strong> The hero uses <code className="text-[10px] font-mono bg-neutral-100 px-1 py-0.5 rounded">object-fit: cover</code> to ensure crisp, non-distorted rendering without letterbox gaps. Because mobile screens are tall (~1.12:1) while desktops are wide (~2.54:1), edge cropping is unavoidable. Use the focal sliders and device toggle tabs above to position the most critical clothing and model elements in view.
+                  </p>
                 </div>
 
                 {/* Image Controls Bar */}
@@ -1156,7 +1348,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     src={heroPreviewUrl || heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl || '/hero-bg.jpg'}
                     alt="Hero Preview"
                     style={{
-                      objectPosition: `50% ${heroSlides.find((s) => s.id === editingModalSlideId)?.imagePosition ?? 50}%`,
+                      objectPosition: `${heroSlides.find((s) => s.id === editingModalSlideId)?.imagePositionX ?? 50}% ${heroSlides.find((s) => s.id === editingModalSlideId)?.imagePosition ?? 50}%`,
                     }}
                     className="w-full h-full object-cover transition-[object-position] duration-150"
                     onError={(e) => {
