@@ -33,7 +33,7 @@ describe('Phase 3 — Enquiries Table Delete Button & Confirmation Dialog', () =
         (m) => m[1]
       );
 
-      expect(thMatches).toEqual(['Customer', 'Type', 'Message', 'Drive Sync', 'Date', 'ACTIONS']);
+      expect(thMatches).toEqual(['Customer', 'Type', 'Message', 'Date', 'ACTIONS']);
     });
 
     it('each enquiry row displays its own Delete button with Trash2 icon and accessible title', () => {
@@ -58,7 +58,6 @@ describe('Phase 3 — Enquiries Table Delete Button & Confirmation Dialog', () =
       expect(enquiriesTab).toContain('handleTriggerDriveSync');
       expect(enquiriesTab).toContain('/api/admin/enquiries/export.csv');
       expect(enquiriesTab).toContain('Export CSV');
-      expect(enquiriesTab).toContain('enq.driveSyncStatus');
       expect(enquiriesTab).toContain('enq.enquiryType');
       expect(enquiriesTab).toContain('enq.createdAt');
     });

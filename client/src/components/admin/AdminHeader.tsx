@@ -19,7 +19,7 @@ const tabTitles: Record<AdminTab, string> = {
   categories: 'Category Management & Storefront Routes',
   collections: 'Homepage Content & Hero Banner',
   orders: 'Customer Orders & Fulfillment',
-  enquiries: 'Customer Enquiries & Drive Sync',
+  enquiries: 'Customer Enquiries',
   audit: 'Security & Mutation Audit Trail',
   payments: 'Storefront Payment Settings & UPI QR',
 };

@@ -58,7 +58,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'categories', label: 'Categories', icon: FolderTree },
     { id: 'collections', label: 'Homepage Content', icon: Sparkles },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
-    { id: 'enquiries', label: 'Enquiries & Drive Sync', icon: Inbox },
+    { id: 'enquiries', label: 'Enquiries', icon: Inbox },
     { id: 'audit', label: 'Security Audit Logs', icon: History },
     { id: 'payments', label: 'Payment Settings', icon: QrCode },
   ];

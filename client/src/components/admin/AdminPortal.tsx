@@ -1157,7 +1157,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                       <TableHead>Customer</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Message</TableHead>
-                      <TableHead>Drive Sync</TableHead>
                       <TableHead>Date</TableHead>
                       <TableHead className="text-right">ACTIONS</TableHead>
                     </TableRow>
@@ -1196,19 +1195,6 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                               Est. Qty: {enq.quantity}
                             </div>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              enq.driveSyncStatus === 'SYNCED'
-                                ? 'success'
-                                : enq.driveSyncStatus === 'FAILED'
-                                ? 'destructive'
-                                : 'warning'
-                            }
-                          >
-                            {enq.driveSyncStatus}
-                          </Badge>
                         </TableCell>
                         <TableCell className="text-[11px] font-mono text-axdoro-text-muted">
                           {new Date(enq.createdAt).toLocaleDateString()}
