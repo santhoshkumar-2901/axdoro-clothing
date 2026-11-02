@@ -369,6 +369,35 @@ export async function adminUpdateCategory(
   if (!res.ok) throw new Error(json.message || json.error || 'Failed to update category');
 }
 
+export interface DeleteCategoryResponse {
+  status: 'success' | 'error';
+  message: string;
+  data?: {
+    id: string;
+    name: string;
+    slug: string;
+    productCount: number;
+  };
+  productCount?: number;
+}
+
+export async function adminDeleteCategory(id: string): Promise<DeleteCategoryResponse> {
+  const res = await fetch(`/api/admin/categories/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error: any = new Error(json.error || json.message || 'Failed to delete category');
+    error.status = res.status;
+    error.code = json.code;
+    error.productCount = json.productCount;
+    throw error;
+  }
+  return json;
+}
+
 
 export interface CreateProductVariantPayload {
   size: string;
@@ -699,6 +728,34 @@ export async function adminAcknowledgeOrder(orderId: string): Promise<AdminOrder
   const json = await res.json();
   if (!res.ok) throw new Error(json.message || 'Failed to acknowledge order');
   return json.data;
+}
+
+export interface DeleteOrderResponse {
+  status: 'success' | 'error';
+  message: string;
+  data?: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    totalPaise: number;
+    orderStatus: string;
+    restoredItemsCount: number;
+  };
+}
+
+export async function adminDeleteOrder(orderId: string): Promise<DeleteOrderResponse> {
+  const res = await fetch(`/api/admin/orders/${encodeURIComponent(orderId)}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const error: any = new Error(json.error || json.message || 'Failed to delete order');
+    error.status = res.status;
+    throw error;
+  }
+  return json;
 }
 
 export async function adminGetBadgeCounts(): Promise<AdminBadgeCounts> {
@@ -1094,6 +1151,8 @@ export interface UpdateHomepageHeroPayload {
   imageUrl?: string | null;
   publicId?: string | null;
   slides?: import('../types/product.js').HeroSlide[];
+  isCategoryMarqueeEnabled?: boolean;
+  marqueeCategoryImages?: Record<string, string | null>;
 }
 
 export async function adminGetHomepageHero(): Promise<import('../types/product.js').HomepageHeroSetting> {

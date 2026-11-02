@@ -11,6 +11,7 @@ import {
   adminGetCategories,
   adminCreateCategory,
   adminUpdateCategory,
+  adminDeleteCategory,
   adminGetCategorySection,
   adminUpsertCategorySection,
   adminDeleteCategorySection,
@@ -264,6 +265,54 @@ adminCategoriesRouter.put('/:id', async (req: Request, res: Response, next: Next
       message: 'Category updated successfully',
     });
   } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/admin/categories/:id
+adminCategoriesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    if (!z.string().uuid().safeParse(id).success) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid category ID format',
+        message: 'Invalid category ID format',
+      });
+      return;
+    }
+
+    const result = await adminDeleteCategory(id, req.admin!);
+    res.json({
+      status: 'success',
+      message: `Category "${result.name}" deleted successfully`,
+      data: result,
+      category: result,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const code = (err as any)?.code;
+
+    if (msg === 'CATEGORY_NOT_FOUND') {
+      res.status(404).json({
+        status: 'error',
+        error: 'Category not found',
+        message: 'Category not found',
+      });
+      return;
+    }
+
+    if (code === 'CATEGORY_HAS_PRODUCTS') {
+      res.status(409).json({
+        status: 'error',
+        code: 'CATEGORY_HAS_PRODUCTS',
+        error: msg,
+        message: msg,
+        productCount: (err as any).productCount,
+      });
+      return;
+    }
+
     next(err);
   }
 });

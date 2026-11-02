@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { requireAdmin } from '../../middleware/adminAuth.js';
 import { orderStatusUpdateSchema } from '../../schemas/orders.js';
-import { listOrders, getOrderById, updateOrderStatus, acknowledgeOrder } from '../../services/order.service.js';
+import { listOrders, getOrderById, updateOrderStatus, acknowledgeOrder, adminDeleteOrder } from '../../services/order.service.js';
 
 export const adminOrdersRouter = Router();
 
@@ -119,3 +120,37 @@ const handleAcknowledge = async (req: Request, res: Response, next: NextFunction
 
 adminOrdersRouter.post('/:id/acknowledge', handleAcknowledge);
 adminOrdersRouter.patch('/:id/acknowledge', handleAcknowledge);
+
+// DELETE /api/admin/orders/:id - Permanently delete order and restore variant inventory if active
+adminOrdersRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    if (!z.string().uuid().safeParse(id).success) {
+      res.status(400).json({
+        status: 'error',
+        error: 'Invalid order ID format',
+        message: 'Invalid order ID format',
+      });
+      return;
+    }
+
+    const result = await adminDeleteOrder(id, req.admin!);
+    res.json({
+      status: 'success',
+      message: `Order #${result.orderNumber} deleted successfully`,
+      data: result,
+      order: result,
+    });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('Order not found')) {
+      res.status(404).json({
+        status: 'error',
+        error: 'Order not found',
+        message: 'Order not found',
+      });
+      return;
+    }
+    next(err);
+  }
+});

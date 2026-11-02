@@ -34,6 +34,8 @@ export default function App(): React.JSX.Element {
   const [catalogueVersion, setCatalogueVersion] = useState(0);
   const [heroImageUrl, setHeroImageUrl] = useState<string | null | undefined>(undefined);
   const [heroSlides, setHeroSlides] = useState<HeroSlide[] | undefined>(undefined);
+  const [isCategoryMarqueeEnabled, setIsCategoryMarqueeEnabled] = useState<boolean | undefined>(undefined);
+  const [marqueeCategoryImages, setMarqueeCategoryImages] = useState<Record<string, string>>({});
   const [categorySections, setCategorySections] = useState<PublicCategorySection[]>([]);
   const [sectionsLoading, setSectionsLoading] = useState<boolean>(true);
   const [sectionsError, setSectionsError] = useState<string | null>(null);
@@ -67,12 +69,16 @@ export default function App(): React.JSX.Element {
         if (isCurrent) {
           setHeroImageUrl(res.imageUrl || null);
           setHeroSlides(res.slides);
+          setIsCategoryMarqueeEnabled(res.isCategoryMarqueeEnabled ?? true);
+          setMarqueeCategoryImages(res.marqueeCategoryImages ?? {});
         }
       })
       .catch(() => {
         if (isCurrent) {
           setHeroImageUrl(null);
           setHeroSlides([]);
+          setIsCategoryMarqueeEnabled(true);
+          setMarqueeCategoryImages({});
         }
       });
 
@@ -289,6 +295,8 @@ export default function App(): React.JSX.Element {
               heroImageUrl={heroImageUrl}
               slides={heroSlides}
               categories={categories}
+              isCategoryMarqueeEnabled={isCategoryMarqueeEnabled}
+              marqueeCategoryImages={marqueeCategoryImages}
               onNavigate={navigate}
             />
 

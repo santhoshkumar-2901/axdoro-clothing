@@ -301,6 +301,108 @@ export async function adminUpdateCategory(
   }
 }
 
+export interface DeleteCategoryResult {
+  id: string;
+  name: string;
+  slug: string;
+  productCount: number;
+}
+
+/**
+ * Permanently deletes a category if no products are assigned to it.
+ * Cleans up associated category_sections, cleans up marquee settings in site_settings,
+ * and deletes hosted Cloudinary image assets post-commit.
+ */
+export async function adminDeleteCategory(
+  id: string,
+  actor: AdminUserDTO
+): Promise<DeleteCategoryResult> {
+  let publicIdToDelete: string | null = null;
+
+  const result = await withTransaction(async (client) => {
+    // 1. Lock category row
+    const catRes = await client.query<{ id: string; name: string; slug: string; public_id: string | null }>(
+      `SELECT id, name, slug, public_id FROM categories WHERE id = $1 FOR UPDATE;`,
+      [id]
+    );
+
+    if (catRes.rows.length === 0) {
+      throw new Error('CATEGORY_NOT_FOUND');
+    }
+
+    const category = catRes.rows[0];
+    publicIdToDelete = category.public_id;
+
+    // 2. Check for assigned products
+    const prodRes = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM products WHERE category_id = $1;`,
+      [id]
+    );
+    const productCount = parseInt(prodRes.rows[0]?.count || '0', 10);
+    if (productCount > 0) {
+      const err = new Error(
+        `Cannot delete category because it contains ${productCount} product(s). Please reassign or delete these products first.`
+      );
+      (err as any).code = 'CATEGORY_HAS_PRODUCTS';
+      (err as any).productCount = productCount;
+      throw err;
+    }
+
+    // 3. Delete category_sections if present (also cascades via FK)
+    await client.query(`DELETE FROM category_sections WHERE category_id = $1;`, [id]);
+
+    // 4. Delete category row
+    await client.query(`DELETE FROM categories WHERE id = $1;`, [id]);
+
+    // 5. Clean up site_settings homepage_hero marqueeCategoryImages if present
+    const settingsRes = await client.query<{ value: any }>(
+      `SELECT value FROM site_settings WHERE key = 'homepage_hero' FOR UPDATE;`
+    );
+    if (settingsRes.rows.length > 0 && settingsRes.rows[0].value?.marqueeCategoryImages?.[category.slug]) {
+      const val = { ...settingsRes.rows[0].value };
+      if (val.marqueeCategoryImages) {
+        delete val.marqueeCategoryImages[category.slug];
+        await client.query(
+          `UPDATE site_settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = 'homepage_hero';`,
+          [JSON.stringify(val)]
+        );
+      }
+    }
+
+    // 6. Record audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'CATEGORY_DELETE',
+      entityType: 'category',
+      entityId: id,
+      details: {
+        name: category.name,
+        slug: category.slug,
+      },
+      client,
+    });
+
+    return {
+      id: category.id,
+      name: category.name,
+      slug: category.slug,
+      productCount: 0,
+    };
+  });
+
+  // 7. Safe post-commit Cloudinary asset cleanup if hosted on Cloudinary
+  if (publicIdToDelete) {
+    try {
+      await deleteCloudinaryAsset(publicIdToDelete);
+    } catch (err: unknown) {
+      console.warn(`[Cloudinary] Asset deletion warning for category asset '${publicIdToDelete}':`, err);
+    }
+  }
+
+  return result;
+}
+
 // -------------------------------------------------------------
 // Category Section Management (Homepage Sections)
 // -------------------------------------------------------------

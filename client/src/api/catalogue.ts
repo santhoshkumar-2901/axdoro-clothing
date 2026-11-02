@@ -170,7 +170,12 @@ export async function fetchHomepageCollectionBySlug(
   };
 }
 
-export async function fetchHomepageHero(): Promise<{ imageUrl: string | null; slides?: HeroSlide[] }> {
+export async function fetchHomepageHero(): Promise<{
+  imageUrl: string | null;
+  slides?: HeroSlide[];
+  isCategoryMarqueeEnabled?: boolean;
+  marqueeCategoryImages?: Record<string, string>;
+}> {
   try {
     const response = await fetch('/api/homepage/hero', {
       headers: {
@@ -179,17 +184,22 @@ export async function fetchHomepageHero(): Promise<{ imageUrl: string | null; sl
     });
 
     if (!response.ok) {
-      return { imageUrl: null, slides: [] };
+      return { imageUrl: null, slides: [], isCategoryMarqueeEnabled: true, marqueeCategoryImages: {} };
     }
 
     const json = await response.json();
     return {
       imageUrl: json.data?.imageUrl || null,
       slides: Array.isArray(json.data?.slides) ? json.data.slides : undefined,
+      isCategoryMarqueeEnabled: typeof json.data?.isCategoryMarqueeEnabled === 'boolean' ? json.data.isCategoryMarqueeEnabled : true,
+      marqueeCategoryImages:
+        json.data?.marqueeCategoryImages && typeof json.data.marqueeCategoryImages === 'object'
+          ? json.data.marqueeCategoryImages
+          : {},
     };
   } catch {
     // Fail safely with default fallback
-    return { imageUrl: null, slides: [] };
+    return { imageUrl: null, slides: [], isCategoryMarqueeEnabled: true, marqueeCategoryImages: {} };
   }
 }
 

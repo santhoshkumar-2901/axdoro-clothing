@@ -21,6 +21,7 @@ import {
   adminGetCategories,
   adminCreateCategory,
   adminUpdateCategory,
+  adminDeleteCategory,
   adminGetCategoryUploadSignature,
   CreateCategoryPayload,
   UpdateCategoryPayload,
@@ -102,10 +103,16 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
   const [isSectionModalOpen, setIsSectionModalOpen] = useState<boolean>(false);
   const [isReorderModalOpen, setIsReorderModalOpen] = useState<boolean>(false);
 
+  // Delete category modal state
+  const [categoryToDelete, setCategoryToDelete] = useState<AdminCategory | null>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState<boolean>(false);
+  const [deleteCategoryError, setDeleteCategoryError] = useState<string | null>(null);
+
   // Global reference-counted scroll lock while add or edit category dialog is open
   useScrollLock(isAddOpen || Boolean(editingCategory));
   useScrollLock(Boolean(imageModalCategory));
   useScrollLock(isSectionModalOpen || isReorderModalOpen);
+  useScrollLock(Boolean(categoryToDelete));
 
   // Quick toggle loading state
   const [togglingCategoryId, setTogglingCategoryId] = useState<string | null>(null);
@@ -440,6 +447,27 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
     }
   };
 
+  const handleDeleteCategoryConfirm = async () => {
+    if (!categoryToDelete || isDeletingCategory) return;
+    const target = categoryToDelete;
+    setIsDeletingCategory(true);
+    setDeleteCategoryError(null);
+
+    try {
+      await adminDeleteCategory(target.id);
+      setSuccessMessage(`Category "${target.name}" was permanently deleted.`);
+      setTimeout(() => setSuccessMessage(null), 3500);
+      setCategories((prev) => prev.filter((c) => c.id !== target.id));
+      setCategoryToDelete(null);
+      setDeleteCategoryError(null);
+      onCategoryMutated?.();
+    } catch (err: any) {
+      setDeleteCategoryError(err instanceof Error ? err.message : 'An error occurred while deleting the category.');
+    } finally {
+      setIsDeletingCategory(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header & Actions */}
@@ -673,6 +701,20 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
                             ) : (
                               'Activate'
                             )}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setCategoryToDelete(cat);
+                              setDeleteCategoryError(null);
+                            }}
+                            className="h-8 text-xs font-semibold px-2.5 text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                            title="Delete Category"
+                            data-testid={`delete-category-btn-${cat.slug}`}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
                           </Button>
                         </div>
                       </TableCell>
@@ -1234,6 +1276,111 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Category Confirmation Dialog */}
+      {categoryToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-category-dialog-title"
+        >
+          <div className="w-full max-w-md bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-axdoro-border px-6 py-4 shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5 flex-shrink-0" />
+                <h3 id="delete-category-dialog-title" className="text-base font-bold text-axdoro-charcoal">
+                  Permanently delete category?
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingCategory}
+                onClick={() => {
+                  setCategoryToDelete(null);
+                  setDeleteCategoryError(null);
+                }}
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-surface-muted transition-colors disabled:opacity-40 cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-3 text-xs">
+                <p className="text-axdoro-charcoal leading-relaxed">
+                  This will permanently delete the category and its configured homepage sections. This action cannot be undone.
+                </p>
+
+                <div className="p-3.5 rounded-xl bg-axdoro-surface-muted/30 border border-axdoro-border text-xs space-y-1">
+                  <div className="font-bold text-axdoro-charcoal text-sm">{categoryToDelete.name}</div>
+                  <div className="text-axdoro-text-muted font-mono text-[11px]">
+                    Slug: /category/{categoryToDelete.slug}
+                  </div>
+                  <div className="text-[11px] text-axdoro-text-muted pt-1">
+                    Products: <span className="font-semibold text-axdoro-charcoal">{categoryToDelete.productCount}</span> &bull; Status: <span className="font-semibold text-axdoro-charcoal">{categoryToDelete.isActive ? 'Active' : 'Inactive'}</span>
+                  </div>
+                </div>
+
+                {categoryToDelete.productCount > 0 && (
+                  <div className="rounded-lg p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <p className="font-medium leading-relaxed">
+                        Cannot delete this category because it contains {categoryToDelete.productCount} product{categoryToDelete.productCount > 1 ? 's' : ''}. Please reassign or delete these products in the catalogue first.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {deleteCategoryError && (
+                  <div className="rounded-lg p-3 bg-red-50 border border-red-200 text-red-900 text-xs">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <p className="font-medium leading-relaxed">{deleteCategoryError}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDeletingCategory}
+                onClick={() => {
+                  setCategoryToDelete(null);
+                  setDeleteCategoryError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={isDeletingCategory || categoryToDelete.productCount > 0}
+                onClick={handleDeleteCategoryConfirm}
+                className="bg-red-600 text-white hover:bg-red-700 font-semibold"
+                data-testid="confirm-delete-category-btn"
+              >
+                {isDeletingCategory ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Deleting Category...
+                  </>
+                ) : (
+                  'Delete Category'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Homepage Category Section Modal */}
       <CategorySectionModal
         category={selectedSectionCategory}

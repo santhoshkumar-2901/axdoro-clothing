@@ -2227,4 +2227,133 @@ describe('Admin Catalogue & Inventory Integration Tests (axdoro_test)', () => {
       expect(imgCheck.rows[0].is_primary).toBe(true);
     });
   });
+
+  describe('Category Deletion & Catalogue Integrity (DELETE /api/admin/categories/:id)', () => {
+    it('rejects unauthenticated requests with 401 Unauthorized', async () => {
+      const res = await request(app).delete('/api/admin/categories/00000000-0000-0000-0000-000000000001');
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects malformed category ID with 400 Bad Request', async () => {
+      const res = await request(app)
+        .delete('/api/admin/categories/invalid-uuid-format')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid category id format/i);
+    });
+
+    it('returns 404 Not Found for non-existent category', async () => {
+      const res = await request(app)
+        .delete('/api/admin/categories/a0000000-0000-4000-8000-000000000099')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toMatch(/category not found/i);
+    });
+
+    it('rejects deletion with 409 Conflict when category contains products', async () => {
+      // 1. Create a category
+      const catRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Protected Outerwear',
+          slug: 'protected-outerwear',
+          description: 'Category with assigned products',
+          displayOrder: 20,
+          isActive: true,
+        });
+      expect(catRes.status).toBe(201);
+      const catId = catRes.body.category.id;
+
+      // 2. Add product to category
+      const prodRes = await request(app)
+        .post('/api/admin/products')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Winter Parka',
+          slug: 'winter-parka',
+          description: 'Warm winter jacket',
+          categoryId: catId,
+          status: 'published',
+          variants: [
+            { size: 'L', color: 'Navy', sku: 'PARKA-NVY-L', pricePaise: 499900, stockQuantity: 10 },
+          ],
+        });
+      expect(prodRes.status).toBe(201);
+
+      // 3. Attempt to delete category
+      const delRes = await request(app)
+        .delete(`/api/admin/categories/${catId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(delRes.status).toBe(409);
+      expect(delRes.body.code).toBe('CATEGORY_HAS_PRODUCTS');
+      expect(delRes.body.message).toMatch(/cannot delete category because it contains 1 product/i);
+
+      // 4. Verify category still exists
+      const catCheck = await testPool.query('SELECT id FROM categories WHERE id = $1;', [catId]);
+      expect(catCheck.rows).toHaveLength(1);
+    });
+
+    it('permanently deletes an eligible empty category, cascades section, cleans marquee settings, and records audit log', async () => {
+      // 1. Create category
+      const catRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Seasonal Accessories',
+          slug: 'seasonal-accessories',
+          description: 'Hats and scarves',
+          displayOrder: 25,
+          isActive: true,
+        });
+      expect(catRes.status).toBe(201);
+      const catId = catRes.body.category.id;
+
+      // 2. Add category section
+      await testPool.query(
+        `INSERT INTO category_sections (category_id, is_enabled, display_order, heading, subtitle)
+         VALUES ($1, true, 1, 'Accessories Showcase', 'Explore our gear')`,
+        [catId]
+      );
+
+      // 3. Add to site_settings homepage_hero marqueeCategoryImages
+      await testPool.query(
+        `INSERT INTO site_settings (key, value)
+         VALUES ('homepage_hero', '{"marqueeCategoryImages": {"seasonal-accessories": "https://example.com/acc.png"}}'::jsonb)
+         ON CONFLICT (key) DO UPDATE SET value = '{"marqueeCategoryImages": {"seasonal-accessories": "https://example.com/acc.png"}}'::jsonb;`
+      );
+
+      // 4. Delete category
+      const delRes = await request(app)
+        .delete(`/api/admin/categories/${catId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.status).toBe('success');
+      expect(delRes.body.data.name).toBe('Seasonal Accessories');
+
+      // 5. Verify category is removed
+      const catCheck = await testPool.query('SELECT id FROM categories WHERE id = $1;', [catId]);
+      expect(catCheck.rows).toHaveLength(0);
+
+      // 6. Verify category_sections record is removed
+      const secCheck = await testPool.query('SELECT id FROM category_sections WHERE category_id = $1;', [catId]);
+      expect(secCheck.rows).toHaveLength(0);
+
+      // 7. Verify marquee setting in site_settings was cleaned up
+      const setCheck = await testPool.query<{ value: any }>(
+        `SELECT value FROM site_settings WHERE key = 'homepage_hero';`
+      );
+      expect(setCheck.rows[0].value?.marqueeCategoryImages?.['seasonal-accessories']).toBeUndefined();
+
+      // 8. Verify CATEGORY_DELETE audit log was recorded
+      const auditRes = await testPool.query<{ action: string; details: any }>(
+        `SELECT action, details FROM admin_audit_logs WHERE action = 'CATEGORY_DELETE' AND entity_id = $1;`,
+        [catId]
+      );
+      expect(auditRes.rows).toHaveLength(1);
+      expect(auditRes.rows[0].details.slug).toBe('seasonal-accessories');
+    });
+  });
 });

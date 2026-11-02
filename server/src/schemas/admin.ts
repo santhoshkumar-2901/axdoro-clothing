@@ -429,6 +429,30 @@ export const homepageHeroUpdateSchema = z
       .optional()
       .nullable(),
     publicId: z.string().trim().max(255).optional().nullable(),
+    isCategoryMarqueeEnabled: z.boolean().optional(),
+    marqueeCategoryImages: z
+      .record(
+        z.string().trim().min(1).max(100),
+        z
+          .string()
+          .trim()
+          .superRefine((val, ctx) => {
+            if (!val) return;
+            if (val.startsWith('/') && !val.startsWith('//') && /\.(jpg|jpeg|png|webp|avif|svg|gif)$/i.test(val)) {
+              return;
+            }
+            const result = isValidProductImageUrl(val);
+            if (!result.valid) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: result.reason || 'Invalid marquee category image URL',
+              });
+            }
+          })
+          .nullable()
+          .optional()
+      )
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (data.slides) {
@@ -441,10 +465,15 @@ export const homepageHeroUpdateSchema = z
           path: ['slides'],
         });
       }
-    } else if (data.imageUrl === undefined && data.publicId === undefined) {
+    } else if (
+      data.imageUrl === undefined &&
+      data.publicId === undefined &&
+      data.isCategoryMarqueeEnabled === undefined &&
+      data.marqueeCategoryImages === undefined
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Either slides array or legacy imageUrl/publicId must be provided',
+        message: 'Either slides array, legacy imageUrl/publicId, or marquee settings must be provided',
       });
     }
   });

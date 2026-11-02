@@ -18,6 +18,8 @@ export interface HomepageHeroSetting {
   slides: HeroSlide[];
   imageUrl: string | null;
   publicId: string | null;
+  isCategoryMarqueeEnabled: boolean;
+  marqueeCategoryImages: Record<string, string>;
   updatedAt?: string;
 }
 
@@ -63,11 +65,30 @@ export function normalizeHomepageHeroSetting(
 ): HomepageHeroSetting {
   const defaultSlides = DEFAULT_HERO_SLIDES.map((s) => ({ ...s }));
 
+  const isCategoryMarqueeEnabled =
+    storedValue && typeof storedValue === 'object' && typeof storedValue.isCategoryMarqueeEnabled === 'boolean'
+      ? storedValue.isCategoryMarqueeEnabled
+      : true;
+
+  const rawMarqueeCategoryImages =
+    storedValue && typeof storedValue === 'object' && storedValue.marqueeCategoryImages && typeof storedValue.marqueeCategoryImages === 'object' && !Array.isArray(storedValue.marqueeCategoryImages)
+      ? storedValue.marqueeCategoryImages
+      : {};
+
+  const cleanMarqueeImages: Record<string, string> = {};
+  for (const [key, val] of Object.entries(rawMarqueeCategoryImages)) {
+    if (typeof val === 'string' && val.trim() !== '') {
+      cleanMarqueeImages[key.trim()] = val.trim();
+    }
+  }
+
   if (!storedValue || typeof storedValue !== 'object') {
     return {
       slides: defaultSlides,
       imageUrl: null,
       publicId: null,
+      isCategoryMarqueeEnabled: true,
+      marqueeCategoryImages: {},
       updatedAt: updatedAt ? (typeof updatedAt === 'string' ? updatedAt : updatedAt.toISOString()) : undefined,
     };
   }
@@ -121,6 +142,8 @@ export function normalizeHomepageHeroSetting(
       slides,
       imageUrl: slides[0]?.imageUrl || null,
       publicId: slides[0]?.publicId || null,
+      isCategoryMarqueeEnabled,
+      marqueeCategoryImages: cleanMarqueeImages,
       updatedAt: updatedAt ? (typeof updatedAt === 'string' ? updatedAt : updatedAt.toISOString()) : undefined,
     };
   }
@@ -142,6 +165,8 @@ export function normalizeHomepageHeroSetting(
     slides: defaultSlides,
     imageUrl: legacyImageUrl,
     publicId: legacyPublicId,
+    isCategoryMarqueeEnabled,
+    marqueeCategoryImages: cleanMarqueeImages,
     updatedAt: updatedAt ? (typeof updatedAt === 'string' ? updatedAt : updatedAt.toISOString()) : undefined,
   };
 }
@@ -183,21 +208,35 @@ export async function updateHomepageHeroSetting(params: {
   slides?: HeroSlideInput[];
   imageUrl?: string | null;
   publicId?: string | null;
+  isCategoryMarqueeEnabled?: boolean | null;
+  marqueeCategoryImages?: Record<string, string | null | undefined> | null;
   adminId: string;
   adminEmail: string;
   ipAddress?: string | null;
 }): Promise<HomepageHeroSetting> {
-  const { slides: newSlidesInput, imageUrl = null, publicId = null, adminId, adminEmail, ipAddress = null } = params;
+  const {
+    slides: newSlidesInput,
+    imageUrl: inputImageUrl,
+    publicId: inputPublicId,
+    isCategoryMarqueeEnabled: newMarqueeEnabled,
+    marqueeCategoryImages: newMarqueeCategoryImages,
+    adminId,
+    adminEmail,
+    ipAddress = null,
+  } = params;
 
   const client = await pool.connect();
 
   try {
     await client.query('BEGIN');
 
-    // 1. Fetch previous setting for row lock and audit logging
+    // 1. Fetch previous setting for row lock, audit logging, and preserving other fields
     const prevRes = await client.query<{ value: any }>(
       `SELECT value FROM site_settings WHERE key = 'homepage_hero' FOR UPDATE;`
     );
+    const prevRawValue = prevRes.rows.length > 0 && prevRes.rows[0].value && typeof prevRes.rows[0].value === 'object'
+      ? prevRes.rows[0].value
+      : {};
     const previousSetting = prevRes.rows.length > 0 ? normalizeHomepageHeroSetting(prevRes.rows[0].value) : null;
 
     // 2. Determine target slides
@@ -228,23 +267,51 @@ export async function updateHomepageHeroSetting(params: {
         };
       });
     } else {
-      // Legacy update mode (updating slide 1)
+      // Retain previous slides without overwrite
       const baseSlides = previousSetting ? previousSetting.slides.map((s) => ({ ...s })) : DEFAULT_HERO_SLIDES.map((s) => ({ ...s }));
-      const finalImg = imageUrl && imageUrl.trim() !== '' ? imageUrl.trim() : null;
-      const finalPub = finalImg ? (publicId && publicId.trim() !== '' ? publicId.trim() : null) : null;
-
-      baseSlides[0].imageUrl = finalImg;
-      baseSlides[0].publicId = finalPub;
+      if (inputImageUrl !== undefined) {
+        const finalImg = inputImageUrl && inputImageUrl.trim() !== '' ? inputImageUrl.trim() : null;
+        const finalPub = finalImg ? (inputPublicId && inputPublicId.trim() !== '' ? inputPublicId.trim() : null) : null;
+        baseSlides[0].imageUrl = finalImg;
+        baseSlides[0].publicId = finalPub;
+      }
       finalSlides = baseSlides;
     }
 
+    // 3. Determine marquee enabled status (preserve previous if undefined)
+    const finalMarqueeEnabled =
+      typeof newMarqueeEnabled === 'boolean'
+        ? newMarqueeEnabled
+        : (previousSetting?.isCategoryMarqueeEnabled ?? true);
+
+    // 4. Determine marquee images mapping (preserve previous and apply updates)
+    const finalMarqueeCategoryImages: Record<string, string> = {
+      ...(previousSetting?.marqueeCategoryImages || {}),
+    };
+
+    if (newMarqueeCategoryImages && typeof newMarqueeCategoryImages === 'object') {
+      for (const [key, val] of Object.entries(newMarqueeCategoryImages)) {
+        const trimmedKey = key.trim();
+        if (!trimmedKey) continue;
+        if (val === null || val === undefined || (typeof val === 'string' && val.trim() === '')) {
+          delete finalMarqueeCategoryImages[trimmedKey];
+        } else if (typeof val === 'string') {
+          finalMarqueeCategoryImages[trimmedKey] = val.trim();
+        }
+      }
+    }
+
+    // 5. Construct merged value preserving any unrelated JSONB properties
     const newValue = {
+      ...prevRawValue,
       imageUrl: finalSlides[0]?.imageUrl || null,
       publicId: finalSlides[0]?.publicId || null,
       slides: finalSlides,
+      isCategoryMarqueeEnabled: finalMarqueeEnabled,
+      marqueeCategoryImages: finalMarqueeCategoryImages,
     };
 
-    // 3. Upsert site_settings
+    // 6. Upsert site_settings
     const upsertRes = await client.query<{ value: any; updated_at: Date }>(
       `INSERT INTO site_settings (key, value, updated_at)
        VALUES ('homepage_hero', $1, CURRENT_TIMESTAMP)
@@ -254,7 +321,7 @@ export async function updateHomepageHeroSetting(params: {
       [JSON.stringify(newValue)]
     );
 
-    // 4. Write immutable audit log
+    // 7. Write immutable audit log
     await createAuditLog({
       adminId,
       adminEmail,
@@ -267,12 +334,16 @@ export async function updateHomepageHeroSetting(params: {
               imageUrl: previousSetting.imageUrl,
               publicId: previousSetting.publicId,
               slides: previousSetting.slides,
+              isCategoryMarqueeEnabled: previousSetting.isCategoryMarqueeEnabled,
+              marqueeCategoryImages: previousSetting.marqueeCategoryImages,
             }
           : prevRes.rows[0]?.value || null,
         new: {
           imageUrl: finalSlides[0]?.imageUrl || null,
           publicId: finalSlides[0]?.publicId || null,
           slides: finalSlides,
+          isCategoryMarqueeEnabled: finalMarqueeEnabled,
+          marqueeCategoryImages: finalMarqueeCategoryImages,
         },
       },
       ipAddress,

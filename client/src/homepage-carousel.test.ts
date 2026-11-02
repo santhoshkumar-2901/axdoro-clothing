@@ -452,6 +452,10 @@ describe('Homepage Responsive 3-Slide Hero Carousel Client Tests', () => {
         React.createElement(Hero, {
           slides: mockHeroSlides,
           categories: mockCategories,
+          marqueeCategoryImages: {
+            't-shirts': 'https://res.cloudinary.com/axdoro/tshirts.webp',
+            pants: 'https://res.cloudinary.com/axdoro/pants.webp',
+          },
           onExplore: () => {},
           onOpenBulk: () => {},
         })
@@ -478,6 +482,53 @@ describe('Homepage Responsive 3-Slide Hero Carousel Client Tests', () => {
       expect(html).toContain('https://res.cloudinary.com/axdoro/tshirts.webp');
       expect(html).toContain('https://res.cloudinary.com/axdoro/pants.webp');
       expect(html).toContain('/categories/shirts-3d.webp'); // 3D Shirts fallback
+    });
+
+    it('keeps category catalogue image independent and preserves default 3D asset when no custom marquee image is provided', () => {
+      const html = renderToString(
+        React.createElement(Hero, {
+          slides: mockHeroSlides,
+          categories: [
+            {
+              id: 'cat-tshirts',
+              slug: 't-shirts',
+              name: 'T-Shirts',
+              description: 'Cotton tees',
+              displayOrder: 1,
+              imageUrl: 'https://res.cloudinary.com/axdoro/catalogue-thumb.webp', // Catalogue image, NOT marquee
+            },
+          ],
+          onExplore: () => {},
+          onOpenBulk: () => {},
+        })
+      );
+
+      // Verify catalogue thumbnail is NOT used in the marquee; default 3D asset is preserved
+      expect(html).not.toContain('https://res.cloudinary.com/axdoro/catalogue-thumb.webp');
+      expect(html).toContain('/categories/t-shirts-3d.webp');
+    });
+
+    it('completely omits category marquee and scales container when isCategoryMarqueeEnabled is false', () => {
+      const html = renderToString(
+        React.createElement(Hero, {
+          slides: mockHeroSlides,
+          categories: mockCategories,
+          isCategoryMarqueeEnabled: false,
+          onExplore: () => {},
+          onOpenBulk: () => {},
+        })
+      );
+
+      // Marquee container and track should not be rendered
+      expect(html).not.toContain('aria-label="Clothing Categories"');
+      expect(html).not.toContain('data-testid="category-carousel-track"');
+
+      // Container should use compact height class instead of combined height
+      expect(html).toContain('h-[320px] sm:h-[460px] md:h-[560px] lg:h-[640px]');
+      expect(html).not.toContain('h-[480px] sm:h-[580px] md:h-[660px] lg:h-[720px]');
+
+      // Main hero slide should still render normally
+      expect(html).toContain('aria-label="Main Hero Slides"');
     });
 
     it('preserves independence: categories do not alter main hero slide dots, and hero slides do not alter categories', () => {

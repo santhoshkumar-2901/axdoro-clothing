@@ -19,6 +19,7 @@ import {
   adminGetOrders,
   adminUpdateOrderStatus,
   adminAcknowledgeOrder,
+  adminDeleteOrder,
   adminGetBadgeCounts,
   adminGetEnquiries,
   adminDeleteEnquiry,
@@ -160,6 +161,12 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // Order details modal state
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<AdminOrder | null>(null);
   useScrollLock(Boolean(selectedOrderDetails));
+
+  // Order deletion states
+  const [orderToDelete, setOrderToDelete] = useState<AdminOrder | null>(null);
+  useScrollLock(Boolean(orderToDelete));
+  const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [deleteOrderError, setDeleteOrderError] = useState<string | null>(null);
 
   // Sync tab with browser URL history (popstate)
   useEffect(() => {
@@ -497,6 +504,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     const notification = getOrderWhatsAppNotification(order);
     if (notification.isEligible && notification.url) {
       window.open(notification.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const handleDeleteOrderConfirm = async () => {
+    if (!orderToDelete || isDeletingOrder) return;
+    const target = orderToDelete;
+    setIsDeletingOrder(true);
+    setDeleteOrderError(null);
+
+    try {
+      await adminDeleteOrder(target.id);
+      setActionSuccess(`Order #${target.orderNumber} was permanently deleted.`);
+      setTimeout(() => setActionSuccess(null), 3500);
+      setOrders((prev) => prev.filter((o) => o.id !== target.id));
+      if (selectedOrderDetails?.id === target.id) {
+        setSelectedOrderDetails(null);
+      }
+      setOrderToDelete(null);
+      setDeleteOrderError(null);
+      fetchBadgeCounts();
+      onCatalogueMutated?.();
+    } catch (err: any) {
+      setDeleteOrderError(err instanceof Error ? err.message : 'Failed to delete order');
+    } finally {
+      setIsDeletingOrder(false);
     }
   };
 
@@ -1034,17 +1066,34 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                           {new Date(order.createdAt).toLocaleDateString()}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setSelectedOrderDetails(order)}
-                            className="h-7 px-2 text-xs gap-1 font-semibold border-axdoro-border text-axdoro-charcoal hover:bg-axdoro-surface-muted cursor-pointer"
-                            title="View order details"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>Details</span>
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedOrderDetails(order)}
+                              className="h-7 px-2 text-xs gap-1 font-semibold border-axdoro-border text-axdoro-charcoal hover:bg-axdoro-surface-muted cursor-pointer"
+                              title="View order details"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Details</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setOrderToDelete(order);
+                                setDeleteOrderError(null);
+                              }}
+                              className="h-7 px-2 text-xs gap-1 font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 cursor-pointer"
+                              title="Delete order"
+                              data-testid={`delete-order-btn-${order.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -1743,12 +1792,130 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                   type="button"
                   variant="outline"
                   size="sm"
+                  onClick={() => {
+                    setOrderToDelete(selectedOrderDetails);
+                    setDeleteOrderError(null);
+                  }}
+                  className="h-8 text-xs gap-1 font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 cursor-pointer"
+                  title="Delete order"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Order</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => setSelectedOrderDetails(null)}
                   className="h-8 text-xs cursor-pointer"
                 >
                   Close
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Order Confirmation Dialog */}
+      {orderToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-order-dialog-title"
+        >
+          <div className="w-full max-w-md bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-axdoro-border px-6 py-4 shrink-0 bg-axdoro-surface">
+              <div className="flex items-center gap-2 text-red-600">
+                <Trash2 className="w-5 h-5 flex-shrink-0" />
+                <h3 id="delete-order-dialog-title" className="text-base font-bold text-axdoro-charcoal">
+                  Permanently delete order?
+                </h3>
+              </div>
+              <button
+                type="button"
+                disabled={isDeletingOrder}
+                onClick={() => {
+                  setOrderToDelete(null);
+                  setDeleteOrderError(null);
+                }}
+                className="text-axdoro-text-muted hover:text-axdoro-charcoal p-1.5 rounded-lg hover:bg-axdoro-surface-muted transition-colors disabled:opacity-40 cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="space-y-3 text-xs">
+                <p className="text-axdoro-charcoal leading-relaxed">
+                  This will permanently remove the order record and all its line items. This action cannot be undone.
+                </p>
+
+                <div className="p-3.5 rounded-xl bg-axdoro-surface-muted/30 border border-axdoro-border text-xs space-y-1">
+                  <div className="font-bold text-axdoro-charcoal text-sm">
+                    Order #{orderToDelete.orderNumber}
+                  </div>
+                  <div className="text-axdoro-text-muted font-mono text-[11px]">
+                    Customer: {orderToDelete.customerName} ({orderToDelete.customerPhone})
+                  </div>
+                  <div className="text-[11px] text-axdoro-text-muted pt-1">
+                    Amount: <span className="font-semibold text-axdoro-charcoal">₹{(orderToDelete.totalPaise / 100).toFixed(2)}</span> &bull; Status: <span className="font-semibold text-axdoro-charcoal">{orderToDelete.orderStatus}</span>
+                  </div>
+                </div>
+
+                {orderToDelete.orderStatus !== 'CANCELLED' && orderToDelete.orderStatus !== 'DELIVERED' && (
+                  <div className="rounded-lg p-3 bg-blue-50 border border-blue-200 text-blue-900 text-xs">
+                    <p className="font-medium leading-relaxed">
+                      Notice: Inventory reserved by this active order will be automatically restored to variant stock upon deletion.
+                    </p>
+                  </div>
+                )}
+
+                {deleteOrderError && (
+                  <div className="rounded-lg p-3 bg-red-50 border border-red-200 text-red-900 text-xs">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <p className="font-medium leading-relaxed">{deleteOrderError}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-axdoro-border bg-axdoro-surface-muted/30 shrink-0">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDeletingOrder}
+                onClick={() => {
+                  setOrderToDelete(null);
+                  setDeleteOrderError(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={isDeletingOrder}
+                onClick={handleDeleteOrderConfirm}
+                className="bg-red-600 text-white hover:bg-red-700 font-semibold"
+                data-testid="confirm-delete-order-btn"
+              >
+                {isDeletingOrder ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                    Deleting Order...
+                  </>
+                ) : (
+                  'Delete Order'
+                )}
+              </Button>
             </div>
           </div>
         </div>

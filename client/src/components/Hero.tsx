@@ -16,6 +16,8 @@ export interface HeroProps {
   heroImageUrl?: string | null;
   slides?: HeroSlide[];
   categories?: Category[];
+  isCategoryMarqueeEnabled?: boolean;
+  marqueeCategoryImages?: Record<string, string>;
   onNavigate?: (path: string) => void;
 }
 
@@ -23,6 +25,8 @@ export const Hero: React.FC<HeroProps> = ({
   heroImageUrl,
   slides,
   categories,
+  isCategoryMarqueeEnabled = true,
+  marqueeCategoryImages = {},
   onNavigate,
   onExplore: _onExplore,
 }) => {
@@ -31,7 +35,7 @@ export const Hero: React.FC<HeroProps> = ({
 
   // ---------------------------------------------------------------------------
   // Top Category Carousel (Strictly 30% of combined opening container height)
-  // Continuous horizontal sliding strip with 3D product renders (Shirts, Pants, T-Shirts, Jeans)
+  // Continuous horizontal sliding strip with 3D product renders
   // ---------------------------------------------------------------------------
   const fallbackDefaultCategories: Category[] = useMemo(
     () => [
@@ -46,29 +50,14 @@ export const Hero: React.FC<HeroProps> = ({
   const usableCategories = useMemo(() => {
     if (!isCategoriesResolved) return [];
     if (categories && categories.length > 0) {
-      const list = [...categories.filter((c) => c && c.slug)];
-      // Ensure jeans is present in the 4-item strip
-      if (!list.some((c) => c.slug === 'jeans')) {
-        list.push({
-          id: 'cat-jeans',
-          slug: 'jeans',
-          name: 'Jeans',
-          description: null,
-          displayOrder: 4,
-          imageUrl: DEFAULT_CATEGORY_IMAGES['jeans'],
-        });
-      }
-      // Visual order matching reference: Shirts, Pants, T-Shirts, Jeans
-      const desiredOrder = ['shirts', 'pants', 't-shirts', 'jeans'];
-      list.sort((a, b) => {
-        const idxA = desiredOrder.indexOf(a.slug);
-        const idxB = desiredOrder.indexOf(b.slug);
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-        if (idxA !== -1) return -1;
-        if (idxB !== -1) return 1;
-        return (a.displayOrder || 0) - (b.displayOrder || 0);
+      const list = categories.filter((c) => c && c.slug);
+      // Sort dynamically respecting backend displayOrder as the single source of truth
+      return [...list].sort((a, b) => {
+        const orderA = typeof a.displayOrder === 'number' ? a.displayOrder : 0;
+        const orderB = typeof b.displayOrder === 'number' ? b.displayOrder : 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.name || '').localeCompare(b.name || '');
       });
-      return list;
     }
     return fallbackDefaultCategories;
   }, [categories, isCategoriesResolved, fallbackDefaultCategories]);
@@ -301,6 +290,9 @@ export const Hero: React.FC<HeroProps> = ({
     heroTouchStartYRef.current = null;
   };
 
+  const isMarqueeVisible =
+    isCategoryMarqueeEnabled !== false && isCategoriesResolved && usableCategories.length > 0;
+
   return (
     <section
       role="region"
@@ -311,7 +303,7 @@ export const Hero: React.FC<HeroProps> = ({
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       className={`relative overflow-hidden w-full flex flex-col border-b border-axdoro-border bg-axdoro-bg focus:outline-none ${
-        isCategoriesResolved && usableCategories.length > 0
+        isMarqueeVisible
           ? 'h-[480px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'
           : 'h-[320px] sm:h-[460px] md:h-[560px] lg:h-[640px]'
       }`}
@@ -340,7 +332,7 @@ export const Hero: React.FC<HeroProps> = ({
           LEVEL 1: Top Category Carousel (Approximately 30% of combined hero height)
           Continuous horizontal sliding marquee with 3D product renders
           ========================================================================= */}
-      {isCategoriesResolved && usableCategories.length > 0 && (
+      {isMarqueeVisible && (
         <div
           role="region"
           aria-label="Clothing Categories"
@@ -367,7 +359,10 @@ export const Hero: React.FC<HeroProps> = ({
             <div className="flex items-center gap-6 sm:gap-10 md:gap-14 px-3 sm:px-6 flex-shrink-0">
               {primarySequence.map((cat, idx) => {
                 const isFirstEncounter = idx < usableCategories.length;
-                const catImage = cat.imageUrl || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                const customMarqueeImg =
+                  (marqueeCategoryImages && (marqueeCategoryImages[cat.slug] || (cat.id && marqueeCategoryImages[cat.id]))) ||
+                  undefined;
+                const catImage = customMarqueeImg || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
                 const isNarrowBottom = ['pants', 'jeans', 'trousers', 'bottoms', 'shorts'].some((k) =>
                   cat.slug?.toLowerCase().includes(k)
                 );
@@ -435,7 +430,10 @@ export const Hero: React.FC<HeroProps> = ({
                 className="flex items-center gap-6 sm:gap-10 md:gap-14 px-3 sm:px-6 flex-shrink-0 select-none"
               >
                 {primarySequence.map((cat, idx) => {
-                  const catImage = cat.imageUrl || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                  const customMarqueeImg =
+                    (marqueeCategoryImages && (marqueeCategoryImages[cat.slug] || (cat.id && marqueeCategoryImages[cat.id]))) ||
+                    undefined;
+                  const catImage = customMarqueeImg || DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
                   const isNarrowBottom = ['pants', 'jeans', 'trousers', 'bottoms', 'shorts'].some((k) =>
                     cat.slug?.toLowerCase().includes(k)
                   );
@@ -508,7 +506,7 @@ export const Hero: React.FC<HeroProps> = ({
         role="region"
         aria-label="Main Hero Slides"
         className={`w-full min-h-0 relative overflow-hidden bg-axdoro-bg ${
-          isCategoriesResolved && usableCategories.length > 0 ? 'h-[70%] flex-1' : 'h-full'
+          isMarqueeVisible ? 'h-[70%] flex-1' : 'h-full'
         }`}
       >
         {/* Main Carousel Image Only */}

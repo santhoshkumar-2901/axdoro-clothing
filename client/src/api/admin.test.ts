@@ -21,6 +21,8 @@ import {
   adminUpdateVariant,
   adminDeleteProduct,
   adminDeleteEnquiry,
+  adminDeleteCategory,
+  adminDeleteOrder,
   adminGetHomepageCollections,
   adminUpdateHomepageCollection,
   adminUpdateCollectionProducts,
@@ -919,6 +921,102 @@ describe('Admin API Client Session Security & CSRF (Phase 3C)', () => {
       } catch (err: any) {
         expect(err.status).toBe(403);
         expect(err.message).toContain('CSRF token');
+      }
+    });
+  });
+
+  describe('adminDeleteCategory API Client', () => {
+    it('sends DELETE request with CSRF token and credentials', async () => {
+      setCsrfToken('mock-cat-csrf');
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          message: 'Category "Caps" deleted successfully',
+          data: { id: 'cat-123', name: 'Caps', slug: 'caps', productCount: 0 },
+        }),
+      } as any);
+
+      const result = await adminDeleteCategory('cat-123');
+      expect(result.status).toBe('success');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/categories/cat-123', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-Token': 'mock-cat-csrf',
+        },
+        credentials: 'include',
+      });
+    });
+
+    it('captures 409 conflict when category contains products and propagates productCount', async () => {
+      setCsrfToken('mock-cat-csrf');
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({
+          status: 'error',
+          code: 'CATEGORY_HAS_PRODUCTS',
+          error: 'Cannot delete category because it contains 2 product(s)',
+          productCount: 2,
+        }),
+      } as any);
+
+      try {
+        await adminDeleteCategory('cat-has-products');
+        expect.fail('Should have thrown error on 409');
+      } catch (err: any) {
+        expect(err.status).toBe(409);
+        expect(err.code).toBe('CATEGORY_HAS_PRODUCTS');
+        expect(err.productCount).toBe(2);
+        expect(err.message).toContain('Cannot delete category');
+      }
+    });
+  });
+
+  describe('adminDeleteOrder API Client', () => {
+    it('sends DELETE request with CSRF token and credentials', async () => {
+      setCsrfToken('mock-order-csrf');
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          message: 'Order #ORD-123 deleted successfully',
+          data: { id: 'order-123', orderNumber: 'ORD-123', customerName: 'Rohan', totalPaise: 149900 },
+        }),
+      } as any);
+
+      const result = await adminDeleteOrder('order-123');
+      expect(result.status).toBe('success');
+      expect(fetchSpy).toHaveBeenCalledWith('/api/admin/orders/order-123', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'X-CSRF-Token': 'mock-order-csrf',
+        },
+        credentials: 'include',
+      });
+    });
+
+    it('captures 404 not found and propagates status', async () => {
+      setCsrfToken('mock-order-csrf');
+      vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({
+          status: 'error',
+          error: 'Order not found',
+        }),
+      } as any);
+
+      try {
+        await adminDeleteOrder('order-404');
+        expect.fail('Should have thrown error on 404');
+      } catch (err: any) {
+        expect(err.status).toBe(404);
+        expect(err.message).toContain('Order not found');
       }
     });
   });

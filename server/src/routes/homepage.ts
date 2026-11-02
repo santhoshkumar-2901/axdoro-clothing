@@ -25,6 +25,8 @@ homepageRouter.get('/hero', async (_req: Request, res: Response, next: NextFunct
       data: {
         imageUrl: hero.imageUrl,
         slides: publicSlides,
+        isCategoryMarqueeEnabled: hero.isCategoryMarqueeEnabled ?? true,
+        marqueeCategoryImages: hero.marqueeCategoryImages ?? {},
       },
     });
   } catch (err) {

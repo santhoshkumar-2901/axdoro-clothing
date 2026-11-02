@@ -326,4 +326,95 @@ describe('Admin-Managed Homepage Hero Image Integration Tests (axdoro_test)', ()
       expect(adminRes.body.data.length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  describe('9. Category Marquee Configuration & Persistence', () => {
+    it('exposes default marquee settings in public GET /api/homepage/hero', async () => {
+      const res = await request(app).get('/api/homepage/hero');
+      expect(res.status).toBe(200);
+      expect(res.body.data.isCategoryMarqueeEnabled).toBe(true);
+      expect(typeof res.body.data.marqueeCategoryImages).toBe('object');
+    });
+
+    it('updates isCategoryMarqueeEnabled and marqueeCategoryImages while preserving slides and audit logging', async () => {
+      const updateRes = await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          isCategoryMarqueeEnabled: false,
+          marqueeCategoryImages: {
+            shirts: 'https://images.unsplash.com/photo-custom-shirts.jpg',
+            pants: '/categories/custom-pants.png',
+          },
+        });
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.isCategoryMarqueeEnabled).toBe(false);
+      expect(updateRes.body.data.marqueeCategoryImages.shirts).toBe(
+        'https://images.unsplash.com/photo-custom-shirts.jpg'
+      );
+      expect(updateRes.body.data.marqueeCategoryImages.pants).toBe(
+        '/categories/custom-pants.png'
+      );
+
+      // Verify public GET reflects updated settings
+      const pubRes = await request(app).get('/api/homepage/hero');
+      expect(pubRes.status).toBe(200);
+      expect(pubRes.body.data.isCategoryMarqueeEnabled).toBe(false);
+      expect(pubRes.body.data.marqueeCategoryImages.shirts).toBe(
+        'https://images.unsplash.com/photo-custom-shirts.jpg'
+      );
+      expect(pubRes.body.data.slides).toHaveLength(3);
+
+      // Verify audit log
+      const auditRes = await testPool.query<{ action: string; details: any }>(
+        `SELECT action, details FROM admin_audit_logs WHERE action = 'HOMEPAGE_HERO_UPDATE' ORDER BY created_at DESC LIMIT 1;`
+      );
+      expect(auditRes.rows).toHaveLength(1);
+      expect(auditRes.rows[0].details.new.isCategoryMarqueeEnabled).toBe(false);
+      expect(auditRes.rows[0].details.new.marqueeCategoryImages.shirts).toBe(
+        'https://images.unsplash.com/photo-custom-shirts.jpg'
+      );
+    });
+
+    it('clears specific category marquee image when passing null', async () => {
+      // First set custom images for shirts and pants
+      await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          marqueeCategoryImages: {
+            shirts: 'https://images.unsplash.com/photo-custom-shirts.jpg',
+            pants: '/categories/custom-pants.png',
+          },
+        });
+
+      // Then clear shirts by passing null
+      const resetRes = await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          marqueeCategoryImages: {
+            shirts: null,
+          },
+        });
+
+      expect(resetRes.status).toBe(200);
+      expect(resetRes.body.data.marqueeCategoryImages.shirts).toBeUndefined();
+      expect(resetRes.body.data.marqueeCategoryImages.pants).toBe('/categories/custom-pants.png');
+      expect(resetRes.body.data.isCategoryMarqueeEnabled).toBe(true); // Default preserved
+    });
+
+    it('rejects invalid marquee image URLs with 400', async () => {
+      const res = await request(app)
+        .put('/api/admin/homepage/hero')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          marqueeCategoryImages: {
+            shirts: 'javascript:alert(1)',
+          },
+        });
+
+      expect(res.status).toBe(400);
+    });
+  });
 });

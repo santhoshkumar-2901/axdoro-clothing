@@ -727,4 +727,142 @@ describe('Phase 4 — COD Orders & Order Management Integration Tests (axdoro_te
     expect(targetOrder.items[0].unitPricePaise).toBe(unitPricePaise);
     expect(targetOrder.items[0].lineTotalPaise).toBe(2 * unitPricePaise);
   });
+
+  describe('Order Deletion & Inventory Restoration (DELETE /api/admin/orders/:id)', () => {
+    it('rejects unauthenticated requests with 401 Unauthorized', async () => {
+      const res = await request(app).delete('/api/admin/orders/00000000-0000-0000-0000-000000000001');
+      expect(res.status).toBe(401);
+    });
+
+    it('rejects malformed order ID with 400 Bad Request', async () => {
+      const res = await request(app)
+        .delete('/api/admin/orders/invalid-uuid-format')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/invalid order id format/i);
+    });
+
+    it('returns 404 Not Found for non-existent order', async () => {
+      const res = await request(app)
+        .delete('/api/admin/orders/b0000000-0000-4000-8000-000000000099')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(404);
+      expect(res.body.error).toMatch(/order not found/i);
+    });
+
+    it('permanently deletes an active order, restores inventory, and records audit logs', async () => {
+      // 1. Create order for 3 items (stock initial is 10 -> becomes 7)
+      const orderRes = await request(app)
+        .post('/api/orders')
+        .send({
+          customerName: 'Active Delete User',
+          customerEmail: 'activedelete@example.com',
+          customerPhone: '9876543210',
+          shippingAddressLine1: '123 MG Road',
+          shippingCity: 'Bengaluru',
+          shippingState: 'Karnataka',
+          shippingPincode: '560001',
+          paymentMethod: 'COD',
+          items: [{ variantId: testVariantId, quantity: 3 }],
+          idempotencyKey: 'idem-order-delete-active',
+        });
+      expect(orderRes.status).toBe(201);
+      const orderId = orderRes.body.data.id;
+      const orderNumber = orderRes.body.data.orderNumber;
+
+      // Verify stock deducted to 7
+      const stockBefore = await testPool.query<{ stock_quantity: number }>(
+        'SELECT stock_quantity FROM product_variants WHERE id = $1;',
+        [testVariantId]
+      );
+      expect(stockBefore.rows[0].stock_quantity).toBe(7);
+
+      // 2. Admin deletes order
+      const delRes = await request(app)
+        .delete(`/api/admin/orders/${orderId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.status).toBe('success');
+      expect(delRes.body.data.orderNumber).toBe(orderNumber);
+      expect(delRes.body.data.restoredItemsCount).toBe(3);
+
+      // 3. Verify stock restored back to 10
+      const stockAfter = await testPool.query<{ stock_quantity: number }>(
+        'SELECT stock_quantity FROM product_variants WHERE id = $1;',
+        [testVariantId]
+      );
+      expect(stockAfter.rows[0].stock_quantity).toBe(10);
+
+      // 4. Verify order and order_items are removed
+      const orderCheck = await testPool.query('SELECT id FROM orders WHERE id = $1;', [orderId]);
+      expect(orderCheck.rows).toHaveLength(0);
+
+      const itemsCheck = await testPool.query('SELECT id FROM order_items WHERE order_id = $1;', [orderId]);
+      expect(itemsCheck.rows).toHaveLength(0);
+
+      // 5. Verify audit logs
+      const stockAudit = await testPool.query<{ action: string; details: any }>(
+        `SELECT action, details FROM admin_audit_logs WHERE action = 'STOCK_ADJUSTMENT' AND entity_id = $1;`,
+        [testVariantId]
+      );
+      expect(stockAudit.rows.some((r) => r.details.reason?.includes(`Order deleted (${orderNumber})`))).toBe(true);
+
+      const deleteAudit = await testPool.query<{ action: string; details: any }>(
+        `SELECT action, details FROM admin_audit_logs WHERE action = 'ORDER_DELETE' AND entity_id = $1;`,
+        [orderId]
+      );
+      expect(deleteAudit.rows).toHaveLength(1);
+      expect(deleteAudit.rows[0].details.orderNumber).toBe(orderNumber);
+      expect(deleteAudit.rows[0].details.restoredItemsCount).toBe(3);
+    });
+
+    it('deletes a CANCELLED order without double-restoring inventory', async () => {
+      // 1. Create order
+      const orderRes = await request(app)
+        .post('/api/orders')
+        .send({
+          customerName: 'Cancelled Order User',
+          customerEmail: 'cancelleddelete@example.com',
+          customerPhone: '9876543210',
+          shippingAddressLine1: '456 Brigade Road',
+          shippingCity: 'Bengaluru',
+          shippingState: 'Karnataka',
+          shippingPincode: '560001',
+          paymentMethod: 'COD',
+          items: [{ variantId: testVariantId, quantity: 2 }],
+          idempotencyKey: 'idem-order-delete-cancelled',
+        });
+      expect(orderRes.status).toBe(201);
+      const orderId = orderRes.body.data.id;
+
+      // 2. Transition order to CANCELLED (restores stock from 8 to 10)
+      const cancelRes = await request(app)
+        .patch(`/api/admin/orders/${orderId}/status`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ status: 'CANCELLED', reason: 'Customer requested cancellation' });
+      expect(cancelRes.status).toBe(200);
+
+      const stockAfterCancel = await testPool.query<{ stock_quantity: number }>(
+        'SELECT stock_quantity FROM product_variants WHERE id = $1;',
+        [testVariantId]
+      );
+      expect(stockAfterCancel.rows[0].stock_quantity).toBe(10);
+
+      // 3. Admin deletes the cancelled order
+      const delRes = await request(app)
+        .delete(`/api/admin/orders/${orderId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+
+      expect(delRes.status).toBe(200);
+      expect(delRes.body.data.restoredItemsCount).toBe(0);
+
+      // 4. Stock remains 10 (not 12)
+      const stockAfterDelete = await testPool.query<{ stock_quantity: number }>(
+        'SELECT stock_quantity FROM product_variants WHERE id = $1;',
+        [testVariantId]
+      );
+      expect(stockAfterDelete.rows[0].stock_quantity).toBe(10);
+    });
+  });
 });

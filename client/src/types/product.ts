@@ -147,6 +147,8 @@ export interface HomepageHeroSetting {
   slides?: HeroSlide[];
   imageUrl: string | null;
   publicId?: string | null;
+  isCategoryMarqueeEnabled?: boolean;
+  marqueeCategoryImages?: Record<string, string>;
   updatedAt?: string;
 }
 

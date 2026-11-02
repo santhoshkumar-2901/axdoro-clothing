@@ -282,4 +282,65 @@ describe('Admin-Managed Homepage Hero Banner Client Verification', () => {
       expect(heroContent).not.toContain('Oxford &amp; Linen Tailored Weaves');
     });
   });
+
+  describe('6. Category Marquee Dynamic Ordering, Settings & Admin Management', () => {
+    const heroFilePath = path.join(clientDir, 'components', 'Hero.tsx');
+    const heroContent = fs.readFileSync(heroFilePath, 'utf-8');
+    const appFilePath = path.join(clientDir, 'App.tsx');
+    const appContent = fs.readFileSync(appFilePath, 'utf-8');
+    const collectionMgmtPath = path.join(clientDir, 'components', 'admin', 'CollectionManagementView.tsx');
+    const collectionMgmtContent = fs.readFileSync(collectionMgmtPath, 'utf-8');
+
+    it('declares isCategoryMarqueeEnabled and marqueeCategoryImages in HeroProps', () => {
+      expect(heroContent).toContain('isCategoryMarqueeEnabled?: boolean;');
+      expect(heroContent).toContain('marqueeCategoryImages?: Record<string, string>;');
+    });
+
+    it('Hero.tsx sorts categories dynamically by displayOrder instead of hardcoded order', () => {
+      expect(heroContent).not.toContain("const desiredOrder = ['shirts', 'pants', 't-shirts', 'jeans'];");
+      expect(heroContent).toContain('a.displayOrder');
+      expect(heroContent).toContain('b.displayOrder');
+    });
+
+    it('Hero.tsx supports custom marquee images with fallback to default 3D renders', () => {
+      expect(heroContent).toContain('marqueeCategoryImages[cat.slug]');
+      expect(heroContent).toContain('DEFAULT_CATEGORY_IMAGES[cat.slug]');
+      expect(heroContent).toContain('GENERIC_CATEGORY_IMAGE');
+    });
+
+    it('App.tsx passes marquee settings from fetchHomepageHero down to Hero', () => {
+      expect(appContent).toContain('isCategoryMarqueeEnabled={isCategoryMarqueeEnabled}');
+      expect(appContent).toContain('marqueeCategoryImages={marqueeCategoryImages}');
+      expect(appContent).toContain('setIsCategoryMarqueeEnabled(res.isCategoryMarqueeEnabled ?? true)');
+    });
+
+    it('fetchHomepageHero parses isCategoryMarqueeEnabled and marqueeCategoryImages', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          status: 'success',
+          data: {
+            imageUrl: null,
+            slides: [],
+            isCategoryMarqueeEnabled: false,
+            marqueeCategoryImages: { shirts: 'https://images.unsplash.com/shirts-custom.jpg' },
+          },
+        }),
+      });
+      globalThis.fetch = mockFetch;
+
+      const res = await fetchHomepageHero();
+      expect(res.isCategoryMarqueeEnabled).toBe(false);
+      expect(res.marqueeCategoryImages?.shirts).toBe('https://images.unsplash.com/shirts-custom.jpg');
+    });
+
+    it('CollectionManagementView.tsx renders Top Category Marquee Strip settings card', () => {
+      expect(collectionMgmtContent).toContain('Top Category Marquee Strip');
+      expect(collectionMgmtContent).toContain('handleToggleMarqueeEnabled');
+      expect(collectionMgmtContent).toContain('handleResetCategoryMarqueeImage');
+      expect(collectionMgmtContent).toContain('handleOpenMarqueeModal');
+      expect(collectionMgmtContent).toContain('Custom Marquee Image');
+      expect(collectionMgmtContent).toContain('Default 3D Render');
+    });
+  });
 });

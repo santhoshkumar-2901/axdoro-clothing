@@ -11,12 +11,21 @@ import {
   Link as LinkIcon,
   RotateCcw,
   Sliders,
+  Eye,
+  EyeOff,
+  FolderTree,
 } from 'lucide-react';
 import {
   adminGetHomepageHero,
   adminGetHeroUploadSignature,
   adminUpdateHomepageHero,
+  adminGetCategories,
+  AdminCategory,
 } from '../../api/admin.ts';
+import {
+  DEFAULT_CATEGORY_IMAGES,
+  GENERIC_CATEGORY_IMAGE,
+} from '../Hero.tsx';
 import { useScrollLock } from '../../utils/scrollLock.ts';
 import {
   HeroSlide,
@@ -92,15 +101,54 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
   const [heroSuccessMessage, setHeroSuccessMessage] = useState<string | null>(null);
   const heroFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Global reference-counted scroll lock for hero image modal
+  // Marquee state
+  const [isCategoryMarqueeEnabled, setIsCategoryMarqueeEnabled] = useState<boolean>(true);
+  const [marqueeCategoryImages, setMarqueeCategoryImages] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(true);
+  const [isSavingMarquee, setIsSavingMarquee] = useState<boolean>(false);
+  const [marqueeError, setMarqueeError] = useState<string | null>(null);
+  const [marqueeSuccessMessage, setMarqueeSuccessMessage] = useState<string | null>(null);
+
+  // Marquee modal state
+  const [isMarqueeModalOpen, setIsMarqueeModalOpen] = useState<boolean>(false);
+  const [editingMarqueeCategory, setEditingMarqueeCategory] = useState<AdminCategory | null>(null);
+  const [marqueeFile, setMarqueeFile] = useState<File | null>(null);
+  const [marqueePreviewUrl, setMarqueePreviewUrl] = useState<string | null>(null);
+  const [marqueeManualUrl, setMarqueeManualUrl] = useState<string>('');
+  const [useMarqueeManualUrl, setUseMarqueeManualUrl] = useState<boolean>(false);
+  const [isSavingMarqueeModal, setIsSavingMarqueeModal] = useState<boolean>(false);
+  const [marqueeModalError, setMarqueeModalError] = useState<string | null>(null);
+  const marqueeFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Global reference-counted scroll lock for hero image and marquee modal
   useScrollLock(isHeroModalOpen);
+  useScrollLock(isMarqueeModalOpen);
 
   const loadHero = useCallback(async () => {
     try {
       setIsLoadingHero(true);
+      setIsLoadingCategories(true);
       setHeroError(null);
-      const hero = await adminGetHomepageHero();
+      setMarqueeError(null);
+
+      const [hero, catList] = await Promise.all([
+        adminGetHomepageHero(),
+        adminGetCategories().catch((e) => {
+          console.warn('[CollectionManagementView] Failed to load categories for marquee:', e);
+          return [] as AdminCategory[];
+        }),
+      ]);
+
       setHeroSetting(hero);
+      setIsCategoryMarqueeEnabled(hero.isCategoryMarqueeEnabled ?? true);
+      setMarqueeCategoryImages(hero.marqueeCategoryImages ?? {});
+
+      const activeCats = (catList || [])
+        .filter((c) => c && c.isActive)
+        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      setCategories(activeCats);
+
       if (Array.isArray(hero.slides) && hero.slides.length === 3) {
         setHeroSlides(hero.slides);
       } else if (hero.imageUrl) {
@@ -117,6 +165,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       setHeroError(err instanceof Error ? err.message : 'Failed to load hero configuration');
     } finally {
       setIsLoadingHero(false);
+      setIsLoadingCategories(false);
     }
   }, []);
 
@@ -130,8 +179,11 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       if (heroPreviewUrl && heroPreviewUrl.startsWith('blob:')) {
         URL.revokeObjectURL(heroPreviewUrl);
       }
+      if (marqueePreviewUrl && marqueePreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(marqueePreviewUrl);
+      }
     };
-  }, [heroPreviewUrl]);
+  }, [heroPreviewUrl, marqueePreviewUrl]);
 
   const handleOpenHeroModalForSlot = (slotId: number) => {
     setEditingModalSlideId(slotId);
@@ -382,6 +434,163 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
       setHeroError(err instanceof Error ? err.message : 'Failed to update homepage hero slides');
     } finally {
       setIsSavingHero(false);
+    }
+  };
+
+  const handleToggleMarqueeEnabled = async (enabled: boolean) => {
+    try {
+      setIsSavingMarquee(true);
+      setMarqueeError(null);
+      setMarqueeSuccessMessage(null);
+
+      const updated = await adminUpdateHomepageHero({
+        isCategoryMarqueeEnabled: enabled,
+      });
+
+      setIsCategoryMarqueeEnabled(updated.isCategoryMarqueeEnabled ?? enabled);
+      setMarqueeSuccessMessage(
+        enabled
+          ? 'Top category marquee enabled on storefront.'
+          : 'Top category marquee disabled on storefront.'
+      );
+      onCollectionMutated?.();
+    } catch (err) {
+      setMarqueeError(err instanceof Error ? err.message : 'Failed to update marquee status');
+    } finally {
+      setIsSavingMarquee(false);
+    }
+  };
+
+  const handleResetCategoryMarqueeImage = async (categorySlug: string) => {
+    try {
+      setIsSavingMarquee(true);
+      setMarqueeError(null);
+      setMarqueeSuccessMessage(null);
+
+      const updatedImages = { ...marqueeCategoryImages, [categorySlug]: null };
+      const updated = await adminUpdateHomepageHero({
+        marqueeCategoryImages: updatedImages,
+      });
+
+      setMarqueeCategoryImages(updated.marqueeCategoryImages ?? {});
+      setMarqueeSuccessMessage(`Reset marquee image for "${categorySlug}" to default 3D asset.`);
+      onCollectionMutated?.();
+    } catch (err) {
+      setMarqueeError(err instanceof Error ? err.message : 'Failed to reset marquee image');
+    } finally {
+      setIsSavingMarquee(false);
+    }
+  };
+
+  const handleOpenMarqueeModal = (category: AdminCategory) => {
+    setEditingMarqueeCategory(category);
+    const existingCustom =
+      marqueeCategoryImages[category.slug] || (category.id ? marqueeCategoryImages[category.id] : '');
+    setMarqueeFile(null);
+    setMarqueePreviewUrl(existingCustom || null);
+    setMarqueeManualUrl(existingCustom || '');
+    setUseMarqueeManualUrl(false);
+    setMarqueeModalError(null);
+    setIsMarqueeModalOpen(true);
+  };
+
+  const handleCloseMarqueeModal = () => {
+    if (marqueePreviewUrl && marqueePreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(marqueePreviewUrl);
+    }
+    setMarqueeFile(null);
+    setMarqueePreviewUrl(null);
+    setMarqueeManualUrl('');
+    setMarqueeModalError(null);
+    setEditingMarqueeCategory(null);
+    setIsMarqueeModalOpen(false);
+  };
+
+  const handleMarqueeFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      if (marqueePreviewUrl && marqueePreviewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(marqueePreviewUrl);
+      }
+      setMarqueeFile(file);
+      setMarqueePreviewUrl(URL.createObjectURL(file));
+      setMarqueeModalError(null);
+    }
+  };
+
+  const handleClearMarqueeSelectedFile = () => {
+    if (marqueePreviewUrl && marqueePreviewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(marqueePreviewUrl);
+    }
+    setMarqueeFile(null);
+    const existingCustom = editingMarqueeCategory
+      ? marqueeCategoryImages[editingMarqueeCategory.slug] || ''
+      : '';
+    setMarqueePreviewUrl(existingCustom || null);
+    if (marqueeFileInputRef.current) {
+      marqueeFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveCategoryMarqueeImage = async () => {
+    if (!editingMarqueeCategory) return;
+    try {
+      setIsSavingMarqueeModal(true);
+      setMarqueeModalError(null);
+
+      let finalImageUrl: string | null = null;
+      if (useMarqueeManualUrl) {
+        if (!marqueeManualUrl.trim()) {
+          setMarqueeModalError('Please enter an image URL or choose a file.');
+          setIsSavingMarqueeModal(false);
+          return;
+        }
+        finalImageUrl = marqueeManualUrl.trim();
+      } else if (marqueeFile) {
+        const sig = await adminGetHeroUploadSignature();
+        const formData = new FormData();
+        formData.append('file', marqueeFile);
+        formData.append('api_key', sig.apiKey);
+        formData.append('timestamp', String(sig.timestamp));
+        formData.append('signature', sig.signature);
+        formData.append('folder', sig.folder);
+        formData.append('public_id', sig.publicId);
+
+        const uploadRes = await fetch(sig.uploadUrl, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error(`Cloudinary upload failed with HTTP ${uploadRes.status}`);
+        }
+
+        const uploadJson = await uploadRes.json();
+        finalImageUrl = uploadJson.secure_url || uploadJson.url;
+      } else if (marqueePreviewUrl) {
+        finalImageUrl = marqueePreviewUrl;
+      }
+
+      if (!finalImageUrl) {
+        setMarqueeModalError('Please choose a file or enter an image URL.');
+        setIsSavingMarqueeModal(false);
+        return;
+      }
+
+      const updated = await adminUpdateHomepageHero({
+        marqueeCategoryImages: {
+          [editingMarqueeCategory.slug]: finalImageUrl,
+        },
+      });
+
+      setMarqueeCategoryImages(updated.marqueeCategoryImages ?? {});
+      setMarqueeSuccessMessage(`Custom marquee image saved for "${editingMarqueeCategory.name}".`);
+      handleCloseMarqueeModal();
+      onCollectionMutated?.();
+    } catch (err) {
+      setMarqueeModalError(err instanceof Error ? err.message : 'Failed to save marquee image');
+    } finally {
+      setIsSavingMarqueeModal(false);
     }
   };
 
@@ -707,6 +916,204 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
         </CardContent>
       </Card>
 
+      {/* 2. Top Category Marquee Strip Management Section */}
+      <Card className="border-axdoro-border bg-axdoro-surface shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b border-axdoro-border/60">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-base font-bold text-axdoro-charcoal flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-axdoro-accent" />
+                Top Category Marquee Strip
+              </CardTitle>
+              <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
+                Manage the continuous sliding 3D category marquee strip at the top of the storefront homepage.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={isCategoryMarqueeEnabled}
+                aria-label="Toggle category marquee strip"
+                disabled={isSavingMarquee || isLoadingCategories}
+                onClick={() => handleToggleMarqueeEnabled(!isCategoryMarqueeEnabled)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent cursor-pointer ${
+                  isCategoryMarqueeEnabled ? 'bg-axdoro-accent' : 'bg-neutral-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    isCategoryMarqueeEnabled ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+              <span className="text-xs font-semibold text-axdoro-charcoal min-w-28">
+                {isCategoryMarqueeEnabled ? (
+                  <span className="inline-flex items-center gap-1 text-emerald-600">
+                    <Eye className="w-3.5 h-3.5" /> Marquee Enabled
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-neutral-500">
+                    <EyeOff className="w-3.5 h-3.5" /> Marquee Disabled
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4 pb-4 space-y-4">
+          {marqueeSuccessMessage && (
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                <span>{marqueeSuccessMessage}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMarqueeSuccessMessage(null)}
+                className="text-emerald-600 hover:text-emerald-700 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {marqueeError && (
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-500 text-xs flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{marqueeError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMarqueeError(null)}
+                className="text-red-500 hover:text-red-600 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-axdoro-text-muted">
+              Categories are dynamically populated from active catalogue items and sorted by their administrative <code className="font-mono text-[11px] bg-neutral-100 px-1 py-0.5 rounded">display_order</code>.
+            </p>
+            {isSavingMarquee && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-axdoro-accent">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving settings...
+              </span>
+            )}
+          </div>
+
+          {isLoadingCategories ? (
+            <div className="py-8 flex flex-col items-center justify-center text-axdoro-text-muted text-xs gap-2">
+              <Loader2 className="w-5 h-5 animate-spin text-axdoro-accent" />
+              <span>Loading catalogue categories...</span>
+            </div>
+          ) : categories.length === 0 ? (
+            <div className="py-6 text-center text-axdoro-text-muted text-xs border border-dashed border-axdoro-border rounded-lg p-4">
+              <FolderTree className="w-6 h-6 mx-auto mb-2 text-axdoro-text-muted/60" />
+              <p>No active categories found in the catalogue.</p>
+              <p className="text-[11px] mt-1 text-axdoro-text-muted/80">
+                Create and activate categories under the Categories section to display them here.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {categories.map((cat) => {
+                const customImg = marqueeCategoryImages[cat.slug] || (cat.id && marqueeCategoryImages[cat.id]);
+                const default3d = DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
+                const activeImg = customImg || default3d;
+                const hasCustom = Boolean(customImg);
+
+                return (
+                  <div
+                    key={cat.id || cat.slug}
+                    className="p-3.5 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/20 flex items-center justify-between gap-3 hover:border-axdoro-border/80 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {/* Image Thumbnail Preview */}
+                      <div className="relative w-14 h-14 rounded-lg bg-neutral-100/80 border border-neutral-200/80 flex items-center justify-center p-1.5 flex-shrink-0 overflow-hidden shadow-xs">
+                        <img
+                          src={activeImg}
+                          alt={cat.name}
+                          className="max-h-full max-w-full object-contain filter drop-shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            const fb = `/categories/${cat.slug}-3d.png`;
+                            if (target.src !== fb && !target.src.endsWith(fb)) {
+                              target.src = fb;
+                            } else {
+                              target.src = GENERIC_CATEGORY_IMAGE;
+                            }
+                          }}
+                        />
+                      </div>
+
+                      {/* Category Details */}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold text-axdoro-charcoal truncate">
+                            {cat.name}
+                          </span>
+                          <span className="font-mono text-[10px] text-axdoro-text-muted bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">
+                            #{cat.displayOrder ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          {hasCustom ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-medium bg-purple-50 text-axdoro-purple border-purple-200 px-1.5 py-0"
+                            >
+                              Custom Marquee Image
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-medium bg-neutral-50 text-neutral-600 border-neutral-200 px-1.5 py-0"
+                            >
+                              Default 3D Render
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {hasCustom && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResetCategoryMarqueeImage(cat.slug)}
+                          disabled={isSavingMarquee}
+                          className="h-7 text-xs text-neutral-600 hover:text-red-500 hover:border-red-300 px-2 cursor-pointer"
+                          title="Revert to default 3D asset"
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1" /> Default
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleOpenMarqueeModal(cat)}
+                        disabled={isSavingMarquee}
+                        className="h-7 text-xs font-medium px-2.5 bg-axdoro-surface border border-axdoro-border text-axdoro-charcoal hover:bg-neutral-100 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Upload className="w-3 h-3" />
+                        <span>{hasCustom ? 'Replace' : 'Custom'}</span>
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
 
       {/* Hero Image Modal Dialog */}
       {isHeroModalOpen && (
@@ -902,6 +1309,176 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 </Button>
               </div>
             </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Category Marquee Custom Image Modal Dialog */}
+      {isMarqueeModalOpen && editingMarqueeCategory && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg border-axdoro-border bg-axdoro-surface text-axdoro-charcoal shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
+            <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-axdoro-border">
+              <div>
+                <CardTitle className="text-base font-bold text-axdoro-charcoal flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-axdoro-accent" />
+                  Custom Marquee Image: {editingMarqueeCategory.name}
+                </CardTitle>
+                <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
+                  Upload a transparent 3D asset/icon via Cloudinary or enter an image URL for the top marquee.
+                </CardDescription>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseMarqueeModal}
+                disabled={isSavingMarqueeModal}
+                className="p-1 rounded-md text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-axdoro-surface-muted transition-colors cursor-pointer"
+                aria-label="Close dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </CardHeader>
+
+            <CardContent className="space-y-4 pt-4">
+              {marqueeModalError && (
+                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-500 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  <span>{marqueeModalError}</span>
+                </div>
+              )}
+
+              {/* Mode Toggle */}
+              <div className="flex items-center gap-2 p-1 bg-axdoro-surface-muted rounded-lg border border-axdoro-border text-xs">
+                <button
+                  type="button"
+                  onClick={() => setUseMarqueeManualUrl(false)}
+                  className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all cursor-pointer ${
+                    !useMarqueeManualUrl
+                      ? 'bg-axdoro-surface text-axdoro-charcoal shadow-xs'
+                      : 'text-axdoro-text-muted hover:text-axdoro-charcoal'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5 inline mr-1.5" />
+                  File Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseMarqueeManualUrl(true)}
+                  className={`flex-1 py-1.5 px-3 rounded-md font-medium transition-all cursor-pointer ${
+                    useMarqueeManualUrl
+                      ? 'bg-axdoro-surface text-axdoro-charcoal shadow-xs'
+                      : 'text-axdoro-text-muted hover:text-axdoro-charcoal'
+                  }`}
+                >
+                  <LinkIcon className="w-3.5 h-3.5 inline mr-1.5" />
+                  Direct Image URL
+                </button>
+              </div>
+
+              {!useMarqueeManualUrl ? (
+                <div>
+                  <input
+                    ref={marqueeFileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/avif"
+                    onChange={handleMarqueeFileChange}
+                    className="hidden"
+                    id="marquee-file-input"
+                  />
+                  <div
+                    onClick={() => marqueeFileInputRef.current?.click()}
+                    className="border-2 border-dashed border-axdoro-border hover:border-axdoro-accent rounded-xl p-6 text-center cursor-pointer transition-colors bg-axdoro-surface-muted/30"
+                  >
+                    <Upload className="w-8 h-8 text-axdoro-accent mx-auto mb-2" />
+                    <p className="text-xs font-semibold text-axdoro-charcoal">
+                      {marqueeFile ? marqueeFile.name : 'Click to upload marquee 3D image'}
+                    </p>
+                    <p className="text-[11px] text-axdoro-text-muted mt-1">
+                      PNG or WEBP with transparent background recommended (Max 5MB)
+                    </p>
+                  </div>
+                  {marqueeFile && (
+                    <div className="flex justify-end mt-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleClearMarqueeSelectedFile}
+                        className="text-xs text-red-500 h-7 px-2 cursor-pointer"
+                      >
+                        Remove Selected File
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="marquee-url-input" className="text-xs font-medium text-axdoro-charcoal">
+                    Image URL
+                  </Label>
+                  <Input
+                    id="marquee-url-input"
+                    type="url"
+                    placeholder="https://... or /categories/..."
+                    value={marqueeManualUrl}
+                    onChange={(e) => {
+                      setMarqueeManualUrl(e.target.value);
+                      setMarqueePreviewUrl(e.target.value.trim() || null);
+                    }}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              )}
+
+              {/* Live Preview */}
+              {marqueePreviewUrl && (
+                <div className="p-3 border border-axdoro-border rounded-xl bg-axdoro-surface-muted/20">
+                  <span className="text-[11px] font-semibold text-axdoro-text-muted block mb-2">Live Preview:</span>
+                  <div className="h-24 flex items-center justify-center p-2 rounded-lg bg-neutral-100 border border-neutral-200">
+                    <img
+                      src={marqueePreviewUrl}
+                      alt="Marquee Preview"
+                      className="max-h-full max-w-full object-contain filter drop-shadow-[0_2px_6px_rgba(0,0,0,0.15)]"
+                      onError={() => {
+                        setMarqueeModalError('Preview failed to load. Please verify the URL or image file.');
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Dialog Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-axdoro-border">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCloseMarqueeModal}
+                  disabled={isSavingMarqueeModal}
+                  className="h-8 text-xs font-semibold cursor-pointer"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveCategoryMarqueeImage}
+                  disabled={isSavingMarqueeModal}
+                  className="h-8 text-xs font-semibold bg-axdoro-accent text-white hover:bg-axdoro-accent/90 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSavingMarqueeModal ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Save Marquee Image</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
           </Card>
         </div>
       )}

@@ -74,6 +74,8 @@ adminHomepageRouter.put('/hero', async (req: Request, res: Response, next: NextF
       slides: parseResult.data.slides,
       imageUrl: parseResult.data.imageUrl,
       publicId: parseResult.data.publicId,
+      isCategoryMarqueeEnabled: parseResult.data.isCategoryMarqueeEnabled,
+      marqueeCategoryImages: parseResult.data.marqueeCategoryImages,
       adminId: req.admin!.id,
       adminEmail: req.admin!.email,
       ipAddress: clientIp,

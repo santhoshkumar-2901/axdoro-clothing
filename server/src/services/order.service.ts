@@ -816,6 +816,107 @@ export async function getUnacknowledgedOrdersCount(): Promise<number> {
   return parseInt(res.rows[0]?.count || '0', 10);
 }
 
+export interface DeleteOrderResult {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  totalPaise: number;
+  orderStatus: string;
+  restoredItemsCount: number;
+}
+
+/**
+ * Permanently deletes an order and its order items.
+ * If the order is in an active state (not CANCELLED and not DELIVERED), restores variant inventory atomically.
+ * Records audit logs for stock adjustment (if inventory restored) and order deletion.
+ */
+export async function adminDeleteOrder(
+  orderId: string,
+  actor: AdminUserDTO
+): Promise<DeleteOrderResult> {
+  return await withTransaction(async (client) => {
+    // 1. Lock order row
+    const orderRes = await client.query<any>(
+      `SELECT * FROM orders WHERE id = $1 FOR UPDATE;`,
+      [orderId]
+    );
+
+    if (orderRes.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+
+    const order = orderRes.rows[0];
+    const currentStatus = order.order_status;
+    let restoredItemsCount = 0;
+
+    // 2. If order was active (not CANCELLED and not DELIVERED), restore inventory
+    if (currentStatus !== 'CANCELLED' && currentStatus !== 'DELIVERED') {
+      const itemsRes = await client.query<{ variant_id: string; quantity: number }>(
+        `SELECT variant_id, quantity FROM order_items WHERE order_id = $1;`,
+        [orderId]
+      );
+
+      for (const item of itemsRes.rows) {
+        if (item.variant_id) {
+          await client.query(
+            `UPDATE product_variants
+             SET stock_quantity = stock_quantity + $1
+             WHERE id = $2;`,
+            [item.quantity, item.variant_id]
+          );
+
+          await createAuditLog({
+            adminId: actor.id,
+            adminEmail: actor.email,
+            action: 'STOCK_ADJUSTMENT',
+            entityType: 'variant',
+            entityId: item.variant_id,
+            details: {
+              delta: item.quantity,
+              reason: `Order deleted (${order.order_number})`,
+            },
+            client,
+          });
+          restoredItemsCount += item.quantity;
+        }
+      }
+    }
+
+    // 3. Delete order items (also cascades via FK)
+    await client.query(`DELETE FROM order_items WHERE order_id = $1;`, [orderId]);
+
+    // 4. Delete order row
+    await client.query(`DELETE FROM orders WHERE id = $1;`, [orderId]);
+
+    // 5. Record audit log
+    await createAuditLog({
+      adminId: actor.id,
+      adminEmail: actor.email,
+      action: 'ORDER_DELETE',
+      entityType: 'order',
+      entityId: orderId,
+      details: {
+        orderNumber: order.order_number,
+        customerName: order.customer_name,
+        customerEmail: order.customer_email,
+        totalPaise: order.total_paise,
+        orderStatus: order.order_status,
+        restoredItemsCount,
+      },
+      client,
+    });
+
+    return {
+      id: order.id,
+      orderNumber: order.order_number,
+      customerName: order.customer_name,
+      totalPaise: order.total_paise,
+      orderStatus: order.order_status,
+      restoredItemsCount,
+    };
+  });
+}
+
 function mapOrderRow(row: any, itemsRows: any[] = []): OrderRecord {
   return {
     id: row.id,
