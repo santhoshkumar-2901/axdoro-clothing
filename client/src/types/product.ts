@@ -19,6 +19,7 @@ export interface CategoryShortcutItem {
   query?: string | null;
   destinationType?: 'category' | 'query';
   destinationCategorySlug?: string | null;
+  isEnabled?: boolean;
 }
 
 export interface ProductVariant {

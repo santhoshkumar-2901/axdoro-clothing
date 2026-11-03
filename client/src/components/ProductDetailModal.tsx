@@ -275,7 +275,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   return (
     <div
       ref={overlayRef}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 md:p-6 overscroll-contain animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 md:p-6 overscroll-contain animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="product-modal-title"

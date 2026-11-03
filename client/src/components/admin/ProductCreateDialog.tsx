@@ -742,7 +742,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-product-dialog-title"

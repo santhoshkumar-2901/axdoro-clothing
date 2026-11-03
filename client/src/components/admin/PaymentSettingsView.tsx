@@ -378,7 +378,7 @@ export const PaymentSettingsView: React.FC = () => {
       {/* Payment QR Configuration Dialog Modal */}
       {isPaymentQrModalOpen && (
         <div
-          className="fixed inset-0 z-50 overflow-y-auto bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overscroll-contain animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="qr-modal-title"

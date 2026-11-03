@@ -386,7 +386,7 @@ export const Hero: React.FC<HeroProps> = ({
                     className="flex flex-col items-center justify-center flex-shrink-0 group cursor-pointer px-3 sm:px-5 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent rounded-lg transition-transform hover:scale-105"
                   >
                     {/* Contained 3D Clothing Image */}
-                    <div className="relative flex items-end justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
+                    <div className="relative flex items-end justify-center h-16 sm:h-16 md:h-20 w-20 sm:w-20 md:w-24">
                       <img
                         src={catImage}
                         alt={`${cat.name} Category`}
@@ -408,7 +408,7 @@ export const Hero: React.FC<HeroProps> = ({
                     <div
                       aria-hidden="true"
                       className={`h-1.5 sm:h-2 rounded-full mx-auto -mt-0.5 transition-all duration-300 group-hover:scale-110 group-hover:opacity-80 ${
-                        isNarrowBottom ? 'w-7 sm:w-8 md:w-9' : 'w-11 sm:w-13 md:w-14'
+                        isNarrowBottom ? 'w-8 sm:w-8 md:w-9' : 'w-13 sm:w-13 md:w-14'
                       }`}
                       style={{
                         background:
@@ -417,7 +417,7 @@ export const Hero: React.FC<HeroProps> = ({
                     />
 
                     {/* Category Name beneath the image */}
-                    <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1 whitespace-nowrap">
+                    <span className="text-xs sm:text-xs md:text-sm font-bold sm:font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1.5 sm:mt-1 whitespace-nowrap">
                       {cat.name}
                     </span>
                   </button>
@@ -456,7 +456,7 @@ export const Hero: React.FC<HeroProps> = ({
                       className="flex flex-col items-center justify-center flex-shrink-0 group cursor-pointer px-3 sm:px-5 py-1 focus:outline-none rounded-lg transition-transform hover:scale-105"
                     >
                       {/* Contained 3D Clothing Image */}
-                      <div className="relative flex items-end justify-center h-12 sm:h-16 md:h-20 w-16 sm:w-20 md:w-24">
+                      <div className="relative flex items-end justify-center h-16 sm:h-16 md:h-20 w-20 sm:w-20 md:w-24">
                         <img
                           src={catImage}
                           alt=""
@@ -479,7 +479,7 @@ export const Hero: React.FC<HeroProps> = ({
                       <div
                         aria-hidden="true"
                         className={`h-1.5 sm:h-2 rounded-full mx-auto -mt-0.5 transition-all duration-300 group-hover:scale-110 group-hover:opacity-80 ${
-                          isNarrowBottom ? 'w-7 sm:w-8 md:w-9' : 'w-11 sm:w-13 md:w-14'
+                          isNarrowBottom ? 'w-8 sm:w-8 md:w-9' : 'w-13 sm:w-13 md:w-14'
                         }`}
                         style={{
                           background:
@@ -488,7 +488,7 @@ export const Hero: React.FC<HeroProps> = ({
                       />
 
                       {/* Category Name beneath the image */}
-                      <span className="text-[11px] sm:text-xs md:text-sm font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1 whitespace-nowrap">
+                      <span className="text-xs sm:text-xs md:text-sm font-bold sm:font-semibold tracking-wider text-axdoro-charcoal group-hover:text-axdoro-accent-muted transition-colors mt-1.5 sm:mt-1 whitespace-nowrap">
                         {cat.name}
                       </span>
                     </button>

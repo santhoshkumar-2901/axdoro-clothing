@@ -12,6 +12,8 @@ import {
   CheckCircle2,
   Sliders,
   Sparkles,
+  ToggleLeft,
+  ToggleRight,
 } from 'lucide-react';
 import {
   AdminCategory,
@@ -76,8 +78,8 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
   // Shortcut cards list
   const [categoryCards, setCategoryCards] = useState<CategorySectionCard[]>([]);
 
-  // Editing / adding a single shortcut card state
-  const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
+  // Editing / adding a single shortcut card state using stable card ID
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
   const [cardFormId, setCardFormId] = useState<string>('');
   const [cardFormLabel, setCardFormLabel] = useState<string>('');
   const [cardFormSublabel, setCardFormSublabel] = useState<string>('');
@@ -85,8 +87,14 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
   const [cardFormDestinationType, setCardFormDestinationType] = useState<'category' | 'query'>('query');
   const [cardFormCategorySlug, setCardFormCategorySlug] = useState<string>('');
   const [cardFormQuery, setCardFormQuery] = useState<string>('');
+  const [cardFormIsEnabled, setCardFormIsEnabled] = useState<boolean>(true);
   const [isUploadingCardImage, setIsUploadingCardImage] = useState<boolean>(false);
   const cardFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Card deletion confirmation state using stable card ID
+  const [cardIdToDelete, setCardIdToDelete] = useState<string | null>(null);
+
+  useScrollLock(Boolean(cardIdToDelete));
 
   // Load section data whenever modal opens
   useEffect(() => {
@@ -97,7 +105,8 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
     setError(null);
     setSuccess(null);
     setIsConfirmingDelete(false);
-    setEditingCardIndex(null);
+    setEditingCardId(null);
+    setCardIdToDelete(null);
 
     adminGetCategorySection(category.id)
       .then((sec) => {
@@ -243,9 +252,9 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
     }
   };
 
-  // Card list operations
+  // Card list operations using stable card IDs
   const handleOpenAddCard = () => {
-    setEditingCardIndex(-1);
+    setEditingCardId('__new__');
     setCardFormId(`${category.slug}-shortcut-${Date.now().toString(36)}`);
     setCardFormLabel('');
     setCardFormSublabel('');
@@ -253,18 +262,35 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
     setCardFormDestinationType('query');
     setCardFormCategorySlug(category.slug);
     setCardFormQuery('');
+    setCardFormIsEnabled(true);
   };
 
-  const handleOpenEditCard = (index: number) => {
-    const c = categoryCards[index];
-    setEditingCardIndex(index);
-    setCardFormId(c.id);
-    setCardFormLabel(c.label);
-    setCardFormSublabel(c.sublabel || '');
-    setCardFormImageUrl(c.imageUrl);
-    setCardFormDestinationType(c.destinationType || 'query');
-    setCardFormCategorySlug(c.destinationCategorySlug || category.slug);
-    setCardFormQuery(c.query || '');
+  const handleOpenEditCard = (card: CategorySectionCard) => {
+    setEditingCardId(card.id);
+    setCardFormId(card.id);
+    setCardFormLabel(card.label);
+    setCardFormSublabel(card.sublabel || '');
+    setCardFormImageUrl(card.imageUrl);
+    setCardFormDestinationType(card.destinationType || 'query');
+    setCardFormCategorySlug(card.destinationCategorySlug || category.slug);
+    setCardFormQuery(card.query || '');
+    setCardFormIsEnabled(card.isEnabled !== false);
+  };
+
+  const handleToggleCardEnabled = (cardId: string) => {
+    setCategoryCards((prev) =>
+      prev.map((c) => {
+        if (c.id === cardId) {
+          const nextState = c.isEnabled === false ? true : false;
+          // Synchronize with edit form if currently editing this card
+          if (editingCardId === cardId) {
+            setCardFormIsEnabled(nextState);
+          }
+          return { ...c, isEnabled: nextState };
+        }
+        return c;
+      })
+    );
   };
 
   const handleSaveCard = () => {
@@ -274,6 +300,10 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
     }
     if (!cardFormImageUrl.trim()) {
       setError('Shortcut card image URL is required.');
+      return;
+    }
+    if (cardFormDestinationType === 'category' && !cardFormCategorySlug.trim()) {
+      setError('Target destination category is required when destination action is set to category.');
       return;
     }
 
@@ -286,29 +316,35 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
       destinationCategorySlug:
         cardFormDestinationType === 'category' ? cardFormCategorySlug.trim() || null : null,
       query: cardFormDestinationType === 'query' ? cardFormQuery.trim() || null : null,
+      isEnabled: cardFormIsEnabled,
     };
 
-    if (editingCardIndex === -1) {
+    if (editingCardId === '__new__') {
       setCategoryCards([...categoryCards, newCard]);
-    } else if (editingCardIndex !== null && editingCardIndex >= 0) {
-      const updated = [...categoryCards];
-      updated[editingCardIndex] = newCard;
-      setCategoryCards(updated);
+    } else if (editingCardId) {
+      setCategoryCards(categoryCards.map((c) => (c.id === editingCardId ? newCard : c)));
     }
 
-    setEditingCardIndex(null);
+    setEditingCardId(null);
     setError(null);
   };
 
-  const handleRemoveCard = (index: number) => {
-    const updated = categoryCards.filter((_, i) => i !== index);
-    setCategoryCards(updated);
-    if (editingCardIndex === index) {
-      setEditingCardIndex(null);
-    }
+  const handleRequestDeleteCard = (cardId: string) => {
+    setCardIdToDelete(cardId);
   };
 
-  const handleMoveCard = (index: number, direction: 'up' | 'down') => {
+  const handleConfirmDeleteCard = () => {
+    if (!cardIdToDelete) return;
+    setCategoryCards((prev) => prev.filter((c) => c.id !== cardIdToDelete));
+    if (editingCardId === cardIdToDelete) {
+      setEditingCardId(null);
+    }
+    setCardIdToDelete(null);
+  };
+
+  const handleMoveCard = (cardId: string, direction: 'up' | 'down') => {
+    const index = categoryCards.findIndex((c) => c.id === cardId);
+    if (index === -1) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= categoryCards.length) return;
     const updated = [...categoryCards];
@@ -379,12 +415,14 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
     }
   };
 
+  const cardToDelete = categoryCards.find((c) => c.id === cardIdToDelete);
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="category-section-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md overflow-y-auto"
     >
       <div className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Header */}
@@ -581,7 +619,7 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                       Portrait visual filter cards displayed in the horizontal scroll strip.
                     </p>
                   </div>
-                  {editingCardIndex === null && (
+                  {editingCardId === null && (
                     <Button
                       type="button"
                       size="sm"
@@ -594,25 +632,57 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                 </div>
 
                 {/* Edit / Add Card Sub-Form */}
-                {editingCardIndex !== null && (
+                {editingCardId !== null && (
                   <div className="p-4 bg-white rounded-xl border-2 border-axdoro-purple/40 shadow-sm space-y-3">
                     <div className="flex items-center justify-between border-b border-axdoro-border pb-2">
                       <span className="text-xs font-bold text-axdoro-charcoal">
-                        {editingCardIndex === -1 ? 'Add Shortcut Card' : `Edit Shortcut Card #${editingCardIndex + 1}`}
+                        {editingCardId === '__new__' ? 'Add Shortcut Card' : 'Edit Shortcut Card'}
                       </span>
                       <button
                         type="button"
-                        onClick={() => setEditingCardIndex(null)}
+                        onClick={() => setEditingCardId(null)}
                         className="text-axdoro-text-muted hover:text-axdoro-charcoal"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
 
+                    {/* Parent Category Context Notice */}
+                    <div className="text-[11px] text-axdoro-text-muted bg-axdoro-surface-muted px-2.5 py-1.5 rounded-md border border-axdoro-border">
+                      Belongs to parent category: <span className="font-semibold text-axdoro-charcoal">{category.name}</span> (/category/{category.slug})
+                    </div>
+
+                    {/* Enable / Disable Card Toggle in Form */}
+                    <div className="flex items-center justify-between p-2.5 rounded-lg border border-axdoro-border bg-axdoro-surface-muted/30">
+                      <div>
+                        <Label htmlFor="card-is-enabled" className="text-xs font-bold text-axdoro-charcoal cursor-pointer">
+                          Card Active on Storefront
+                        </Label>
+                        <p className="text-[11px] text-axdoro-text-muted mt-0.5">
+                          When active, this card appears in the storefront horizontal card strip for {category.name}.
+                        </p>
+                      </div>
+                      <input
+                        id="card-is-enabled"
+                        type="checkbox"
+                        checked={cardFormIsEnabled}
+                        onChange={(e) => {
+                          const nextVal = e.target.checked;
+                          setCardFormIsEnabled(nextVal);
+                          if (editingCardId && editingCardId !== '__new__') {
+                            setCategoryCards((prev) =>
+                              prev.map((c) => (c.id === editingCardId ? { ...c, isEnabled: nextVal } : c))
+                            );
+                          }
+                        }}
+                        className="h-4 w-4 rounded border-axdoro-border text-axdoro-purple focus:ring-axdoro-purple cursor-pointer"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <Label htmlFor="card-label" className="text-xs">
-                          Label *
+                          Card Title (Label) *
                         </Label>
                         <Input
                           id="card-label"
@@ -627,7 +697,7 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                       </div>
                       <div>
                         <Label htmlFor="card-sublabel" className="text-xs">
-                          Sublabel
+                          Card Subtitle (Sublabel)
                         </Label>
                         <Input
                           id="card-sublabel"
@@ -693,11 +763,11 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                       )}
                     </div>
 
-                    {/* Destination Config */}
+                    {/* Destination Config: Clear distinction between parent category and target destination */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                       <div>
                         <Label htmlFor="card-dest-type" className="text-xs">
-                          Destination Action
+                          Click Action Behavior
                         </Label>
                         <select
                           id="card-dest-type"
@@ -707,15 +777,15 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                           }
                           className="mt-1 block w-full rounded-md border border-axdoro-border bg-white px-3 py-2 text-xs focus:border-axdoro-accent focus:outline-none focus:ring-1 focus:ring-axdoro-accent"
                         >
-                          <option value="query">Filter Category Products by Query Term</option>
-                          <option value="category">Navigate to another Category Page</option>
+                          <option value="query">Filter {category.name} Products by Search Term</option>
+                          <option value="category">Navigate away to another Category Page</option>
                         </select>
                       </div>
 
                       {cardFormDestinationType === 'query' ? (
                         <div>
                           <Label htmlFor="card-query" className="text-xs">
-                            Product Query Filter Term
+                            Product Filter Query (Filters {category.name})
                           </Label>
                           <Input
                             id="card-query"
@@ -730,7 +800,7 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                       ) : (
                         <div>
                           <Label htmlFor="card-cat-dest" className="text-xs">
-                            Target Category Route
+                            Target Destination Category (Navigation Target)
                           </Label>
                           <select
                             id="card-cat-dest"
@@ -753,7 +823,7 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => setEditingCardIndex(null)}
+                        onClick={() => setEditingCardId(null)}
                         className="text-xs"
                       >
                         Cancel
@@ -764,7 +834,7 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                         onClick={handleSaveCard}
                         className="text-xs font-semibold"
                       >
-                        {editingCardIndex === -1 ? 'Add to Section' : 'Update Card'}
+                        {editingCardId === '__new__' ? 'Add to Section' : 'Update Card'}
                       </Button>
                     </div>
                   </div>
@@ -777,67 +847,112 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {categoryCards.map((card, idx) => (
-                      <div
-                        key={card.id || idx}
-                        className="flex items-center gap-3 p-2.5 bg-white rounded-lg border border-axdoro-border shadow-xs hover:border-axdoro-border/80 transition-colors"
-                      >
-                        <img
-                          src={card.imageUrl}
-                          alt={card.label}
-                          className="w-10 h-14 object-cover rounded-md border border-axdoro-border flex-shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-axdoro-charcoal truncate">{card.label}</p>
-                          {card.sublabel && (
-                            <p className="text-[10px] text-axdoro-text-muted uppercase tracking-wider truncate">
-                              {card.sublabel}
-                            </p>
-                          )}
-                          <span className="inline-block text-[10px] font-mono text-axdoro-accent-muted bg-axdoro-surface-muted px-1.5 py-0.5 rounded mt-0.5">
-                            {card.destinationType === 'category'
-                              ? `/category/${card.destinationCategorySlug}`
-                              : `Query: "${card.query || card.label}"`}
-                          </span>
+                    {categoryCards.map((card, idx) => {
+                      const isCardActive = card.isEnabled !== false;
+                      return (
+                        <div
+                          key={card.id || `card-${idx}`}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all ${
+                            isCardActive
+                              ? 'bg-white border-axdoro-border shadow-xs hover:border-axdoro-border/80'
+                              : 'bg-neutral-50/80 border-dashed border-neutral-300 opacity-70'
+                          }`}
+                        >
+                          <img
+                            src={card.imageUrl}
+                            alt={card.label}
+                            className="w-10 h-14 object-cover rounded-md border border-axdoro-border flex-shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-xs font-bold text-axdoro-charcoal truncate">{card.label}</p>
+                              {isCardActive ? (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] text-green-700 bg-green-50 border-green-200 font-semibold px-1.5 py-0"
+                                >
+                                  Active
+                                </Badge>
+                              ) : (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] text-neutral-500 bg-neutral-100 border-neutral-300 font-semibold px-1.5 py-0"
+                                >
+                                  Disabled
+                                </Badge>
+                              )}
+                            </div>
+                            {card.sublabel && (
+                              <p className="text-[10px] text-axdoro-text-muted uppercase tracking-wider truncate">
+                                {card.sublabel}
+                              </p>
+                            )}
+                            <span className="inline-block text-[10px] font-mono text-axdoro-accent-muted bg-axdoro-surface-muted px-1.5 py-0.5 rounded mt-0.5">
+                              {card.destinationType === 'category'
+                                ? `Target: /category/${card.destinationCategorySlug}`
+                                : `Query: "${card.query || card.label}"`}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            {/* Inline Quick Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => handleToggleCardEnabled(card.id)}
+                              className={`p-1 rounded cursor-pointer transition-colors ${
+                                isCardActive
+                                  ? 'text-green-700 hover:text-green-900 hover:bg-green-50'
+                                  : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100'
+                              }`}
+                              title={isCardActive ? 'Click to disable card' : 'Click to enable card'}
+                              aria-label={`${isCardActive ? 'Disable' : 'Enable'} ${card.label} card`}
+                            >
+                              {isCardActive ? (
+                                <ToggleRight className="w-4 h-4 text-green-600" />
+                              ) : (
+                                <ToggleLeft className="w-4 h-4 text-neutral-400" />
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => handleMoveCard(card.id, 'up')}
+                              className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer"
+                              title="Move Up"
+                              aria-label={`Move ${card.label} up`}
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === categoryCards.length - 1}
+                              onClick={() => handleMoveCard(card.id, 'down')}
+                              className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer"
+                              title="Move Down"
+                              aria-label={`Move ${card.label} down`}
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditCard(card)}
+                              className="p-1 text-axdoro-accent hover:text-axdoro-purple cursor-pointer text-xs font-semibold"
+                              title="Edit Card"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRequestDeleteCard(card.id)}
+                              className="p-1 text-red-600 hover:text-red-800 cursor-pointer"
+                              title="Remove Card"
+                              aria-label={`Delete ${card.label} card`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          <button
-                            type="button"
-                            disabled={idx === 0}
-                            onClick={() => handleMoveCard(idx, 'up')}
-                            className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer"
-                            title="Move Up"
-                          >
-                            <ArrowUp className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            disabled={idx === categoryCards.length - 1}
-                            onClick={() => handleMoveCard(idx, 'down')}
-                            className="p-1 text-axdoro-text-muted hover:text-axdoro-charcoal disabled:opacity-30 cursor-pointer"
-                            title="Move Down"
-                          >
-                            <ArrowDown className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditCard(idx)}
-                            className="p-1 text-axdoro-accent hover:text-axdoro-purple cursor-pointer text-xs font-semibold"
-                            title="Edit Card"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveCard(idx)}
-                            className="p-1 text-red-600 hover:text-red-800 cursor-pointer"
-                            title="Remove Card"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1027,6 +1142,48 @@ export const CategorySectionModal: React.FC<CategorySectionModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Card Deletion Confirmation Modal */}
+      {cardToDelete && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm Card Deletion"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md"
+        >
+          <div className="bg-white rounded-xl max-w-sm w-full p-5 shadow-xl border border-axdoro-border space-y-4">
+            <div className="flex items-center gap-2 text-red-600 font-bold text-sm">
+              <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              <span>Delete Category Card</span>
+            </div>
+            <p className="text-xs text-axdoro-charcoal leading-relaxed">
+              Are you sure you want to delete the card &ldquo;<span className="font-semibold">{cardToDelete.label}</span>&rdquo; from <span className="font-semibold">{category.name}</span>?
+            </p>
+            <p className="text-[11px] text-axdoro-text-muted">
+              This card will be removed from this section once you save the section.
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t border-axdoro-border">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCardIdToDelete(null)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleConfirmDeleteCard}
+                className="text-xs font-semibold bg-red-600 hover:bg-red-700 text-white"
+              >
+                Delete Card
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -576,29 +576,40 @@ export function isValidDestinationUrl(rawUrl: string, allowExternal = false): { 
   return { valid: true };
 }
 
-export const categoryCardSchema = z.object({
-  id: z.string().trim().min(1, 'Card ID is required').max(100),
-  label: z.string().trim().min(1, 'Card label is required').max(100),
-  sublabel: z.string().trim().max(100).optional().nullable(),
-  imageUrl: z.string().trim().superRefine((val, ctx) => {
-    const result = isValidProductImageUrl(val);
-    if (!result.valid) {
+export const categoryCardSchema = z
+  .object({
+    id: z.string().trim().min(1, 'Card ID is required').max(100),
+    label: z.string().trim().min(1, 'Card label is required').max(100),
+    sublabel: z.string().trim().max(100).optional().nullable(),
+    imageUrl: z.string().trim().superRefine((val, ctx) => {
+      const result = isValidProductImageUrl(val);
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.reason || 'Invalid card image URL',
+        });
+      }
+    }),
+    destinationType: z.enum(['category', 'query']).default('query'),
+    destinationCategorySlug: z
+      .string()
+      .trim()
+      .max(50)
+      .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Category slug must be lowercase alphanumeric with hyphens')
+      .optional()
+      .nullable(),
+    query: z.string().trim().max(100).optional().nullable(),
+    isEnabled: z.boolean().default(true),
+  })
+  .superRefine((data, ctx) => {
+    if (data.destinationType === 'category' && !data.destinationCategorySlug) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: result.reason || 'Invalid card image URL',
+        path: ['destinationCategorySlug'],
+        message: 'Destination category slug is required when destination type is category',
       });
     }
-  }),
-  destinationType: z.enum(['category', 'query']).default('query'),
-  destinationCategorySlug: z
-    .string()
-    .trim()
-    .max(50)
-    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Category slug must be lowercase alphanumeric with hyphens')
-    .optional()
-    .nullable(),
-  query: z.string().trim().max(100).optional().nullable(),
-});
+  });
 
 export const categorySectionUpsertSchema = z.object({
   isEnabled: z.boolean().default(true),

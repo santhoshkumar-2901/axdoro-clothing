@@ -746,6 +746,7 @@ export interface PublicCategorySectionDTO {
     destinationType: 'category' | 'query';
     destinationCategorySlug?: string | null;
     query?: string | null;
+    isEnabled: boolean;
   }>;
   posterImageUrl: string | null;
   posterHeading: string | null;
@@ -754,6 +755,22 @@ export interface PublicCategorySectionDTO {
   productLimit: number;
   viewAllLabel: string;
   viewAllDestination: string | null;
+}
+
+export function normalizePublicCategoryCards(rawCards: unknown): PublicCategorySectionDTO['categoryCards'] {
+  if (!Array.isArray(rawCards)) return [];
+  return rawCards
+    .filter((c: any) => c && c.isEnabled !== false)
+    .map((c: any) => ({
+      id: String(c?.id || ''),
+      label: String(c?.label || ''),
+      sublabel: c?.sublabel !== undefined && c?.sublabel !== null ? String(c.sublabel) : null,
+      imageUrl: String(c?.imageUrl || ''),
+      destinationType: c?.destinationType === 'category' ? ('category' as const) : ('query' as const),
+      destinationCategorySlug: c?.destinationCategorySlug ? String(c.destinationCategorySlug) : null,
+      query: c?.query ? String(c.query) : null,
+      isEnabled: true,
+    }));
 }
 
 export async function getPublicCategorySections(): Promise<PublicCategorySectionDTO[]> {
@@ -817,7 +834,7 @@ export async function getPublicCategorySections(): Promise<PublicCategorySection
     displayOrder: row.display_order,
     heading: row.heading,
     subtitle: row.subtitle,
-    categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as PublicCategorySectionDTO['categoryCards']) : [],
+    categoryCards: normalizePublicCategoryCards(row.category_cards),
     posterImageUrl: row.poster_image_url,
     posterHeading: row.poster_heading,
     posterSubtitle: row.poster_subtitle,

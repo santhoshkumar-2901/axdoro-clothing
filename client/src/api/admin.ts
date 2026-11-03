@@ -223,6 +223,7 @@ export interface CategorySectionCard {
   destinationType: 'category' | 'query';
   destinationCategorySlug?: string | null;
   query?: string | null;
+  isEnabled?: boolean;
 }
 
 export interface AdminCategorySection {

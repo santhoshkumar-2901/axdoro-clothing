@@ -84,3 +84,7 @@ body {
 body[data-scroll-locked='true'] {
   overflow: hidden !important;
 }
+
+body[data-scroll-locked='true'] main {
+  overflow: hidden !important;
+}

@@ -291,7 +291,7 @@ export const ProductImageModal: React.FC<ProductImageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto overscroll-contain animate-in fade-in">
       <div className="w-full max-w-2xl max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
         <Card className="border-axdoro-border bg-axdoro-surface shadow-elevated rounded-2xl flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] overflow-hidden">
           <CardHeader className="flex flex-row items-start justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0">

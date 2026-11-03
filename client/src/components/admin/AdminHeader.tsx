@@ -43,10 +43,10 @@ export const AdminHeader: React.FC<AdminHeaderProps> = ({
         </button>
 
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-axdoro-text-muted font-mono font-medium">Portal</span>
-            <span className="text-xs text-axdoro-border-strong">/</span>
-            <h1 className="text-sm font-bold text-axdoro-charcoal tracking-tight">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs text-axdoro-text-muted font-mono font-medium hidden xs:inline">Portal</span>
+            <span className="text-xs text-axdoro-border-strong hidden xs:inline">/</span>
+            <h1 className="text-sm font-bold text-axdoro-charcoal tracking-tight truncate max-w-[190px] xs:max-w-[240px] sm:max-w-none">
               {tabTitles[activeTab]}
             </h1>
           </div>

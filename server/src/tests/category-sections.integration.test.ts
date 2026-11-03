@@ -380,6 +380,101 @@ describe('Homepage Category Sections Integration Tests (axdoro_test)', () => {
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('Destination category referenced in card does not exist: shoes-nonexistent');
     });
+
+    it('rejects category card with destinationType category when destinationCategorySlug is missing', async () => {
+      const res = await request(app)
+        .put(`/api/admin/categories/${pantsCategoryId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          heading: 'Valid Heading',
+          categoryCards: [
+            {
+              id: 'card-missing-dest',
+              label: 'Missing Destination',
+              imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff',
+              destinationType: 'category',
+            },
+          ],
+        });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('Destination category slug is required when destination type is category');
+    });
+
+    it('normalizes legacy category cards without isEnabled to isEnabled: true', async () => {
+      // Injected legacy JSONB without isEnabled property directly into DB
+      await testPool.query(
+        `UPDATE category_sections SET category_cards = '[{"id":"legacy-bootcut","label":"Legacy Bootcut","imageUrl":"https://images.unsplash.com/photo-1541099649105-f69ad21f3246","destinationType":"query","query":"Legacy"}]'::jsonb
+         WHERE category_id = $1;`,
+        [pantsCategoryId]
+      );
+
+      // 1. Storefront response normalization
+      const publicRes = await request(app).get('/api/homepage/category-sections');
+      expect(publicRes.status).toBe(200);
+      const pantsPublic = publicRes.body.data.find((s: any) => s.category.slug === 'pants');
+      expect(pantsPublic.categoryCards).toHaveLength(1);
+      expect(pantsPublic.categoryCards[0].label).toBe('Legacy Bootcut');
+      expect(pantsPublic.categoryCards[0].isEnabled).toBe(true);
+
+      // 2. Admin response normalization
+      const adminRes = await request(app)
+        .get(`/api/admin/categories/${pantsCategoryId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminRes.status).toBe(200);
+      expect(adminRes.body.data.categoryCards).toHaveLength(1);
+      expect(adminRes.body.data.categoryCards[0].label).toBe('Legacy Bootcut');
+      expect(adminRes.body.data.categoryCards[0].isEnabled).toBe(true);
+    });
+
+    it('supports individual card enable/disable: disabled cards are omitted from storefront but returned to admin', async () => {
+      const payload = {
+        heading: 'Pants & Trousers',
+        categoryCards: [
+          {
+            id: 'card-active-bootcut',
+            label: 'Active Bootcut',
+            imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246',
+            destinationType: 'query' as const,
+            query: 'Bootcut',
+            isEnabled: true,
+          },
+          {
+            id: 'card-disabled-gurkha',
+            label: 'Disabled Gurkha',
+            imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80',
+            destinationType: 'query' as const,
+            query: 'Gurkha',
+            isEnabled: false,
+          },
+        ],
+      };
+
+      const putRes = await request(app)
+        .put(`/api/admin/categories/${pantsCategoryId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(payload);
+      expect(putRes.status).toBe(200);
+      expect(putRes.body.data.categoryCards).toHaveLength(2);
+
+      // Public Storefront: strictly excludes disabled card
+      const publicRes = await request(app).get('/api/homepage/category-sections');
+      expect(publicRes.status).toBe(200);
+      const pantsSection = publicRes.body.data.find((s: any) => s.category.slug === 'pants');
+      expect(pantsSection.categoryCards).toHaveLength(1);
+      expect(pantsSection.categoryCards[0].id).toBe('card-active-bootcut');
+      expect(pantsSection.categoryCards[0].label).toBe('Active Bootcut');
+
+      // Admin Interface: retains BOTH active and disabled cards for full control
+      const adminRes = await request(app)
+        .get(`/api/admin/categories/${pantsCategoryId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminRes.status).toBe(200);
+      expect(adminRes.body.data.categoryCards).toHaveLength(2);
+      expect(adminRes.body.data.categoryCards[0].id).toBe('card-active-bootcut');
+      expect(adminRes.body.data.categoryCards[0].isEnabled).toBe(true);
+      expect(adminRes.body.data.categoryCards[1].id).toBe('card-disabled-gurkha');
+      expect(adminRes.body.data.categoryCards[1].isEnabled).toBe(false);
+    });
   });
 
   describe('4. Section CRUD, Category Safety, & Audit Logging', () => {
@@ -621,6 +716,140 @@ describe('Homepage Category Sections Integration Tests (axdoro_test)', () => {
       expect(pantsCategory.section.isEnabled).toBe(true);
       expect(pantsCategory.section.heading).toBe('Pants & Trousers');
       expect(pantsCategory.productCount).toBe(1);
+    });
+  });
+
+  describe('7. End-to-End Workflow: Dynamic New Category Card Management Lifecycle', () => {
+    it('executes complete category creation, card authoring, toggling, reordering, storefront isolation, and cleanup', async () => {
+      // Step 1: Create a temporary test category
+      const createCatRes = await request(app)
+        .post('/api/admin/categories')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          name: 'Jackets & Outerwear',
+          slug: 'jackets-outerwear',
+          description: 'Contemporary outerwear pieces',
+          displayOrder: 10,
+          isActive: true,
+        });
+      expect(createCatRes.status).toBe(201);
+      const testCatId = createCatRes.body.data.id;
+      const testCatSlug = createCatRes.body.data.slug;
+
+      // Step 2: Verify section starts unconfigured (404)
+      const sec404Res = await request(app)
+        .get(`/api/admin/categories/${testCatId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(sec404Res.status).toBe(404);
+
+      // Step 3: Add two cards (one enabled, one disabled)
+      const saveSecRes = await request(app)
+        .put(`/api/admin/categories/${testCatId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          heading: 'Jackets & Outerwear Collection',
+          subtitle: 'Architectural outerwear',
+          isEnabled: true,
+          displayOrder: 10,
+          productLimit: 4,
+          viewAllLabel: 'Explore Jackets',
+          viewAllDestination: `/category/${testCatSlug}`,
+          categoryCards: [
+            {
+              id: 'card-bomber',
+              label: 'Bomber Jacket',
+              sublabel: 'Classic Cut',
+              imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246',
+              destinationType: 'query' as const,
+              query: 'Bomber',
+              isEnabled: true,
+            },
+            {
+              id: 'card-biker',
+              label: 'Leather Biker',
+              sublabel: 'Vintage Finish',
+              imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80',
+              destinationType: 'query' as const,
+              query: 'Leather',
+              isEnabled: false,
+            },
+          ],
+        });
+      expect(saveSecRes.status).toBe(200);
+      expect(saveSecRes.body.data.categoryCards).toHaveLength(2);
+
+      // Step 4: Reopen in Admin and verify both cards remain
+      const adminSecRes = await request(app)
+        .get(`/api/admin/categories/${testCatId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(adminSecRes.status).toBe(200);
+      expect(adminSecRes.body.data.categoryCards).toHaveLength(2);
+      expect(adminSecRes.body.data.categoryCards[0].id).toBe('card-bomber');
+      expect(adminSecRes.body.data.categoryCards[0].isEnabled).toBe(true);
+      expect(adminSecRes.body.data.categoryCards[1].id).toBe('card-biker');
+      expect(adminSecRes.body.data.categoryCards[1].isEnabled).toBe(false);
+
+      // Step 5: Check Public Storefront — only enabled card appears
+      const publicRes = await request(app).get('/api/homepage/category-sections');
+      expect(publicRes.status).toBe(200);
+      const jacketsSection = publicRes.body.data.find((s: any) => s.category.slug === testCatSlug);
+      expect(jacketsSection).toBeDefined();
+      expect(jacketsSection.categoryCards).toHaveLength(1);
+      expect(jacketsSection.categoryCards[0].id).toBe('card-bomber');
+      expect(jacketsSection.categoryCards[0].label).toBe('Bomber Jacket');
+
+      // Step 6: Edit card and reorder
+      const reorderPayload = {
+        heading: 'Jackets & Outerwear Collection',
+        isEnabled: true,
+        displayOrder: 10,
+        categoryCards: [
+          {
+            id: 'card-biker',
+            label: 'Leather Biker (Now Active)',
+            sublabel: 'Full Grain',
+            imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80',
+            destinationType: 'query' as const,
+            query: 'Biker',
+            isEnabled: true, // Now enabled
+          },
+          {
+            id: 'card-bomber',
+            label: 'Bomber Jacket',
+            sublabel: 'Classic Cut',
+            imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246',
+            destinationType: 'query' as const,
+            query: 'Bomber',
+            isEnabled: false, // Now disabled
+          },
+        ],
+      };
+      const updateRes = await request(app)
+        .put(`/api/admin/categories/${testCatId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send(reorderPayload);
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.data.categoryCards[0].id).toBe('card-biker');
+      expect(updateRes.body.data.categoryCards[0].label).toBe('Leather Biker (Now Active)');
+
+      // Storefront now reflects the swapped and updated active card
+      const publicRes2 = await request(app).get('/api/homepage/category-sections');
+      const jacketsSection2 = publicRes2.body.data.find((s: any) => s.category.slug === testCatSlug);
+      expect(jacketsSection2.categoryCards).toHaveLength(1);
+      expect(jacketsSection2.categoryCards[0].id).toBe('card-biker');
+      expect(jacketsSection2.categoryCards[0].label).toBe('Leather Biker (Now Active)');
+
+      // Step 7: Clean up — delete temporary test category
+      const delCatRes = await request(app)
+        .delete(`/api/admin/categories/${testCatId}`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(delCatRes.status).toBe(200);
+
+      // Verify section is also deleted via cascade
+      const postDelSec = await request(app)
+        .get(`/api/admin/categories/${testCatId}/section`)
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(postDelSec.status).toBe(404);
     });
   });
 });

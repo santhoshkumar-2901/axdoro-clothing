@@ -12,7 +12,6 @@ import {
   ImageOff,
 } from 'lucide-react';
 import { Button } from './ui/button.tsx';
-import { Badge } from './ui/badge.tsx';
 import { sortProductSizes } from '../utils/sizes.ts';
 
 interface CategoryPageProps {
@@ -132,13 +131,6 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
     );
   }
 
-  // Cover image: category image, falling back to primary product image of first product, or generic brand banner
-  const coverImage = category?.imageUrl
-    ? category.imageUrl
-    : products.length > 0 && products[0].images && products[0].images[0]
-    ? products[0].images[0]
-    : 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&auto=format&fit=crop&q=80';
-
   return (
     <div className="bg-axdoro-bg min-h-screen">
       {/* Breadcrumb Header */}
@@ -158,47 +150,8 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
         </div>
       </div>
 
-      {/* Editorial Category Hero Banner */}
-      <div className="relative border-b border-axdoro-border overflow-hidden bg-[#F7F7F7] text-axdoro-charcoal">
-        <div className="absolute inset-0 z-0">
-          <img
-            src={coverImage}
-            alt={category?.name || 'Category'}
-            onError={(e) => {
-              const fallback = 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=1600&auto=format&fit=crop&q=80';
-              if (e.currentTarget.src !== fallback) {
-                e.currentTarget.src = fallback;
-              }
-            }}
-            className="w-full h-full object-cover object-center transition-all duration-700"
-          />
-          {/* Subtle gradient overlay allowing the picture to be visible while maintaining text readability */}
-          <div className="absolute inset-0 bg-gradient-to-r from-[#F7F7F7]/70 via-[#F7F7F7]/40 to-transparent" />
-        </div>
-
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16">
-          <div className="max-w-xl space-y-3 p-6 sm:p-7 rounded-2xl bg-white/80 backdrop-blur-md border border-white/60 shadow-sm">
-            <div className="flex items-center gap-2.5">
-              <span className="text-[10px] font-mono tracking-widest text-axdoro-charcoal uppercase font-bold px-2 py-0.5 rounded bg-white/90 backdrop-blur-md border border-neutral-200 shadow-sm">
-                Collection
-              </span>
-              <Badge variant="secondary" className="bg-white/90 text-neutral-700 font-mono text-[11px] border border-neutral-200 backdrop-blur-md shadow-sm">
-                {products.length} {products.length === 1 ? 'Style' : 'Styles'} Available
-              </Badge>
-            </div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-axdoro-charcoal">
-              {category?.name}
-            </h1>
-            <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed max-w-xl">
-              {category?.description ||
-                `Explore AXDORO's curated collection of premium ${category?.name.toLowerCase()}. Precision-crafted textiles engineered for individual comfort and bulk durability.`}
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Category Controls & Grid */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         {/* Sort Bar */}
         <div className="bg-axdoro-surface border border-axdoro-border rounded-xl p-4 mb-8 flex items-center justify-end gap-4 shadow-subtle">
           <div className="flex items-center gap-2">

@@ -214,6 +214,36 @@ describe('Gate 3: Admin UI & Dynamic Homepage Category Sections', () => {
 
       expect(html).toBe('');
     });
+
+    it('verifies CategorySectionModal implements card enable/disable toggle, status badges, and delete confirmation dialog', () => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const modalSrc = fs.readFileSync(
+        path.join(__dirname, 'components/admin/CategorySectionModal.tsx'),
+        'utf-8'
+      );
+
+      // Card active/disabled toggle and badges
+      expect(modalSrc).toContain('cardFormIsEnabled');
+      expect(modalSrc).toContain('Card Active on Storefront');
+      expect(modalSrc).toContain('handleToggleCardEnabled');
+      expect(modalSrc).toContain('Active');
+      expect(modalSrc).toContain('Disabled');
+      expect(modalSrc).toContain('ToggleRight');
+      expect(modalSrc).toContain('ToggleLeft');
+
+      // Stable card identity and delete confirmation modal
+      expect(modalSrc).toContain('cardIdToDelete');
+      expect(modalSrc).toContain('handleRequestDeleteCard');
+      expect(modalSrc).toContain('handleConfirmDeleteCard');
+      expect(modalSrc).toContain('Delete Category Card');
+      expect(modalSrc).toContain('Are you sure you want to delete the card');
+
+      // Parent category vs destination category clarity
+      expect(modalSrc).toContain('Belongs to parent category:');
+      expect(modalSrc).toContain('Target Destination Category (Navigation Target)');
+      expect(modalSrc).toContain('Product Filter Query (Filters');
+    });
   });
 
   describe('4. Admin UI: CategorySectionReorderModal Complete List Requirement', () => {

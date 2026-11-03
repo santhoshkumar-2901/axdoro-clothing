@@ -425,6 +425,7 @@ export interface AdminCategorySectionDTO {
     destinationType: 'category' | 'query';
     destinationCategorySlug?: string | null;
     query?: string | null;
+    isEnabled: boolean;
   }>;
   posterImageUrl: string | null;
   posterHeading: string | null;
@@ -435,6 +436,21 @@ export interface AdminCategorySectionDTO {
   viewAllDestination: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export function normalizeAdminCategoryCards(rawCards: unknown): AdminCategorySectionDTO['categoryCards'] {
+  if (!Array.isArray(rawCards)) return [];
+  return rawCards.map((c: any) => ({
+    id: String(c?.id || ''),
+    label: String(c?.label || ''),
+    sublabel: c?.sublabel !== undefined && c?.sublabel !== null ? String(c.sublabel) : null,
+    imageUrl: String(c?.imageUrl || ''),
+    destinationType: c?.destinationType === 'category' ? ('category' as const) : ('query' as const),
+    destinationCategorySlug: c?.destinationCategorySlug ? String(c.destinationCategorySlug) : null,
+    query: c?.query ? String(c.query) : null,
+    // Backward compatibility: existing legacy cards without isEnabled are normalized to true
+    isEnabled: c?.isEnabled !== false,
+  }));
 }
 
 export async function adminGetCategorySection(categoryId: string): Promise<AdminCategorySectionDTO | null> {
@@ -500,7 +516,7 @@ export async function adminGetCategorySection(categoryId: string): Promise<Admin
     displayOrder: row.display_order,
     heading: row.heading,
     subtitle: row.subtitle,
-    categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as AdminCategorySectionDTO['categoryCards']) : [],
+    categoryCards: normalizeAdminCategoryCards(row.category_cards),
     posterImageUrl: row.poster_image_url,
     posterHeading: row.poster_heading,
     posterSubtitle: row.poster_subtitle,
@@ -637,7 +653,7 @@ export async function adminUpsertCategorySection(
       displayOrder: row.display_order,
       heading: row.heading,
       subtitle: row.subtitle,
-      categoryCards: Array.isArray(row.category_cards) ? (row.category_cards as AdminCategorySectionDTO['categoryCards']) : [],
+      categoryCards: normalizeAdminCategoryCards(row.category_cards),
       posterImageUrl: row.poster_image_url,
       posterHeading: row.poster_heading,
       posterSubtitle: row.poster_subtitle,

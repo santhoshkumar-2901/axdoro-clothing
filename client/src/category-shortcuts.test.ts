@@ -133,6 +133,76 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
       expect(html).toContain('Cuban Collar');
       expect(html).toContain('aspect-[3/4]');
     });
+
+    it('defensively filters out disabled cards while rendering legacy and enabled cards', () => {
+      const mixedShortcuts: CategoryShortcutItem[] = [
+        {
+          id: 'card-legacy',
+          label: 'Legacy Cut',
+          imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600',
+          // isEnabled omitted: must be treated as enabled
+        },
+        {
+          id: 'card-active',
+          label: 'Active Fit',
+          imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600',
+          isEnabled: true,
+        },
+        {
+          id: 'card-disabled',
+          label: 'Hidden Cut',
+          imageUrl: 'https://images.unsplash.com/photo-1624378439575-d8705ad7ae80?w=600',
+          isEnabled: false, // must never render
+        },
+      ];
+
+      const html = renderToString(
+        React.createElement(CategorySectionBlock, {
+          categorySlug: 'pants',
+          title: 'Pants & Trousers',
+          shortcuts: mixedShortcuts,
+          viewAllLink: '/category/pants',
+          onQuickView: () => {},
+          onAddToCart: () => {},
+        })
+      );
+
+      expect(html).toContain('Legacy Cut');
+      expect(html).toContain('Active Fit');
+      expect(html).not.toContain('Hidden Cut');
+    });
+
+    it('hides the category shortcuts strip gracefully when all cards are disabled', () => {
+      const disabledShortcuts: CategoryShortcutItem[] = [
+        {
+          id: 'card-disabled-1',
+          label: 'Hidden 1',
+          imageUrl: 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=600',
+          isEnabled: false,
+        },
+        {
+          id: 'card-disabled-2',
+          label: 'Hidden 2',
+          imageUrl: 'https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=600',
+          isEnabled: false,
+        },
+      ];
+
+      const html = renderToString(
+        React.createElement(CategorySectionBlock, {
+          categorySlug: 'pants',
+          title: 'Pants & Trousers',
+          shortcuts: disabledShortcuts,
+          viewAllLink: '/category/pants',
+          onQuickView: () => {},
+          onAddToCart: () => {},
+        })
+      );
+
+      expect(html).not.toContain('Hidden 1');
+      expect(html).not.toContain('Hidden 2');
+      expect(html).not.toContain('Category Shortcuts');
+    });
   });
 
   describe('3. App.tsx Dynamic Category Sections & Database Seeding Preservation', () => {

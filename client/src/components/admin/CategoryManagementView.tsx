@@ -729,7 +729,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
       {/* Add Category Dialog Modal */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in">
           <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
             <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
               <div className="flex items-center gap-2">
@@ -895,7 +895,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
       {/* Edit Category Dialog Modal */}
       {editingCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in">
           <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
             <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
               <div className="flex items-center gap-2">
@@ -1062,7 +1062,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
 
       {/* Category Image Management Dialog Modal */}
       {imageModalCategory && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto overscroll-contain animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md overflow-y-auto overscroll-contain animate-in fade-in">
           <div className="bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated w-full max-w-lg max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] flex flex-col my-auto overflow-hidden">
             <div className="px-6 py-4 border-b border-axdoro-border flex items-center justify-between shrink-0 bg-axdoro-surface">
               <div className="flex items-center gap-2">
@@ -1280,7 +1280,7 @@ export const CategoryManagementView: React.FC<CategoryManagementViewProps> = ({
       {/* Delete Category Confirmation Dialog */}
       {categoryToDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-category-dialog-title"

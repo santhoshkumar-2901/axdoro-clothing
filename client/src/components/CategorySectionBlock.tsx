@@ -59,26 +59,33 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
   const [activeShortcut, setActiveShortcut] = useState<string | null>(null);
 
   const normalizedShortcuts: NormalizedShortcutItem[] = React.useMemo(() => {
-    return shortcuts.map((sc, idx) => {
-      if (typeof sc === 'string') {
+    return shortcuts
+      .filter((sc) => {
+        if (!sc) return false;
+        // String shortcuts are always enabled; object shortcuts must not have isEnabled explicitly false
+        if (typeof sc === 'string') return true;
+        return sc.isEnabled !== false;
+      })
+      .map((sc, idx) => {
+        if (typeof sc === 'string') {
+          return {
+            id: `sc-${idx}-${sc.toLowerCase().replace(/\s+/g, '-')}`,
+            label: sc,
+            imageUrl: DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
+            query: sc,
+            destinationType: 'query',
+          };
+        }
         return {
-          id: `sc-${idx}-${sc.toLowerCase().replace(/\s+/g, '-')}`,
-          label: sc,
-          imageUrl: DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
-          query: sc,
-          destinationType: 'query',
+          id: sc.id || `sc-${idx}-${sc.label.toLowerCase().replace(/\s+/g, '-')}`,
+          label: sc.label,
+          sublabel: sc.sublabel || undefined,
+          imageUrl: sc.imageUrl || DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
+          query: sc.query || (sc.sublabel ? `${sc.label} ${sc.sublabel}` : sc.label),
+          destinationType: sc.destinationType || 'query',
+          destinationCategorySlug: sc.destinationCategorySlug,
         };
-      }
-      return {
-        id: sc.id || `sc-${idx}-${sc.label.toLowerCase().replace(/\s+/g, '-')}`,
-        label: sc.label,
-        sublabel: sc.sublabel || undefined,
-        imageUrl: sc.imageUrl || DEFAULT_CATEGORY_FALLBACKS[categorySlug] || DEFAULT_CATEGORY_FALLBACKS['pants'],
-        query: sc.query || (sc.sublabel ? `${sc.label} ${sc.sublabel}` : sc.label),
-        destinationType: sc.destinationType || 'query',
-        destinationCategorySlug: sc.destinationCategorySlug,
-      };
-    });
+      });
   }, [shortcuts, categorySlug]);
 
   useEffect(() => {

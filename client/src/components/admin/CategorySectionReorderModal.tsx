@@ -120,7 +120,7 @@ export const CategorySectionReorderModal: React.FC<CategorySectionReorderModalPr
       role="dialog"
       aria-modal="true"
       aria-labelledby="reorder-sections-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-xs overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/75 backdrop-blur-md overflow-y-auto"
     >
       <div className="relative w-full max-w-lg bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-2xl overflow-hidden my-auto flex flex-col">
         {/* Header */}

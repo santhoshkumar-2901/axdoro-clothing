@@ -35,59 +35,44 @@ function alphaComposite(
   ];
 }
 
-describe('Category Banner Contrast & WCAG 2.2 Verification', () => {
+describe('Category Page Zero-Banner & WCAG 2.2 Verification', () => {
   const clientDir = path.resolve(__dirname);
   const categoryPagePath = path.join(clientDir, 'components', 'CategoryPage.tsx');
   const categoryPageContent = fs.readFileSync(categoryPagePath, 'utf-8');
   const appPath = path.join(clientDir, 'App.tsx');
   const appContent = fs.readFileSync(appPath, 'utf-8');
 
-  describe('1. Category Banner Markup, Overlay & Stacking Order', () => {
-    it('uses light #F7F7F7 container background with axdoro-charcoal text', () => {
-      expect(categoryPageContent).toContain('bg-[#F7F7F7] text-axdoro-charcoal');
-      expect(categoryPageContent).not.toContain('bg-[#0D0B14] text-white');
+  describe('1. Direct-to-Products Layout & Complete Banner Removal', () => {
+    it('completely eliminates banner containers and heavy hero markup', () => {
+      expect(categoryPageContent).not.toContain('bg-[#F7F7F7] text-axdoro-charcoal');
+      expect(categoryPageContent).not.toContain('absolute inset-0 z-0');
+      expect(categoryPageContent).not.toContain('bg-axdoro-surface/30');
     });
 
-    it('implements directional light gradient overlays using #F7F7F7', () => {
-      expect(categoryPageContent).toContain(
-        'bg-gradient-to-r from-[#F7F7F7]/70 via-[#F7F7F7]/40 to-transparent'
-      );
-    });
-
-    it('ensures overlays do not use dark 0D0B14 gradient tokens', () => {
+    it('removes hero cover gradient overlays', () => {
+      expect(categoryPageContent).not.toContain('bg-gradient-to-r from-[#F7F7F7]/70');
       expect(categoryPageContent).not.toContain('from-[#0D0B14]');
-      expect(categoryPageContent).not.toContain('via-[#0D0B14]');
-      expect(categoryPageContent).not.toContain('to-[#0D0B14]');
     });
 
-    it('maintains strict stacking order: image at z-0, overlays at z-0, and text content at z-10', () => {
-      const z0Index = categoryPageContent.indexOf('absolute inset-0 z-0');
-      const imgIndex = categoryPageContent.indexOf('<img', z0Index);
-      const overlayIndex = categoryPageContent.indexOf('bg-gradient-to-r from-[#F7F7F7]', imgIndex);
-      const z10Index = categoryPageContent.indexOf('relative z-10', overlayIndex);
+    it('transitions directly from breadcrumb navigation to category controls and product grid', () => {
+      const breadcrumbIndex = categoryPageContent.indexOf('aria-label="Breadcrumb"');
+      const gridControlsIndex = categoryPageContent.indexOf('Category Controls & Grid');
 
-      expect(z0Index).toBeGreaterThan(-1);
-      expect(imgIndex).toBeGreaterThan(z0Index);
-      expect(overlayIndex).toBeGreaterThan(imgIndex);
-      expect(z10Index).toBeGreaterThan(overlayIndex);
+      expect(breadcrumbIndex).toBeGreaterThan(-1);
+      expect(gridControlsIndex).toBeGreaterThan(breadcrumbIndex);
     });
   });
 
-  describe('2. Text & Badge Contrast Styling', () => {
-    it('preserves high-contrast charcoal category title', () => {
+  describe('2. Breadcrumb & Controls Typography', () => {
+    it('preserves high-contrast charcoal category title in breadcrumbs', () => {
       expect(categoryPageContent).toContain(
-        '<h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-axdoro-charcoal">'
+        '<span className="text-axdoro-charcoal font-semibold">{category?.name}</span>'
       );
     });
 
-    it('provides description text in high-contrast text-neutral-600', () => {
-      expect(categoryPageContent).toContain('text-xs sm:text-sm text-neutral-600 leading-relaxed max-w-xl');
-    });
-
-    it('provides clean light semi-transparent backdrops for Collection and style count badges', () => {
-      expect(categoryPageContent).toContain('bg-white/90 backdrop-blur-md border border-neutral-200');
-      expect(categoryPageContent).toContain('text-axdoro-charcoal uppercase font-bold');
-      expect(categoryPageContent).toContain('text-neutral-700 font-mono text-[11px]');
+    it('renders clean right-aligned sort bar without product count clutter', () => {
+      expect(categoryPageContent).toContain('flex items-center justify-end gap-4');
+      expect(categoryPageContent).not.toContain('{products.length} {products.length === 1 ? \'Product\' : \'Products\'}');
     });
   });
 
@@ -124,16 +109,8 @@ describe('Category Banner Contrast & WCAG 2.2 Verification', () => {
       expect(ratio).toBeGreaterThanOrEqual(4.5);
     });
 
-    it('Collection badge text (Charcoal #171717) on light badge backing achieves > 15:1 contrast', () => {
-      const badgeBg = alphaComposite([255, 255, 255], 0.9, LIGHT_BG);
-      const ratio = getContrastRatio(CHARCOAL_TEXT, badgeBg);
-      expect(ratio).toBeGreaterThanOrEqual(4.5);
-      expect(ratio).toBeGreaterThan(15.0);
-    });
-
-    it('Style count badge text (Neutral-700 #404040) on light badge backing achieves > 9:1 contrast', () => {
-      const badgeBg = alphaComposite([255, 255, 255], 0.9, LIGHT_BG);
-      const ratio = getContrastRatio(NEUTRAL_700, badgeBg);
+    it('Product count text (Neutral-700 #404040) on light background achieves > 9:1 contrast', () => {
+      const ratio = getContrastRatio(NEUTRAL_700, LIGHT_BG);
       expect(ratio).toBeGreaterThanOrEqual(4.5);
       expect(ratio).toBeGreaterThan(9.0);
     });

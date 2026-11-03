@@ -1538,7 +1538,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* Order Details Modal */}
       {selectedOrderDetails && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto"
+          className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-labelledby="order-details-dialog-title"
@@ -1807,7 +1807,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* Delete Order Confirmation Dialog */}
       {orderToDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="delete-order-dialog-title"

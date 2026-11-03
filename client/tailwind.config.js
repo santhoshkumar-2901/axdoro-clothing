@@ -26,6 +26,9 @@ export default {
         card: '0 2px 8px -2px rgba(0, 0, 0, 0.05), 0 1px 4px -1px rgba(0, 0, 0, 0.03)',
         elevated: '0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
       },
+      backdropBlur: {
+        xs: '4px',
+      },
     },
   },
   plugins: [],

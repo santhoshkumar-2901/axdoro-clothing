@@ -88,17 +88,17 @@ describe('Admin-Managed Category Images Client Suite', () => {
     });
   });
 
-  describe('3. Storefront CategoryPage Hero Image Verification', () => {
-    it('verifies CategoryPage prioritizes category.imageUrl in hero cover banner', () => {
+  describe('3. Storefront CategoryPage Clean Header Verification', () => {
+    it('verifies CategoryPage renders clean minimalist header without heavy hero cover banner', () => {
       const pageContent = fs.readFileSync(
         path.join(clientDir, 'src', 'components', 'CategoryPage.tsx'),
         'utf-8'
       );
 
-      // Checks for category.imageUrl in coverImage calculation
-      expect(pageContent).toContain('category?.imageUrl');
-      expect(pageContent).toContain('const coverImage = category?.imageUrl');
-      expect(pageContent).toContain('onError={(e) => {');
+      // Verifies clean title header and absence of heavy hero banner markup
+      expect(pageContent).toContain('category?.name');
+      expect(pageContent).not.toContain('bg-[#F7F7F7] text-axdoro-charcoal');
+      expect(pageContent).not.toContain('from-[#F7F7F7]/70');
     });
   });
 

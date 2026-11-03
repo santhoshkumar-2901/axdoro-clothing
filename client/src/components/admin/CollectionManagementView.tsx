@@ -654,20 +654,20 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
               <CardDescription className="text-xs text-axdoro-text-muted mt-0.5">
                 Manage the three rotating hero slides displayed at the top of the storefront homepage.
                 {heroSetting?.updatedAt && (
-                  <span className="ml-2 font-mono text-[10px] text-axdoro-accent-muted">
+                  <span className="ml-2 font-mono text-[10px] text-axdoro-accent-muted block sm:inline mt-0.5 sm:mt-0">
                     (Last saved: {new Date(heroSetting.updatedAt).toLocaleTimeString()})
                   </span>
                 )}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={handleResetHeroToDefault}
                 disabled={isSavingHero || !heroSlides.find((s) => s.id === activeSlideId)?.imageUrl}
-                className="h-8 text-xs font-semibold text-axdoro-text-muted hover:text-red-400 hover:border-red-400/40"
+                className="h-8 text-xs font-semibold text-axdoro-text-muted hover:text-red-400 hover:border-red-400/40 flex-1 sm:flex-initial"
                 title="Reset to default /hero-bg.jpg"
               >
                 <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset to Default
@@ -677,7 +677,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 size="sm"
                 onClick={handleOpenHeroModal}
                 disabled={isLoadingHero}
-                className="h-8 text-xs font-semibold px-3 shadow-xs flex items-center gap-1.5"
+                className="h-8 text-xs font-semibold px-3 shadow-xs flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>{heroSlides.find((s) => s.id === activeSlideId)?.imageUrl ? 'Change Hero Image' : 'Upload Hero Image'}</span>
@@ -687,7 +687,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 size="sm"
                 onClick={handleSaveAllSlides}
                 disabled={isSavingHero || isLoadingHero}
-                className="h-8 text-xs font-semibold px-3.5 bg-axdoro-purple text-white hover:bg-axdoro-purple-light flex items-center gap-1.5"
+                className="h-8 text-xs font-semibold px-3.5 bg-axdoro-purple text-white hover:bg-axdoro-purple-light flex items-center justify-center gap-1.5 w-full sm:w-auto"
               >
                 {isSavingHero ? (
                   <>
@@ -707,7 +707,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
 
         {/* Hero Save & Validation Alerts */}
         {heroError && (
-          <div className="mx-6 mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
+          <div className="mx-4 sm:mx-6 mt-4 p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
             <AlertCircle className="w-4 h-4 flex-shrink-0 text-red-600 mt-0.5" />
             <div className="flex-1">
               <span className="font-semibold">Hero Validation Error: </span>
@@ -719,7 +719,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
           </div>
         )}
         {heroSuccessMessage && (
-          <div className="mx-6 mt-4 p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
+          <div className="mx-4 sm:mx-6 mt-4 p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
             <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
             <div className="flex-1 font-medium">{heroSuccessMessage}</div>
             <button onClick={() => setHeroSuccessMessage(null)} className="text-emerald-500 hover:text-emerald-700">
@@ -729,7 +729,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
         )}
 
         {/* Slide Slot Navigation Tabs */}
-        <div className="flex items-center gap-2 border-b border-axdoro-border px-6 pt-3 pb-2 overflow-x-auto">
+        <div className="flex items-center gap-2 border-b border-axdoro-border px-4 sm:px-6 pt-3 pb-2 overflow-x-auto scrollbar-thin">
           {heroSlides.map((slide) => {
             const isSelected = slide.id === activeSlideId;
             return (
@@ -877,7 +877,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                             Default Asset
                           </Badge>
                         )}
-                        <Badge variant="outline" className="text-[10px] font-mono bg-black/60 text-white border-white/20 backdrop-blur-xs">
+                        <Badge variant="outline" className="text-[10px] font-mono bg-black/60 text-white border-white/20 backdrop-blur-sm">
                           {previewDevice === 'desktop'
                             ? 'Desktop (~2.54:1)'
                             : previewDevice === 'tablet'
@@ -911,18 +911,18 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   {/* Horizontal Focal Alignment (X-Axis) */}
                   <div className="space-y-2.5">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <Label className="text-xs font-semibold text-axdoro-charcoal flex items-center gap-1">
+                      <Label className="text-xs font-semibold text-axdoro-charcoal flex flex-wrap items-center gap-1">
                         <span>Horizontal Alignment (X-Axis)</span>
                         <span className="text-[10px] font-normal text-axdoro-text-muted">— centers models on mobile/tablet viewports</span>
                       </Label>
 
                       {/* Presets: Left (0%), Center (50%), Right (100%) */}
-                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border self-start sm:self-auto">
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border w-full sm:w-auto justify-between sm:justify-start">
                         <button
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 0)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePositionX ?? 50) === 0
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -934,7 +934,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 50)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePositionX ?? 50) === 50
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -946,7 +946,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'x', 100)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePositionX ?? 50) === 100
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -958,9 +958,9 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     </div>
 
                     {/* Horizontal Range Slider */}
-                    <div className="flex items-center gap-3 pt-0.5">
-                      <span className="text-[11px] font-mono text-axdoro-text-muted w-14 flex-shrink-0">
-                        0% (Left)
+                    <div className="flex items-center gap-2 sm:gap-3 pt-0.5">
+                      <span className="text-[10px] sm:text-[11px] font-mono text-axdoro-text-muted flex-shrink-0">
+                        0% <span className="hidden sm:inline">(Left)</span>
                       </span>
                       <input
                         type="range"
@@ -971,13 +971,13 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                         onChange={(e) => handleSlidePositionChange(activeSlide.id, 'x', Number(e.target.value))}
                         onPointerUp={() => handleCommitSlidePosition(activeSlide.id, 'x')}
                         disabled={isSavingHero}
-                        className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
+                        className="flex-1 min-w-[100px] h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
                         aria-label="Slide horizontal alignment position"
                       />
-                      <span className="text-[11px] font-mono text-axdoro-text-muted w-16 text-right flex-shrink-0">
-                        100% (Right)
+                      <span className="text-[10px] sm:text-[11px] font-mono text-axdoro-text-muted text-right flex-shrink-0">
+                        100% <span className="hidden sm:inline">(Right)</span>
                       </span>
-                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
+                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-1.5 sm:px-2 py-0.5 rounded border border-neutral-200 min-w-10 sm:min-w-12 text-center flex-shrink-0">
                         {activeSlide.imagePositionX ?? 50}%
                       </span>
                     </div>
@@ -986,18 +986,18 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   {/* Vertical Image Alignment (Y-Axis) */}
                   <div className="space-y-2.5 pt-1 border-t border-axdoro-border/40">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <Label className="text-xs font-semibold text-axdoro-charcoal flex items-center gap-1">
+                      <Label className="text-xs font-semibold text-axdoro-charcoal flex flex-wrap items-center gap-1">
                         <span>Vertical Alignment (Y-Axis)</span>
                         <span className="text-[10px] font-normal text-axdoro-text-muted">— preserves headroom or garment hemline</span>
                       </Label>
 
                       {/* Presets: Top (0%), Center (50%), Bottom (100%) */}
-                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border self-start sm:self-auto">
+                      <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-axdoro-border w-full sm:w-auto justify-between sm:justify-start">
                         <button
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 0)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePosition ?? 50) === 0
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -1009,7 +1009,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 50)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePosition ?? 50) === 50
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -1021,7 +1021,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                           type="button"
                           onClick={() => handleSetSlidePosition(activeSlide.id, 'y', 100)}
                           disabled={isSavingHero}
-                          className={`px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer ${
+                          className={`flex-1 sm:flex-initial px-2 py-0.5 text-[11px] font-semibold rounded transition-colors cursor-pointer text-center ${
                             (activeSlide.imagePosition ?? 50) === 100
                               ? 'bg-axdoro-charcoal text-white shadow-xs'
                               : 'text-axdoro-text-muted hover:text-axdoro-charcoal hover:bg-neutral-100'
@@ -1033,9 +1033,9 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     </div>
 
                     {/* Vertical Range Slider */}
-                    <div className="flex items-center gap-3 pt-0.5">
-                      <span className="text-[11px] font-mono text-axdoro-text-muted w-14 flex-shrink-0">
-                        0% (Top)
+                    <div className="flex items-center gap-2 sm:gap-3 pt-0.5">
+                      <span className="text-[10px] sm:text-[11px] font-mono text-axdoro-text-muted flex-shrink-0">
+                        0% <span className="hidden sm:inline">(Top)</span>
                       </span>
                       <input
                         type="range"
@@ -1046,13 +1046,13 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                         onChange={(e) => handleSlidePositionChange(activeSlide.id, 'y', Number(e.target.value))}
                         onPointerUp={() => handleCommitSlidePosition(activeSlide.id, 'y')}
                         disabled={isSavingHero}
-                        className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
+                        className="flex-1 min-w-[100px] h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-axdoro-charcoal"
                         aria-label="Slide vertical alignment position"
                       />
-                      <span className="text-[11px] font-mono text-axdoro-text-muted w-16 text-right flex-shrink-0">
-                        100% (Btm)
+                      <span className="text-[10px] sm:text-[11px] font-mono text-axdoro-text-muted text-right flex-shrink-0">
+                        100% <span className="hidden sm:inline">(Btm)</span>
                       </span>
-                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-2 py-0.5 rounded border border-neutral-200 min-w-12 text-center">
+                      <span className="text-xs font-mono font-bold text-axdoro-charcoal bg-white px-1.5 sm:px-2 py-0.5 rounded border border-neutral-200 min-w-10 sm:min-w-12 text-center flex-shrink-0">
                         {activeSlide.imagePosition ?? 50}%
                       </span>
                     </div>
@@ -1077,7 +1077,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-start sm:justify-end">
                     {activeSlide.imageUrl && (
                       <Button
                         type="button"
@@ -1085,7 +1085,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                         size="sm"
                         onClick={() => handleResetSlotImageToDefault(activeSlide.id)}
                         disabled={isSavingHero}
-                        className="h-8 text-xs text-red-500 hover:text-red-600 hover:border-red-300"
+                        className="h-8 text-xs text-red-500 hover:text-red-600 hover:border-red-300 flex-1 sm:flex-initial"
                       >
                         Remove Image
                       </Button>
@@ -1095,7 +1095,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                       size="sm"
                       onClick={() => handleOpenHeroModalForSlot(activeSlide.id)}
                       disabled={isSavingHero}
-                      className="h-8 text-xs font-semibold px-3.5 bg-axdoro-purple text-white hover:bg-axdoro-purple-light flex items-center gap-1.5"
+                      className="h-8 text-xs font-semibold px-3.5 bg-axdoro-purple text-white hover:bg-axdoro-purple-light flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>{activeSlide.imageUrl ? 'Replace Image' : 'Upload Image'}</span>
@@ -1121,7 +1121,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 Manage the continuous sliding 3D category marquee strip at the top of the storefront homepage.
               </CardDescription>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 self-start sm:self-auto">
               <button
                 type="button"
                 role="switch"
@@ -1186,12 +1186,12 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
             </div>
           )}
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <p className="text-xs text-axdoro-text-muted">
               Categories are dynamically populated from active catalogue items and sorted by their administrative <code className="font-mono text-[11px] bg-neutral-100 px-1 py-0.5 rounded">display_order</code>.
             </p>
             {isSavingMarquee && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-axdoro-accent">
+              <span className="inline-flex items-center gap-1.5 text-xs text-axdoro-accent flex-shrink-0">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving settings...
               </span>
             )}
@@ -1211,7 +1211,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 pt-1">
               {categories.map((cat) => {
                 const customImg = marqueeCategoryImages[cat.slug] || (cat.id && marqueeCategoryImages[cat.id]);
                 const default3d = DEFAULT_CATEGORY_IMAGES[cat.slug] || GENERIC_CATEGORY_IMAGE;
@@ -1221,9 +1221,9 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                 return (
                   <div
                     key={cat.id || cat.slug}
-                    className="p-3.5 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/20 flex items-center justify-between gap-3 hover:border-axdoro-border/80 transition-colors"
+                    className="p-3 sm:p-3.5 rounded-xl border border-axdoro-border bg-axdoro-surface-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-axdoro-border/80 transition-colors"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 w-full sm:w-auto">
                       {/* Image Thumbnail Preview */}
                       <div className="relative w-14 h-14 rounded-lg bg-neutral-100/80 border border-neutral-200/80 flex items-center justify-center p-1.5 flex-shrink-0 overflow-hidden shadow-xs">
                         <img
@@ -1243,7 +1243,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                       </div>
 
                       {/* Category Details */}
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold text-axdoro-charcoal truncate">
                             {cat.name}
@@ -1252,7 +1252,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                             #{cat.displayOrder ?? 0}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           {hasCustom ? (
                             <Badge
                               variant="outline"
@@ -1273,7 +1273,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center justify-end gap-1.5 flex-shrink-0 w-full sm:w-auto border-t sm:border-t-0 pt-2 sm:pt-0 border-axdoro-border/40">
                       {hasCustom && (
                         <Button
                           type="button"
@@ -1309,7 +1309,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
 
       {/* Hero Image Modal Dialog */}
       {isHeroModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <Card className="w-full max-w-lg border-axdoro-border bg-axdoro-surface text-axdoro-charcoal shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-axdoro-border">
               <div>
@@ -1453,7 +1453,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
               )}
             </CardContent>
 
-            <div className="p-4 border-t border-axdoro-border flex items-center justify-between">
+            <div className="p-4 border-t border-axdoro-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               {heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl && (
                 <Button
                   type="button"
@@ -1464,19 +1464,19 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                     setIsHeroModalOpen(false);
                   }}
                   disabled={isSavingHero}
-                  className="text-xs text-red-400 hover:text-red-300 hover:border-red-400/40"
+                  className="text-xs text-red-400 hover:text-red-300 hover:border-red-400/40 w-full sm:w-auto"
                 >
                   <RotateCcw className="w-3.5 h-3.5 mr-1" /> Reset to Default
                 </Button>
               )}
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex items-center gap-2 w-full sm:w-auto sm:ml-auto justify-end">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleCloseHeroModal}
                   disabled={isSavingHero}
-                  className="text-xs"
+                  className="text-xs flex-1 sm:flex-initial"
                 >
                   Cancel
                 </Button>
@@ -1485,7 +1485,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   size="sm"
                   onClick={handleSaveHero}
                   disabled={isSavingHero || (!heroFile && (!heroManualUrl.trim() || heroManualUrl.trim() === heroSlides.find((s) => s.id === editingModalSlideId)?.imageUrl))}
-                  className="text-xs font-semibold flex items-center gap-1.5"
+                  className="text-xs font-semibold flex items-center justify-center gap-1.5 flex-1 sm:flex-initial"
                 >
                   {isSavingHero ? (
                     <>
@@ -1507,7 +1507,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
 
       {/* Category Marquee Custom Image Modal Dialog */}
       {isMarqueeModalOpen && editingMarqueeCategory && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <Card className="w-full max-w-lg border-axdoro-border bg-axdoro-surface text-axdoro-charcoal shadow-2xl relative animate-in fade-in zoom-in-95 duration-150">
             <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-axdoro-border">
               <div>
@@ -1639,14 +1639,14 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
               )}
 
               {/* Dialog Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-axdoro-border">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 pt-2 border-t border-axdoro-border">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   onClick={handleCloseMarqueeModal}
                   disabled={isSavingMarqueeModal}
-                  className="h-8 text-xs font-semibold cursor-pointer"
+                  className="h-8 text-xs font-semibold cursor-pointer w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
@@ -1655,7 +1655,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                   size="sm"
                   onClick={handleSaveCategoryMarqueeImage}
                   disabled={isSavingMarqueeModal}
-                  className="h-8 text-xs font-semibold bg-axdoro-accent text-white hover:bg-axdoro-accent/90 flex items-center gap-1.5 cursor-pointer"
+                  className="h-8 text-xs font-semibold bg-axdoro-accent text-white hover:bg-axdoro-accent/90 flex items-center justify-center gap-1.5 cursor-pointer w-full sm:w-auto"
                 >
                   {isSavingMarqueeModal ? (
                     <>
