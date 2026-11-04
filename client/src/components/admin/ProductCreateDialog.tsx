@@ -108,6 +108,33 @@ export function resolvePrimaryImageId(colorVariants: ColorVariantGroup[]): strin
   return null;
 }
 
+export const ALLOWED_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/avif'];
+export const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.avif'];
+export const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+export function validateProductImageFile(file: File): { valid: boolean; error?: string } {
+  const fileName = file.name.toLowerCase();
+  const hasValidExt = ALLOWED_IMAGE_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+  const hasValidMime =
+    ALLOWED_IMAGE_MIME_TYPES.includes(file.type.toLowerCase()) || (file.type === '' && hasValidExt);
+
+  if (!hasValidExt && !hasValidMime) {
+    return {
+      valid: false,
+      error: 'Only JPEG, PNG, WEBP, and AVIF image files are supported.',
+    };
+  }
+
+  if (file.size > MAX_IMAGE_FILE_SIZE) {
+    return {
+      valid: false,
+      error: 'Image size cannot exceed 10 MB.',
+    };
+  }
+
+  return { valid: true };
+}
+
 const HEX_COLOR_REGEX = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 
 export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
@@ -150,6 +177,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
 
   // Image upload/URL input helper state
   const [activeUploadColorId, setActiveUploadColorId] = useState<string | null>(null);
+  const activeUploadColorIdRef = useRef<string | null>(null);
   const [uploadingColorId, setUploadingColorId] = useState<string | null>(null);
   const [manualUrlInput, setManualUrlInput] = useState<string>('');
   const [manualAltInput, setManualAltInput] = useState<string>('');
@@ -420,6 +448,7 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
   // -------------------------------------------------------------
 
   const handleTriggerFileUpload = (colorId: string) => {
+    activeUploadColorIdRef.current = colorId;
     setActiveUploadColorId(colorId);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -428,9 +457,22 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
   };
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || !e.target.files[0] || !activeUploadColorId) return;
-    const file = e.target.files[0];
-    const targetColorId = activeUploadColorId;
+    const file = e.target.files?.[0];
+    const targetColorId = activeUploadColorIdRef.current || activeUploadColorId;
+    if (!file || !targetColorId) {
+      activeUploadColorIdRef.current = null;
+      setActiveUploadColorId(null);
+      return;
+    }
+
+    const validation = validateProductImageFile(file);
+    if (!validation.valid) {
+      setErrorMsg(validation.error || 'Invalid image file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      activeUploadColorIdRef.current = null;
+      setActiveUploadColorId(null);
+      return;
+    }
 
     try {
       setUploadingColorId(targetColorId);
@@ -491,6 +533,8 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
     } finally {
       setUploadingColorId(null);
       setActiveUploadColorId(null);
+      activeUploadColorIdRef.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -748,19 +792,20 @@ export const ProductCreateDialog: React.FC<ProductCreateDialogProps> = ({
       aria-labelledby="create-product-dialog-title"
       onClick={onClose}
     >
-      {/* Hidden file input for Cloudinary uploads */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/avif"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
-
       <div
         className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-auto flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Hidden file input for Cloudinary uploads (safely placed inside dialog with propagation protection) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif"
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={handleFileSelected}
+        />
+
         {/* Header (Preserved layout tokens) */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0 z-10">
           <div className="flex items-center gap-2.5">

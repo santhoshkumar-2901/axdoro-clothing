@@ -31,6 +31,7 @@ import {
   UpdateProductImageItemPayload,
 } from '../../api/admin.ts';
 import { useScrollLock } from '../../utils/scrollLock.ts';
+import { validateProductImageFile } from './ProductCreateDialog.tsx';
 
 interface ProductEditDialogProps {
   productId: string | null;
@@ -98,6 +99,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
 
   // Hidden file input for Cloudinary image uploads
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const activeUploadColorIdRef = useRef<string | null>(null);
   const [uploadingColorId, setUploadingColorId] = useState<string | null>(null);
 
   // Direct image URL accordion state
@@ -617,7 +619,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
 
   // Cloudinary Staged Upload
   const handleTriggerFileUpload = (colorId: string) => {
-    setUploadingColorId(colorId);
+    activeUploadColorIdRef.current = colorId;
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
       fileInputRef.current.click();
@@ -626,16 +628,17 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    const targetColorId = uploadingColorId;
-    if (!file || !targetColorId) return;
-
-    if (!['image/jpeg', 'image/png', 'image/webp', 'image/avif'].includes(file.type)) {
-      setErrorMsg('Only JPEG, PNG, WEBP, and AVIF image files are supported.');
+    const targetColorId = activeUploadColorIdRef.current;
+    if (!file || !targetColorId) {
+      activeUploadColorIdRef.current = null;
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setErrorMsg('Image size cannot exceed 10 MB.');
+    const validation = validateProductImageFile(file);
+    if (!validation.valid) {
+      setErrorMsg(validation.error || 'Invalid image file.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      activeUploadColorIdRef.current = null;
       return;
     }
 
@@ -643,6 +646,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
     const colorLabel = targetColor?.colorName || 'Default';
 
     try {
+      setUploadingColorId(targetColorId);
       setErrorMsg(null);
       const signatureData = await adminGetProductUploadSignature({
         sessionId: stagingSessionId || undefined,
@@ -701,6 +705,8 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
       setErrorMsg(`Image upload failed: ${msg}`);
     } finally {
       setUploadingColorId(null);
+      activeUploadColorIdRef.current = null;
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -978,19 +984,20 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
       aria-labelledby="edit-product-dialog-title"
       onClick={onClose}
     >
-      {/* Hidden file input for Cloudinary image uploads */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/avif"
-        className="hidden"
-        onChange={handleFileSelected}
-      />
-
       <div
         className="relative w-full max-w-4xl bg-axdoro-surface border border-axdoro-border rounded-2xl shadow-elevated overflow-hidden my-auto flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)]"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Hidden file input for Cloudinary image uploads (safely placed inside dialog with propagation protection) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif"
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={handleFileSelected}
+        />
+
         {/* Header (Preserved layout tokens & solid bg-axdoro-surface) */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-axdoro-border bg-axdoro-surface shrink-0 z-10">
           <div className="flex items-center gap-2.5">
