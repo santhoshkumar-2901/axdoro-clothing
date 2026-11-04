@@ -278,6 +278,7 @@ export default function App(): React.JSX.Element {
             onQuickView={handleQuickView}
             onAddToCart={handleAddToCart}
             onOpenBulk={handleOpenGeneralBulk}
+            posterImageUrl={categorySections.find((s) => s.category?.slug === categorySlug)?.posterImageUrl}
           />
         ) : (
           <>

@@ -111,16 +111,11 @@ export const Hero: React.FC<HeroProps> = ({
     catTouchStartYRef.current = null;
   };
 
-  // Build repeated sequence to guarantee adequate track width across all screen resolutions
-  const repeatCount = useMemo(() => {
-    if (usableCategories.length === 0) return 1;
-    return Math.max(3, Math.ceil(12 / usableCategories.length));
-  }, [usableCategories.length]);
-
+  // Static category sequence (still, not moving)
   const primarySequence = useMemo(() => {
     if (usableCategories.length === 0) return [];
-    return Array.from({ length: repeatCount }, () => usableCategories).flat();
-  }, [usableCategories, repeatCount]);
+    return usableCategories;
+  }, [usableCategories]);
 
   // ---------------------------------------------------------------------------
   // Main Hero Carousel (Approximately 70% of combined hero height, image-only, 5000ms rotation)
@@ -306,7 +301,7 @@ export const Hero: React.FC<HeroProps> = ({
       onTouchEnd={handleTouchEnd}
       className={`relative overflow-hidden w-full flex flex-col border-b border-axdoro-border bg-axdoro-bg focus:outline-none ${
         isMarqueeVisible
-          ? 'h-[480px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'
+          ? 'h-[600px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'
           : 'h-[320px] sm:h-[460px] md:h-[560px] lg:h-[640px]'
       }`}
     >
@@ -342,23 +337,21 @@ export const Hero: React.FC<HeroProps> = ({
           onTouchMove={handleCatTouchMove}
           onTouchEnd={handleCatTouchEnd}
           onTouchCancel={handleCatTouchEnd}
-          className="w-full h-[30%] min-h-0 border-b border-axdoro-border bg-axdoro-surface-muted/90 backdrop-blur-md relative z-20 flex flex-col justify-center overflow-hidden flex-shrink-0 select-none"
+          className="w-full h-[144px] sm:h-[30%] min-h-0 border-b border-axdoro-border bg-axdoro-surface-muted/90 backdrop-blur-md relative z-20 flex flex-col justify-center overflow-hidden flex-shrink-0 select-none"
         >
-          {/* Continuous Category Carousel Track */}
+          {/* Static Category Track (Still, centered, not moving) */}
           <div
             data-testid="category-carousel-track"
-            className={`flex items-center w-max select-none will-change-transform ${
-              prefersReducedMotion ? 'mx-auto justify-center overflow-x-auto max-w-full px-4' : ''
-            }`}
+            className="flex items-center justify-center w-full max-w-7xl mx-auto px-4 overflow-x-auto select-none"
             style={{
-              animation: prefersReducedMotion ? 'none' : 'categoryMarquee 32s linear infinite',
-              animationPlayState: isTouching ? 'paused' : 'running',
+              /* categoryMarquee 32s linear infinite disabled for static presentation */
+              animation: 'none',
               transform: isTouching && touchDeltaX !== 0 ? `translateX(${touchDeltaX}px)` : undefined,
               transition: isTouching ? 'none' : 'transform 0.25s ease-out',
             }}
           >
             {/* Primary accessible sequence */}
-            <div className="flex items-center gap-6 sm:gap-10 md:gap-14 px-3 sm:px-6 flex-shrink-0">
+            <div className="flex items-center justify-center gap-6 sm:gap-10 md:gap-14 px-3 sm:px-6 flex-shrink-0">
               {primarySequence.map((cat, idx) => {
                 const isFirstEncounter = idx < usableCategories.length;
                 const customMarqueeImg =
@@ -425,8 +418,8 @@ export const Hero: React.FC<HeroProps> = ({
               })}
             </div>
 
-            {/* Duplicate sequence for seamless continuous marquee loop */}
-            {!prefersReducedMotion && (
+            {/* Duplicate sequence for seamless continuous marquee loop (disabled for still presentation) */}
+            {false && !prefersReducedMotion && (
               <div
                 aria-hidden="true"
                 className="flex items-center gap-6 sm:gap-10 md:gap-14 px-3 sm:px-6 flex-shrink-0 select-none"

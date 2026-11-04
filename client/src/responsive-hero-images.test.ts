@@ -10,9 +10,9 @@ describe('Responsive Hero Images & Focal Positioning Verification', () => {
   const viewContent = fs.readFileSync(collectionViewPath, 'utf-8');
 
   describe('1. Frontend Hero.tsx Responsive Contract & Proportions', () => {
-    it('preserves the strict 30% marquee and 70% main hero proportions', () => {
+    it('preserves the responsive proportions with extended mobile portrait hero', () => {
       expect(heroContent).toContain("isMarqueeVisible");
-      expect(heroContent).toContain("'h-[480px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'");
+      expect(heroContent).toContain("'h-[600px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'");
       expect(heroContent).toContain('h-[30%] min-h-0');
       expect(heroContent).toContain("isMarqueeVisible ? 'h-[70%] flex-1' : 'h-full'");
     });
@@ -47,8 +47,8 @@ describe('Responsive Hero Images & Focal Positioning Verification', () => {
       expect(viewContent).toContain("previewDevice === 'tablet'");
       expect(viewContent).toContain("aspect-[768/462]");
 
-      // Mobile proportion: 375px / 336px (~1.12:1)
-      expect(viewContent).toContain("aspect-[375/336]");
+      // Mobile proportion: 375px / 456px (~0.82:1)
+      expect(viewContent).toContain("aspect-[375/456]");
     });
 
     it('provides Horizontal Alignment (X-Axis) presets and fine-tuning slider', () => {

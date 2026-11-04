@@ -850,7 +850,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                           ? 'w-full aspect-[1280/504] max-h-72'
                           : previewDevice === 'tablet'
                           ? 'w-[440px] max-w-full aspect-[768/462]'
-                          : 'w-[270px] max-w-full aspect-[375/336]'
+                          : 'w-[270px] max-w-full aspect-[375/456]'
                       }`}
                     >
                       <img
@@ -882,7 +882,7 @@ export const CollectionManagementView: React.FC<CollectionManagementViewProps> =
                             ? 'Desktop (~2.54:1)'
                             : previewDevice === 'tablet'
                             ? 'Tablet (~1.66:1)'
-                            : 'Mobile (~1.12:1)'}
+                            : 'Mobile (~0.82:1)'}
                         </Badge>
                       </div>
                     </div>

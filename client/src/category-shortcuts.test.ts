@@ -57,12 +57,13 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
         })
       );
 
-      // Card container classes
+      // Card container classes (Option A: increased size across all sections)
       expect(html).toContain('aspect-[3/4]');
       expect(html).toContain('rounded-xl');
-      expect(html).toContain('w-28');
-      expect(html).toContain('sm:w-36');
-      expect(html).toContain('md:w-40');
+      expect(html).toContain('w-36');
+      expect(html).toContain('sm:w-44');
+      expect(html).toContain('md:w-48');
+      expect(html).toContain('lg:w-52');
       expect(html).toContain('overflow-hidden');
     });
 
@@ -286,10 +287,10 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
         })
       );
 
-      // Full-width rectangular container
-      expect(html).toContain('w-full relative aspect-[16/7] sm:aspect-[21/8] overflow-hidden');
+      // Full-width rectangular container (Option 1: enlarged promotional poster banner)
+      expect(html).toContain('w-full relative aspect-[16/10] sm:aspect-[16/6] overflow-hidden');
       // Must not have rounded-xl or rounded-2xl on the full-bleed banner
-      const bannerIndex = html.indexOf('w-full relative aspect-[16/7]');
+      const bannerIndex = html.indexOf('w-full relative aspect-[16/10]');
       const bannerMarkup = html.slice(bannerIndex, bannerIndex + 300);
       expect(bannerMarkup).not.toContain('rounded-xl');
       expect(bannerMarkup).not.toContain('rounded-2xl');

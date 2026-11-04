@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Product, Category, SortOption } from '../types/product.ts';
-import { fetchCategoryBySlug, fetchProducts } from '../api/catalogue.ts';
+import { fetchCategoryBySlug, fetchProducts, fetchHomepageCategorySections } from '../api/catalogue.ts';
 import {
   ChevronRight,
   ArrowLeft,
@@ -20,6 +20,7 @@ interface CategoryPageProps {
   onQuickView: (product: Product) => void;
   onAddToCart: (product: Product, size: string, color: string) => void;
   onOpenBulk: () => void;
+  posterImageUrl?: string | null;
 }
 
 export const CategoryPage: React.FC<CategoryPageProps> = ({
@@ -28,15 +29,24 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
   onQuickView,
   onAddToCart: _onAddToCart,
   onOpenBulk,
+  posterImageUrl: initialPosterImageUrl,
 }) => {
   const [category, setCategory] = useState<Category | null>(null);
+  const [posterImageUrl, setPosterImageUrl] = useState<string | null>(initialPosterImageUrl || null);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isNotFound, setIsNotFound] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>('featured');
 
-  // Load category and products
+  // Keep posterImageUrl synchronized if parent passes an updated prop
+  useEffect(() => {
+    if (initialPosterImageUrl) {
+      setPosterImageUrl(initialPosterImageUrl);
+    }
+  }, [initialPosterImageUrl]);
+
+  // Load category, promotional section banner, and products
   useEffect(() => {
     let isCurrent = true;
     setIsLoading(true);
@@ -45,11 +55,36 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
 
     async function loadData() {
       try {
-        // 1. Fetch category metadata
-        const cat = await fetchCategoryBySlug(slug);
+        // 1. Fetch category metadata & homepage category sections concurrently
+        const [catRes, sectionsRes] = await Promise.allSettled([
+          fetchCategoryBySlug(slug),
+          fetchHomepageCategorySections(),
+        ]);
+
         if (!isCurrent) return;
-        setCategory(cat);
-        document.title = `${cat.name} — AXDORO`;
+
+        if (catRes.status === 'fulfilled') {
+          const cat = catRes.value;
+          setCategory(cat);
+          document.title = `${cat.name} — AXDORO`;
+        } else {
+          const msg = catRes.reason instanceof Error ? catRes.reason.message : String(catRes.reason);
+          if (msg.includes('not found') || msg.includes('404')) {
+            setIsNotFound(true);
+            document.title = 'Category Not Found — AXDORO';
+            return;
+          } else {
+            setError(msg);
+            return;
+          }
+        }
+
+        if (sectionsRes.status === 'fulfilled') {
+          const matchingSec = sectionsRes.value.find((s) => s.category?.slug === slug);
+          if (matchingSec?.posterImageUrl) {
+            setPosterImageUrl(matchingSec.posterImageUrl);
+          }
+        }
 
         // 2. Fetch products strictly belonging to this category
         const response = await fetchProducts({
@@ -149,6 +184,38 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
           </nav>
         </div>
       </div>
+
+      {/* Category Hero Banner (Sleek Horizontal Fashion Banner) */}
+      <section
+        role="region"
+        aria-label={`${category?.name || 'Category'} Collection Banner`}
+        className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden bg-neutral-900 border-b border-axdoro-border flex items-center"
+      >
+        {/* Background Image: Promotional Poster Banner Image > Category Image > Ambient Fallback */}
+        <img
+          src={posterImageUrl || initialPosterImageUrl || category?.imageUrl || '/hero-bg.jpg'}
+          alt={category?.name || 'Category Banner'}
+          className="absolute inset-0 w-full h-full object-cover object-center"
+          loading="eager"
+        />
+
+        {/* Soft, Transparent Vignette Behind Text Only — Image Remains Bright & Clear */}
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/25 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+
+        {/* Banner Content Container */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col justify-end">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black uppercase text-white tracking-tight leading-none drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+            {category?.name || slug}
+          </h1>
+
+          {category?.description && (
+            <p className="text-xs sm:text-sm text-white/95 font-medium max-w-2xl mt-1.5 sm:mt-2 line-clamp-2 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.85)]">
+              {category.description}
+            </p>
+          )}
+        </div>
+      </section>
 
       {/* Category Controls & Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">

@@ -189,7 +189,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
             <div
               role="region"
               aria-label={`${title} Category Shortcuts`}
-              className="flex items-center gap-3 sm:gap-4 overflow-x-auto scrollbar-none pb-2 pt-1 snap-x snap-mandatory"
+              className="flex items-center gap-4 sm:gap-5 overflow-x-auto scrollbar-none pb-2 pt-1 snap-x snap-mandatory"
             >
               {normalizedShortcuts.map((item) => {
                 const isActive = activeShortcut === item.query;
@@ -200,7 +200,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
                     onClick={() => handleShortcutClick(item)}
                     aria-pressed={isActive}
                     aria-label={`${item.label}${item.sublabel ? ` ${item.sublabel}` : ''} filter`}
-                    className={`group relative flex-shrink-0 w-28 sm:w-36 md:w-40 aspect-[3/4] rounded-xl overflow-hidden cursor-pointer text-left snap-start transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ${
+                    className={`group relative flex-shrink-0 w-36 sm:w-44 md:w-48 lg:w-52 aspect-[3/4] rounded-xl overflow-hidden cursor-pointer text-left snap-start transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ${
                       isActive
                         ? 'ring-2 ring-neutral-900 ring-offset-2 shadow-md'
                         : 'border border-neutral-200/80 hover:border-neutral-400 hover:shadow-sm'
@@ -231,18 +231,18 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
 
                     {/* Active Pill / Indicator Tag */}
                     {isActive && (
-                      <div className="absolute top-2.5 right-2.5 z-10">
-                        <span className="inline-block w-2 h-2 rounded-full bg-white shadow" />
+                      <div className="absolute top-3 right-3 z-10">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-white shadow" />
                       </div>
                     )}
 
                     {/* Text Overlay at Bottom */}
-                    <div className="absolute inset-x-0 bottom-0 p-2.5 sm:p-3 z-10 flex flex-col justify-end">
-                      <span className="text-xs sm:text-sm font-extrabold uppercase text-white tracking-tight leading-tight block drop-shadow">
+                    <div className="absolute inset-x-0 bottom-0 p-3.5 sm:p-4 z-10 flex flex-col justify-end">
+                      <span className="text-sm sm:text-base font-extrabold uppercase text-white tracking-tight leading-tight block drop-shadow">
                         {item.label}
                       </span>
                       {item.sublabel && (
-                        <span className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-widest text-neutral-300 block drop-shadow mt-0.5">
+                        <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-widest text-neutral-300 block drop-shadow mt-0.5">
                           {item.sublabel}
                         </span>
                       )}
@@ -259,7 +259,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
       {bannerImage && (
         <div
           onClick={handleBannerClick}
-          className={`w-full relative aspect-[16/7] sm:aspect-[21/8] overflow-hidden bg-neutral-900 mb-8 sm:mb-10 ${
+          className={`w-full relative aspect-[16/10] sm:aspect-[16/6] overflow-hidden bg-neutral-900 mb-8 sm:mb-10 ${
             bannerDestinationUrl ? 'cursor-pointer group' : ''
           }`}
         >
