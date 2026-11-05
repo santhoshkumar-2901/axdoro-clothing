@@ -245,7 +245,7 @@ export default function App(): React.JSX.Element {
 
   return (
     <div className="storefront-root min-h-screen bg-axdoro-bg text-axdoro-text flex flex-col justify-between selection:bg-axdoro-accent selection:text-white">
-      {/* Responsive Sticky Navbar */}
+      {/* Responsive Storefront Navbar */}
       <Navbar
         cartCount={totalCartCount}
         onOpenCart={() => setIsCartOpen(true)}
