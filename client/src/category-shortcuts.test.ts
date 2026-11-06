@@ -57,13 +57,13 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
         })
       );
 
-      // Card container classes (Option A: increased size across all sections)
-      expect(html).toContain('aspect-[3/4]');
+      // Card container classes (Reference dimensions: 243x323px on desktop)
+      expect(html).toContain('aspect-[243/323]');
       expect(html).toContain('rounded-xl');
       expect(html).toContain('w-36');
       expect(html).toContain('sm:w-44');
-      expect(html).toContain('md:w-48');
-      expect(html).toContain('lg:w-52');
+      expect(html).toContain('md:w-52');
+      expect(html).toContain('lg:w-[243px]');
       expect(html).toContain('overflow-hidden');
     });
 

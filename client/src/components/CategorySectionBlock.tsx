@@ -200,7 +200,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
                     onClick={() => handleShortcutClick(item)}
                     aria-pressed={isActive}
                     aria-label={`${item.label}${item.sublabel ? ` ${item.sublabel}` : ''} filter`}
-                    className={`group relative flex-shrink-0 w-36 sm:w-44 md:w-48 lg:w-52 aspect-[3/4] rounded-xl overflow-hidden cursor-pointer text-left snap-start transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ${
+                    className={`group relative flex-shrink-0 w-36 sm:w-44 md:w-52 lg:w-[243px] aspect-[243/323] rounded-xl overflow-hidden cursor-pointer text-left snap-start transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2 ${
                       isActive
                         ? 'ring-2 ring-neutral-900 ring-offset-2 shadow-md'
                         : 'border border-neutral-200/80 hover:border-neutral-400 hover:shadow-sm'
