@@ -301,8 +301,8 @@ export const Hero: React.FC<HeroProps> = ({
       onTouchEnd={handleTouchEnd}
       className={`relative overflow-hidden w-full flex flex-col border-b border-axdoro-border bg-axdoro-bg focus:outline-none ${
         isMarqueeVisible
-          ? 'h-[600px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'
-          : 'h-[calc(100svh-5rem)] max-h-[calc(100svh-5rem)] min-h-[320px]'
+          ? 'h-[524px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'
+          : 'h-[380px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'
       }`}
     >
       {/* Keyframe animation definitions */}

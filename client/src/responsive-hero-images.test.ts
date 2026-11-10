@@ -12,7 +12,7 @@ describe('Responsive Hero Images & Focal Positioning Verification', () => {
   describe('1. Frontend Hero.tsx Responsive Contract & Proportions', () => {
     it('preserves the responsive proportions with extended mobile portrait hero', () => {
       expect(heroContent).toContain("isMarqueeVisible");
-      expect(heroContent).toContain("'h-[600px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'");
+      expect(heroContent).toContain("'h-[524px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'");
       expect(heroContent).toContain('h-[30%] min-h-0');
       expect(heroContent).toContain("isMarqueeVisible ? 'h-[70%] sm:h-full flex-1' : 'h-full'");
     });
