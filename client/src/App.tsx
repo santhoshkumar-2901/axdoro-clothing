@@ -12,7 +12,6 @@ import { Hero } from './components/Hero.tsx';
 import { CategoryPage } from './components/CategoryPage.tsx';
 import { CategorySectionBlock } from './components/CategorySectionBlock.tsx';
 import { EditorialSection } from './components/EditorialSection.tsx';
-import { Newsletter } from './components/Newsletter.tsx';
 import { Footer } from './components/Footer.tsx';
 import { ProductDetailModal } from './components/ProductDetailModal.tsx';
 import { CartDrawer } from './components/CartDrawer.tsx';
@@ -342,9 +341,6 @@ export default function App(): React.JSX.Element {
 
             {/* 5. Editorial Brand Story & Pillars */}
             <EditorialSection onOpenBulk={handleOpenGeneralBulk} />
-
-            {/* 7. Newsletter Signup (Demo UI) */}
-            <Newsletter />
           </>
         )}
       </main>

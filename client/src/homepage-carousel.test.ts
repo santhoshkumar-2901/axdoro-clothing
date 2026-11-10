@@ -524,7 +524,7 @@ describe('Homepage Responsive 3-Slide Hero Carousel Client Tests', () => {
       expect(html).not.toContain('data-testid="category-carousel-track"');
 
       // Container should use compact height class instead of combined height
-      expect(html).toContain('h-[320px] sm:h-[460px] md:h-[560px] lg:h-[640px]');
+      expect(html).toContain('h-[calc(100svh-5rem)] max-h-[calc(100svh-5rem)] min-h-[320px]');
       expect(html).not.toContain('h-[480px] sm:h-[580px] md:h-[660px] lg:h-[720px]');
 
       // Main hero slide should still render normally

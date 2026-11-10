@@ -259,7 +259,7 @@ export const CategorySectionBlock: React.FC<CategorySectionBlockProps> = ({
       {bannerImage && (
         <div
           onClick={handleBannerClick}
-          className={`w-full relative aspect-[16/10] sm:aspect-[16/6] overflow-hidden bg-neutral-900 mb-8 sm:mb-10 ${
+          className={`w-full relative aspect-[5/4] sm:aspect-[16/6] overflow-hidden bg-neutral-900 mb-8 sm:mb-10 ${
             bannerDestinationUrl ? 'cursor-pointer group' : ''
           }`}
         >

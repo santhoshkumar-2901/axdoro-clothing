@@ -288,9 +288,9 @@ describe('AXDORO — Image-Based Category Cards (Phase 2)', () => {
       );
 
       // Full-width rectangular container (Option 1: enlarged promotional poster banner)
-      expect(html).toContain('w-full relative aspect-[16/10] sm:aspect-[16/6] overflow-hidden');
+      expect(html).toContain('w-full relative aspect-[5/4] sm:aspect-[16/6] overflow-hidden');
       // Must not have rounded-xl or rounded-2xl on the full-bleed banner
-      const bannerIndex = html.indexOf('w-full relative aspect-[16/10]');
+      const bannerIndex = html.indexOf('w-full relative aspect-[5/4]');
       const bannerMarkup = html.slice(bannerIndex, bannerIndex + 300);
       expect(bannerMarkup).not.toContain('rounded-xl');
       expect(bannerMarkup).not.toContain('rounded-2xl');

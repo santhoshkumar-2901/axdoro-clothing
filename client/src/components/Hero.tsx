@@ -301,8 +301,8 @@ export const Hero: React.FC<HeroProps> = ({
       onTouchEnd={handleTouchEnd}
       className={`relative overflow-hidden w-full flex flex-col border-b border-axdoro-border bg-axdoro-bg focus:outline-none ${
         isMarqueeVisible
-          ? 'h-[600px] sm:h-[580px] md:h-[660px] lg:h-[720px] max-h-[850px]'
-          : 'h-[320px] sm:h-[460px] md:h-[560px] lg:h-[640px]'
+          ? 'h-[600px] sm:h-[calc(100svh-5rem)] sm:max-h-[calc(100svh-5rem)]'
+          : 'h-[calc(100svh-5rem)] max-h-[calc(100svh-5rem)] min-h-[320px]'
       }`}
     >
       {/* Keyframe animation definitions */}
@@ -326,8 +326,8 @@ export const Hero: React.FC<HeroProps> = ({
       `}</style>
 
       {/* =========================================================================
-          LEVEL 1: Top Category Carousel (Approximately 30% of combined hero height)
-          Continuous horizontal sliding marquee with 3D product renders
+          LEVEL 1: Top Category Carousel (Approximately 30% of combined hero height on mobile)
+          Continuous horizontal sliding marquee with 3D product renders (Mobile View Only)
           ========================================================================= */}
       {isMarqueeVisible && (
         <div
@@ -337,7 +337,7 @@ export const Hero: React.FC<HeroProps> = ({
           onTouchMove={handleCatTouchMove}
           onTouchEnd={handleCatTouchEnd}
           onTouchCancel={handleCatTouchEnd}
-          className="w-full h-[144px] sm:h-[30%] min-h-0 border-b border-axdoro-border bg-axdoro-surface-muted/90 backdrop-blur-md relative z-20 flex flex-col justify-center overflow-hidden flex-shrink-0 select-none"
+          className="sm:hidden w-full h-[144px] sm:h-[30%] min-h-0 border-b border-axdoro-border bg-axdoro-surface-muted/90 backdrop-blur-md relative z-20 flex flex-col justify-center overflow-hidden flex-shrink-0 select-none"
         >
           {/* Static Category Track (Still, centered, not moving) */}
           <div
@@ -501,7 +501,7 @@ export const Hero: React.FC<HeroProps> = ({
         role="region"
         aria-label="Main Hero Slides"
         className={`w-full min-h-0 relative overflow-hidden bg-axdoro-bg ${
-          isMarqueeVisible ? 'h-[70%] flex-1' : 'h-full'
+          isMarqueeVisible ? 'h-[70%] sm:h-full flex-1' : 'h-full'
         }`}
       >
         {/* Main Carousel Image Only */}
