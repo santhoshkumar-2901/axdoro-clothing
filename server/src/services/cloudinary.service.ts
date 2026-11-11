@@ -183,6 +183,87 @@ export async function uploadArtworkBuffer(options: {
   };
 }
 
+export interface UploadEvidenceResult {
+  secureUrl: string;
+  publicId: string;
+  format: string;
+  bytes: number;
+}
+
+/**
+ * Uploads a customer return/exchange evidence image buffer to Cloudinary.
+ * Strictly uses private authenticated storage (type: 'authenticated') and folder 'axdoro/returns/evidence'.
+ * Generates 128-bit cryptographic entropy in the public ID suffix.
+ * Tags the asset initially with 'return_evidence,pending_commit'.
+ */
+export async function uploadReturnEvidenceBuffer(options: {
+  buffer: Buffer;
+  filename: string;
+  format: 'png' | 'jpg' | 'webp';
+}): Promise<UploadEvidenceResult> {
+  if (!isCloudinaryConfigured()) {
+    throw new Error('Cloudinary credentials are not configured on this server.');
+  }
+
+  const cloudName = env.CLOUDINARY_CLOUD_NAME!;
+  const apiKey = env.CLOUDINARY_API_KEY!;
+  const apiSecret = env.CLOUDINARY_API_SECRET!;
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  // 128-bit cryptographic random entropy: 16 bytes = 32 hex chars
+  const randomSuffix = crypto.randomBytes(16).toString('hex');
+  const publicId = `evidence_${timestamp}_${randomSuffix}`;
+  const folder = 'axdoro/returns/evidence';
+  const type = 'authenticated';
+  const tags = 'return_evidence,pending_commit';
+
+  const paramsToSign: Record<string, string | number> = {
+    folder,
+    public_id: publicId,
+    tags,
+    timestamp,
+    type,
+  };
+
+  const signature = signCloudinaryParameters(paramsToSign, apiSecret);
+
+  const formData = new FormData();
+  const blob = new Blob([options.buffer]);
+  formData.append('file', blob, options.filename);
+  formData.append('api_key', apiKey);
+  formData.append('timestamp', String(timestamp));
+  formData.append('signature', signature);
+  formData.append('folder', folder);
+  formData.append('public_id', publicId);
+  formData.append('type', type);
+  formData.append('tags', tags);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errData = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    throw new Error(errData?.error?.message || `Cloudinary evidence upload failed with HTTP ${res.status}`);
+  }
+
+  const data = (await res.json()) as {
+    secure_url?: string;
+    url?: string;
+    public_id: string;
+    format?: string;
+    bytes?: number;
+  };
+
+  return {
+    secureUrl: data.secure_url || data.url || '',
+    publicId: data.public_id,
+    format: data.format || options.format,
+    bytes: data.bytes || options.buffer.length,
+  };
+}
+
 /**
  * Fetches an authenticated customer artwork buffer from Cloudinary for administrative delivery.
  * Zero credentials or tokens are exposed to the browser.
@@ -254,7 +335,9 @@ export async function deleteCloudinaryAsset(
     const apiKey = env.CLOUDINARY_API_KEY!;
     const apiSecret = env.CLOUDINARY_API_SECRET!;
     const timestamp = Math.floor(Date.now() / 1000);
-    const assetType = options?.type || (publicId.includes('artwork_') ? 'authenticated' : 'upload');
+    const assetType =
+      options?.type ||
+      (publicId.includes('artwork_') || publicId.includes('evidence_') ? 'authenticated' : 'upload');
 
     const paramsToSign: Record<string, string | number> = {
       public_id: publicId,
@@ -312,7 +395,11 @@ export async function tagCloudinaryAsset(options: {
     const apiKey = env.CLOUDINARY_API_KEY!;
     const apiSecret = env.CLOUDINARY_API_SECRET!;
     const timestamp = Math.floor(Date.now() / 1000);
-    const assetType = options.type || (options.publicId.includes('artwork_') ? 'authenticated' : 'upload');
+    const assetType =
+      options.type ||
+      (options.publicId.includes('artwork_') || options.publicId.includes('evidence_')
+        ? 'authenticated'
+        : 'upload');
     const resourceType = options.resourceType || 'image';
 
     const paramsToSign: Record<string, string | number> = {

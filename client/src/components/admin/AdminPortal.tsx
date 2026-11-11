@@ -21,6 +21,7 @@ import {
   adminAcknowledgeOrder,
   adminDeleteOrder,
   adminGetBadgeCounts,
+  adminGetReturnMetrics,
   adminGetEnquiries,
   adminDeleteEnquiry,
   adminDownloadArtwork,
@@ -55,6 +56,7 @@ import { CollectionManagementView } from './CollectionManagementView.tsx';
 import { ProductCreateDialog } from './ProductCreateDialog.tsx';
 import { ProductEditDialog } from './ProductEditDialog.tsx';
 import { PaymentSettingsView } from './PaymentSettingsView.tsx';
+import { ReturnsManagementView } from './ReturnsManagementView.tsx';
 import {
   Card,
   CardHeader,
@@ -77,6 +79,7 @@ function getTabFromPath(pathname: string): AdminTab {
   if (normalized.endsWith('/collections')) return 'collections';
   if (normalized.endsWith('/products')) return 'products';
   if (normalized.endsWith('/orders')) return 'orders';
+  if (normalized.endsWith('/returns')) return 'returns';
   if (normalized.endsWith('/enquiries')) return 'enquiries';
   if (normalized.endsWith('/audit')) return 'audit';
   if (normalized.endsWith('/payments') || normalized.endsWith('/payment-settings')) return 'payments';
@@ -117,9 +120,10 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Dynamic notification badge counts for sidebar
-  const [badgeCounts, setBadgeCounts] = useState<{ orders: number; stock: number }>({
+  const [badgeCounts, setBadgeCounts] = useState<{ orders: number; stock: number; returns?: number }>({
     orders: 0,
     stock: 0,
+    returns: 0,
   });
 
   // Stock adjustment popup state
@@ -189,9 +193,11 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const fetchBadgeCounts = useCallback(async () => {
     try {
       const counts = await adminGetBadgeCounts();
+      const returnMetrics = await adminGetReturnMetrics().catch(() => null);
       setBadgeCounts({
         orders: counts.orders.unacknowledgedCount,
         stock: counts.inventory.lowStockProductCount,
+        returns: returnMetrics?.pendingReview ?? 0,
       });
     } catch {
       // Fail gracefully: retain previous valid counts if network or background poll fails
@@ -1101,6 +1107,9 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
                 </Table>
               )}
             </div>
+          ) : activeTab === 'returns' ? (
+            /* 4. Returns & Exchanges Tab */
+            <ReturnsManagementView onReturnMutated={fetchBadgeCounts} />
           ) : activeTab === 'enquiries' ? (
             /* 5. Enquiries Tab */
             <div className="space-y-4">

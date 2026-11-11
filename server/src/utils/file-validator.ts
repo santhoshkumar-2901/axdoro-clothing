@@ -2,13 +2,25 @@ import path from 'path';
 
 export const MAX_ARTWORK_BYTES = 4 * 1024 * 1024; // 4 MB
 
+export const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024; // 4 MB
+export const MAX_EVIDENCE_FILES = 3;
+export const MAX_TOTAL_PAYLOAD_BYTES = 13 * 1024 * 1024; // 13 MB
+
 export const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.pdf']);
+
+export const ALLOWED_EVIDENCE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp']);
 
 export const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
   'image/webp',
   'application/pdf',
+]);
+
+export const ALLOWED_EVIDENCE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/webp',
 ]);
 
 export interface ArtworkValidationResult {
@@ -142,6 +154,118 @@ export function validateArtworkBuffer(
   return {
     isValid: true,
     detectedFormat,
+    sanitizedFilename: sanitizeFilename(originalFilename),
+    bytes,
+  };
+}
+
+export interface EvidenceValidationResult {
+  isValid: boolean;
+  detectedFormat?: 'png' | 'jpg' | 'webp';
+  detectedMime?: 'image/png' | 'image/jpeg' | 'image/webp';
+  sanitizedFilename?: string;
+  bytes?: number;
+  error?: string;
+}
+
+/**
+ * Validates a customer return evidence image buffer.
+ * Strictly permits only JPEG, PNG, and WebP raster images (up to 4 MB).
+ * Rejects PDFs, SVGs, GIFs, and unsupported formats.
+ */
+export function validateReturnEvidenceBuffer(
+  buffer: Buffer,
+  originalFilename: string,
+  mimetype?: string
+): EvidenceValidationResult {
+  if (!buffer || !Buffer.isBuffer(buffer)) {
+    return { isValid: false, error: 'No file buffer provided.' };
+  }
+
+  const bytes = buffer.length;
+  if (bytes === 0) {
+    return { isValid: false, error: 'Uploaded file is empty (0 bytes).' };
+  }
+
+  if (bytes > MAX_EVIDENCE_BYTES) {
+    return {
+      isValid: false,
+      bytes,
+      error: `File size exceeds the 4 MB limit (${(bytes / (1024 * 1024)).toFixed(2)} MB uploaded).`,
+    };
+  }
+
+  const ext = path.extname(originalFilename || '').toLowerCase();
+  if (!ALLOWED_EVIDENCE_EXTENSIONS.has(ext)) {
+    return {
+      isValid: false,
+      error: `Unsupported file extension '${ext}'. Only JPEG, PNG, and WebP images are permitted for return evidence.`,
+    };
+  }
+
+  if (mimetype && !ALLOWED_EVIDENCE_MIME_TYPES.has(mimetype.toLowerCase())) {
+    return {
+      isValid: false,
+      error: `Unsupported MIME type '${mimetype}'. Allowed types: image/jpeg, image/png, image/webp.`,
+    };
+  }
+
+  // Magic bytes inspection
+  let detectedFormat: 'png' | 'jpg' | 'webp' | null = null;
+  let detectedMime: 'image/png' | 'image/jpeg' | 'image/webp' | null = null;
+
+  // 1. PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (
+    bytes >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    detectedFormat = 'png';
+    detectedMime = 'image/png';
+  }
+  // 2. JPEG: FF D8 FF
+  else if (bytes >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    detectedFormat = 'jpg';
+    detectedMime = 'image/jpeg';
+  }
+  // 3. WebP: 'RIFF' .... 'WEBP'
+  else if (
+    bytes >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    detectedFormat = 'webp';
+    detectedMime = 'image/webp';
+  }
+
+  if (!detectedFormat || !detectedMime) {
+    return {
+      isValid: false,
+      error: 'File content does not match allowed image signatures (invalid magic bytes).',
+    };
+  }
+
+  // Ensure detected format matches extension category
+  if (detectedFormat === 'png' && ext !== '.png') {
+    return { isValid: false, error: 'File extension does not match detected PNG content.' };
+  }
+  if (detectedFormat === 'webp' && ext !== '.webp') {
+    return { isValid: false, error: 'File extension does not match detected WebP content.' };
+  }
+  if (detectedFormat === 'jpg' && ext !== '.jpg' && ext !== '.jpeg') {
+    return { isValid: false, error: 'File extension does not match detected JPEG content.' };
+  }
+
+  return {
+    isValid: true,
+    detectedFormat,
+    detectedMime,
     sanitizedFilename: sanitizeFilename(originalFilename),
     bytes,
   };

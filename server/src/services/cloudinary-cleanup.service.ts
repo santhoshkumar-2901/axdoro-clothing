@@ -115,8 +115,24 @@ export async function isAssetReferencedByCategory(
 }
 
 /**
+ * Checks whether an asset's public_id is actively referenced by return request evidence.
+ * An asset is considered actively referenced if deleted_at IS NULL.
+ * Fails closed on database query error.
+ */
+export async function isAssetReferencedByReturnEvidence(
+  publicId: string,
+  clientOrPool?: Pool | PoolClient | null
+): Promise<boolean> {
+  const sql = `SELECT id FROM return_request_evidence WHERE cloudinary_public_id = $1 AND deleted_at IS NULL LIMIT 1;`;
+  const res = clientOrPool
+    ? await clientOrPool.query(sql, [publicId])
+    : await query(sql, [publicId]);
+  return res.rows.length > 0;
+}
+
+/**
  * Comprehensive safety check: verifies whether a public_id is actively referenced
- * anywhere in the database (enquiries, product_images, or categories).
+ * anywhere in the database (enquiries, product_images, categories, or return_request_evidence).
  */
 export async function isAssetReferencedInDatabase(
   publicId: string,
@@ -125,6 +141,7 @@ export async function isAssetReferencedInDatabase(
   if (await isAssetReferencedByActiveEnquiry(publicId, clientOrPool)) return true;
   if (await isAssetReferencedByProductImages(publicId, clientOrPool)) return true;
   if (await isAssetReferencedByCategory(publicId, clientOrPool)) return true;
+  if (await isAssetReferencedByReturnEvidence(publicId, clientOrPool)) return true;
   return false;
 }
 
@@ -420,8 +437,8 @@ export async function processCloudinaryCleanupQueue(batchSize: number = 10): Pro
  * Safety rules:
  * - Assets younger than conservative threshold (minAgeMs, default 1 hour) are skipped.
  * - Database lookup failures never trigger deletion; they are logged and skipped.
- * - If active enquiry references the asset, tags are updated to 'committed' and 'pending_commit' is removed.
- * - If confirmed that no enquiry references the asset, it is safely deleted.
+ * - If any active database record (enquiry, product image, category, or return evidence) references the asset, tags are updated to 'committed' and 'pending_commit' is removed.
+ * - If confirmed that no database record references the asset, it is safely deleted.
  */
 export async function reconcileCloudinaryPendingTags(options?: {
   minAgeMs?: number;
@@ -453,10 +470,10 @@ export async function reconcileCloudinaryPendingTags(options?: {
           continue;
         }
 
-        // 2. Query PostgreSQL to see if an active enquiry references this public_id
+        // 2. Query PostgreSQL to see if any active database record references this public_id
         let isReferenced = false;
         try {
-          isReferenced = await isAssetReferencedByActiveEnquiry(res.public_id);
+          isReferenced = await isAssetReferencedInDatabase(res.public_id);
         } catch (dbErr) {
           // Never delete an asset merely because its database lookup temporarily fails
           console.error(`[Reconcile Tags] DB lookup failed for asset ${res.public_id}; skipping:`, dbErr);
@@ -465,7 +482,7 @@ export async function reconcileCloudinaryPendingTags(options?: {
         }
 
         if (isReferenced) {
-          // Active enquiry exists: upload and DB write succeeded, but post-commit tag update was missed
+          // Active record exists: upload and DB write succeeded, but post-commit tag update was missed
           await tagCloudinaryAsset({
             publicId: res.public_id,
             tag: 'pending_commit',
@@ -482,7 +499,7 @@ export async function reconcileCloudinaryPendingTags(options?: {
           });
           reconciledCommitted++;
         } else {
-          // Confirmed orphan: no active enquiry exists in database. Safe to delete!
+          // Confirmed orphan: no database record references the asset. Safe to delete!
           const deleted = await deleteCloudinaryAsset(res.public_id, {
             type: res.type || 'authenticated',
             resourceType: res.resource_type || 'image',

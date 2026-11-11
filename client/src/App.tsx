@@ -18,6 +18,8 @@ import { CartDrawer } from './components/CartDrawer.tsx';
 import { BulkEnquiryModal } from './components/BulkEnquiryModal.tsx';
 import { CheckoutModal } from './components/CheckoutModal.tsx';
 import { AdminPortal } from './components/admin/AdminPortal.tsx';
+import { ReturnPolicyPage } from './pages/ReturnPolicyPage.tsx';
+import { ReturnRequestPage } from './pages/ReturnRequestPage.tsx';
 
 export default function App(): React.JSX.Element {
   const [currentPath, setCurrentPath] = useState<string>(() =>
@@ -240,6 +242,15 @@ export default function App(): React.JSX.Element {
     ? decodeURIComponent(currentPath.replace(/^\/category\//, '').replace(/\/.*$/, ''))
     : '';
 
+  const isReturnPolicyRoute =
+    currentPath === '/return-policy' ||
+    currentPath === '/returns-policy' ||
+    currentPath === '/return-exchange-policy';
+  const isReturnRoute =
+    currentPath === '/returns' ||
+    currentPath === '/return' ||
+    currentPath === '/return-request';
+
   const totalCartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
 
   return (
@@ -250,7 +261,7 @@ export default function App(): React.JSX.Element {
         onOpenCart={() => setIsCartOpen(true)}
         onSelectCategory={(cat) => {
           if (cat === 'all') {
-            if (isCategoryRoute) {
+            if (isCategoryRoute || isReturnPolicyRoute || isReturnRoute) {
               navigate('/');
               setTimeout(() => handleScrollToShop(), 50);
             } else {
@@ -268,9 +279,13 @@ export default function App(): React.JSX.Element {
         onNavigate={navigate}
       />
 
-      {/* Main Content Area: Dedicated Category Page or Storefront Homepage */}
+      {/* Main Content Area: Dedicated Return Policy, Return Request, Category Page or Storefront Homepage */}
       <main className="flex-1">
-        {isCategoryRoute && categorySlug ? (
+        {isReturnPolicyRoute ? (
+          <ReturnPolicyPage onNavigate={navigate} />
+        ) : isReturnRoute ? (
+          <ReturnRequestPage onNavigate={navigate} />
+        ) : isCategoryRoute && categorySlug ? (
           <CategoryPage
             slug={categorySlug}
             onNavigate={navigate}

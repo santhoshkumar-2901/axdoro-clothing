@@ -1235,3 +1235,262 @@ export async function adminUpdatePaymentQr(
   if (!res.ok) throw new Error(json.message || json.error || 'Failed to update payment QR settings');
   return json.data;
 }
+
+// ---------------------------------------------------------------------------
+// Returns & Exchanges Management (Phase 4)
+// ---------------------------------------------------------------------------
+
+export interface AdminReturnListItem {
+  id: string;
+  requestNumber: string;
+  submittedOrderId: string;
+  customerPhone: string;
+  customerEmail: string;
+  customerName: string | null;
+  reason: string;
+  description: string | null;
+  status: string;
+  isOrderMatched: boolean;
+  eligibilityFlag: string;
+  evidenceCount: number;
+  refundStatus: string;
+  productReceivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReturnsListResponse {
+  items: AdminReturnListItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalCount: number;
+    totalPages: number;
+  };
+}
+
+export interface AdminReturnDetail {
+  id: string;
+  requestNumber: string;
+  submittedOrderId: string;
+  customerPhone: string;
+  customerEmail: string;
+  reason: string;
+  description: string | null;
+  status: string;
+  adminNotes: string | null;
+  rejectionReason: string | null;
+  isOrderMatched: boolean;
+  eligibilityFlag: string;
+  deliveryDateRecorded: string | null;
+  requiresDeliveryReview: boolean;
+  shipping: {
+    shippingInstructions: string | null;
+    returnCourierName: string | null;
+    returnTrackingNumber: string | null;
+    customerShippedAt: string | null;
+    productReceivedAt: string | null;
+  };
+  inspection: {
+    inspectionResult: string | null;
+    inspectionNotes: string | null;
+    inspectedAt: string | null;
+    inspectedBy: string | null;
+  };
+  refund: {
+    refundStatus: string;
+    refundAmountPaise: number | null;
+    refundMethod: string | null;
+    refundReference: string | null;
+    refundInitiatedAt: string | null;
+    refundCompletedAt: string | null;
+    refundNotes: string | null;
+  };
+  matchedOrder: {
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    orderStatus: string;
+    paymentMethod: string;
+    paymentStatus: string;
+    totalPaise: number;
+    deliveredAt: string | null;
+    createdAt: string;
+    items: Array<{
+      id: string;
+      productName: string;
+      variantSku: string | null;
+      variantSize: string | null;
+      variantColor: string | null;
+      unitPricePaise: number;
+      quantity: number;
+      lineTotalPaise: number;
+    }>;
+  } | null;
+  evidence: Array<{
+    id: string;
+    originalFilename: string;
+    mimeType: string;
+    fileSizeBytes: number;
+    format: string;
+    createdAt: string;
+  }>;
+  history: Array<{
+    id: string;
+    previousStatus: string | null;
+    newStatus: string;
+    actorType: string;
+    actorId: string | null;
+    notes: string | null;
+    createdAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminReturnMetrics {
+  pendingReview: number;
+  underReview: number;
+  approved: number;
+  rejected: number;
+  completed: number;
+  total: number;
+}
+
+export async function adminGetReturns(params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+  fromDate?: string;
+  toDate?: string;
+}): Promise<AdminReturnsListResponse> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.status && params.status !== 'ALL') query.set('status', params.status);
+  if (params?.search) query.set('search', params.search);
+  if (params?.fromDate) query.set('fromDate', params.fromDate);
+  if (params?.toDate) query.set('toDate', params.toDate);
+
+  const res = await fetch(`/api/admin/returns?${query.toString()}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || json.error || 'Failed to fetch returns');
+  return { items: json.data, pagination: json.pagination };
+}
+
+export async function adminGetReturnMetrics(): Promise<AdminReturnMetrics> {
+  const res = await fetch('/api/admin/returns/metrics', {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to fetch return metrics');
+  return json.data;
+}
+
+export async function adminGetReturnById(id: string): Promise<AdminReturnDetail> {
+  const res = await fetch(`/api/admin/returns/${id}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to fetch return request details');
+  return json.data;
+}
+
+export async function adminUpdateReturnStatus(
+  id: string,
+  payload: { status: string; adminNotes?: string; rejectionReason?: string }
+): Promise<AdminReturnDetail> {
+  const res = await fetch(`/api/admin/returns/${id}/status`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to update return status');
+  return json.data;
+}
+
+export async function adminUpdateReturnShipping(
+  id: string,
+  payload: {
+    shippingInstructions?: string | null;
+    returnCourierName?: string | null;
+    returnTrackingNumber?: string | null;
+    customerShippedAt?: string | null;
+    productReceivedAt?: string | null;
+  }
+): Promise<AdminReturnDetail> {
+  const res = await fetch(`/api/admin/returns/${id}/shipping`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to update shipping information');
+  return json.data;
+}
+
+export async function adminUpdateReturnInspection(
+  id: string,
+  payload: {
+    inspectionResult: 'PENDING' | 'PASS' | 'FAIL' | 'PARTIAL';
+    inspectionNotes: string;
+    productReceivedAt?: string | null;
+  }
+): Promise<AdminReturnDetail> {
+  const res = await fetch(`/api/admin/returns/${id}/inspection`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to update inspection record');
+  return json.data;
+}
+
+export async function adminUpdateReturnRefund(
+  id: string,
+  payload: {
+    refundStatus: 'NOT_APPLICABLE' | 'PENDING' | 'INITIATED' | 'COMPLETED' | 'REJECTED';
+    refundAmountPaise?: number | null;
+    refundMethod?: 'ORIGINAL_PAYMENT' | 'BANK_TRANSFER' | 'UPI' | 'STORE_CREDIT' | null;
+    refundReference?: string | null;
+    refundNotes?: string | null;
+    refundCompletedAt?: string | null;
+    allowExcessRefund?: boolean;
+  }
+): Promise<AdminReturnDetail> {
+  const res = await fetch(`/api/admin/returns/${id}/refund`, {
+    method: 'PATCH',
+    headers: csrfHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to update refund ledger');
+  return json.data;
+}
+
+export async function adminDeleteReturnEvidence(
+  returnId: string,
+  evidenceId: string
+): Promise<void> {
+  const res = await fetch(`/api/admin/returns/${returnId}/evidence/${evidenceId}`, {
+    method: 'DELETE',
+    headers: csrfHeaders(),
+    credentials: 'include',
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message || 'Failed to delete evidence item');
+}

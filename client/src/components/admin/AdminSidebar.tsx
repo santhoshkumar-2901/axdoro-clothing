@@ -12,12 +12,13 @@ import {
   LogOut,
   X,
   QrCode,
+  RotateCcw,
 } from 'lucide-react';
 import { AdminUser } from '../../api/admin.ts';
 import { Badge } from '../ui/badge.tsx';
 import { useScrollLock } from '../../utils/scrollLock.ts';
 
-export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'orders' | 'enquiries' | 'audit' | 'payments';
+export type AdminTab = 'metrics' | 'products' | 'categories' | 'collections' | 'orders' | 'returns' | 'enquiries' | 'audit' | 'payments';
 
 export interface AdminSidebarProps {
   activeTab: AdminTab;
@@ -29,6 +30,7 @@ export interface AdminSidebarProps {
   onCloseMobile: () => void;
   badgeCounts?: {
     orders: number;
+    returns?: number;
     stock?: number;
   };
 }
@@ -58,6 +60,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
     { id: 'categories', label: 'Categories', icon: FolderTree },
     { id: 'collections', label: 'Homepage Content', icon: Sparkles },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'returns', label: 'Returns & Exchanges', icon: RotateCcw },
     { id: 'enquiries', label: 'Enquiries', icon: Inbox },
     { id: 'audit', label: 'Security Audit Logs', icon: History },
     { id: 'payments', label: 'Payment Settings', icon: QrCode },
@@ -106,11 +109,18 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
-            const count = item.id === 'orders' ? badgeCounts?.orders ?? 0 : 0;
+            const count =
+              item.id === 'orders'
+                ? badgeCounts?.orders ?? 0
+                : item.id === 'returns'
+                ? badgeCounts?.returns ?? 0
+                : 0;
             const formattedBadge = formatBadgeCount(count);
             const badgeAriaLabel =
               item.id === 'orders'
                 ? `${count} unacknowledged orders requiring attention`
+                : item.id === 'returns'
+                ? `${count} pending return requests requiring review`
                 : undefined;
 
             return (

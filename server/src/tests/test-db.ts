@@ -165,6 +165,19 @@ export async function truncateTestEnquiries(): Promise<void> {
   }
 }
 
+/**
+ * Safely resets return requests tables inside axdoro_test.
+ */
+export async function truncateTestReturns(): Promise<void> {
+  validateTestDatabaseTarget(testConnectionString);
+  const client = await testPool.connect();
+  try {
+    await client.query('TRUNCATE TABLE return_request_evidence, return_request_history, return_requests CASCADE');
+  } finally {
+    client.release();
+  }
+}
+
 export async function closeTestDatabase(): Promise<void> {
   await testPool.end();
 }

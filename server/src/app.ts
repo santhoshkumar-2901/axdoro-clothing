@@ -23,6 +23,8 @@ import { adminHomepageRouter } from './routes/admin/homepage.js';
 import { paymentSettingsRouter } from './routes/payment-settings.js';
 import { adminPaymentSettingsRouter } from './routes/admin/payment-settings.js';
 import { adminMaintenanceRouter } from './routes/admin/maintenance.js';
+import { adminReturnsRouter } from './routes/admin/returns.js';
+import { returnsRouter } from './routes/returns.js';
 import { csrfProtection } from './middleware/csrf.js';
 
 export function createApp(): Express {
@@ -47,6 +49,7 @@ export function createApp(): Express {
   app.use('/api/catalogue/products', productsRouter);
   app.use('/api/catalogue/collections', collectionsRouter);
   app.use('/api/orders', ordersRouter);
+  app.use('/api/returns', returnsRouter);
   app.use('/api/enquiries', enquiriesRouter);
   app.use('/api/homepage', homepageRouter);
   app.use('/api/payment-settings', paymentSettingsRouter);
@@ -63,6 +66,7 @@ export function createApp(): Express {
   app.use('/api/admin/metrics', adminMetricsRouter);
   app.use('/api/admin/audit-logs', adminAuditLogsRouter);
   app.use('/api/admin/orders', adminOrdersRouter);
+  app.use('/api/admin/returns', adminReturnsRouter);
   app.use('/api/admin/enquiries', adminEnquiriesRouter);
   app.use('/api/admin/notifications', adminNotificationsRouter);
   app.use('/api/admin/maintenance', adminMaintenanceRouter);
