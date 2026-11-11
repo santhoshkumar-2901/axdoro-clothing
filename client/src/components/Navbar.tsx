@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Menu, X, Layers, Search, ChevronRight, Loader2, RotateCcw } from 'lucide-react';
+import { ShoppingBag, Menu, X, Layers, Search, ChevronRight, Loader2 } from 'lucide-react';
 import { ProductCategory, Category, Product } from '../types/product.ts';
 import { fetchProducts } from '../api/catalogue.ts';
 import { useScrollLock } from '../utils/scrollLock.ts';
@@ -165,27 +165,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
 
-            {/* Right: Search, Return and Bag Controls */}
+            {/* Right: Search and Bag Controls */}
             <div className="flex items-center justify-end gap-1.5 sm:gap-3">
-              {/* Return Order Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (onNavigate) {
-                    onNavigate('/returns');
-                  } else {
-                    window.location.href = '/returns';
-                  }
-                }}
-                className="inline-flex items-center gap-1.5 p-2 sm:px-3 sm:py-2 rounded-lg text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent"
-                aria-label="Return or Exchange an Order"
-              >
-                <RotateCcw className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
-                <span className="hidden sm:inline text-xs font-semibold tracking-wide">
-                  Return
-                </span>
-              </button>
-
               {/* Search Button */}
               <button
                 type="button"
@@ -475,6 +456,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   role="menuitem"
+                  aria-label="Return or Exchange an Order"
                   onClick={() =>
                     handleNavClick(() => {
                       if (onNavigate) {
@@ -486,10 +468,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }
                   className="w-full text-left text-base font-medium text-axdoro-text hover:text-axdoro-accent hover:bg-axdoro-surface-muted py-3 px-3 rounded-lg flex items-center justify-between transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-axdoro-accent cursor-pointer"
                 >
-                  <span className="flex items-center gap-2.5">
-                    <RotateCcw className="w-4 h-4 text-axdoro-accent" />
-                    <span>Return / Exchange</span>
-                  </span>
+                  <span>Return / Exchange</span>
                   <ChevronRight className="w-4 h-4 text-axdoro-text-muted" />
                 </button>
               </div>
