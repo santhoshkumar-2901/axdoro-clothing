@@ -189,7 +189,7 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
       <section
         role="region"
         aria-label={`${category?.name || 'Category'} Collection Banner`}
-        className="relative w-full h-44 sm:h-56 md:h-64 overflow-hidden bg-neutral-900 border-b border-axdoro-border flex items-center"
+        className="relative w-full h-52 sm:h-64 md:h-80 lg:h-[420px] xl:h-[480px] overflow-hidden bg-neutral-900 border-b border-axdoro-border flex items-end pb-6 sm:pb-8 lg:pb-10"
       >
         {/* Background Image: Promotional Poster Banner Image > Category Image > Ambient Fallback */}
         <img
@@ -200,8 +200,8 @@ export const CategoryPage: React.FC<CategoryPageProps> = ({
         />
 
         {/* Soft, Transparent Vignette Behind Text Only — Image Remains Bright & Clear */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/25 to-transparent pointer-events-none" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/15 to-transparent pointer-events-none" />
 
         {/* Banner Content Container */}
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full flex flex-col justify-end">

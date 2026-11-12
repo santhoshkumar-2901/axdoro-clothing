@@ -1444,27 +1444,38 @@ export async function adminUpdateProduct(
         }
       }
 
-      // Safeguard 4: Validate that every new staged image belongs to authenticated admin's staging session
+      // Safeguard 4: Validate that every new staged image belongs to current staging session or same admin's non-deleted upload
+      const extraSessionIdsToCommit = new Set<string>();
       for (const img of data.images) {
         if (!img.id && img.publicId) {
-          if (!data.stagingSessionId) {
-            const err = new Error('Active staging session ID is required for newly uploaded images');
-            (err as any).statusCode = 400;
-            throw err;
-          }
-          const assetRes = await client.query<{ session_id: string; claim_status: string }>(
-            `SELECT session_id, claim_status FROM product_staged_assets WHERE public_id = $1 FOR UPDATE;`,
+          const assetRes = await client.query<{
+            session_id: string;
+            claim_status: string;
+            admin_id: string;
+          }>(
+            `SELECT a.session_id, a.claim_status, s.admin_id
+             FROM product_staged_assets a
+             JOIN product_staging_sessions s ON s.id = a.session_id
+             WHERE a.public_id = $1
+             FOR UPDATE OF a;`,
             [img.publicId]
           );
-          if (assetRes.rows.length === 0 || assetRes.rows[0].session_id !== data.stagingSessionId) {
-            const err = new Error(`Security violation: Image asset '${img.publicId}' does not belong to this staging session`);
-            (err as any).statusCode = 400;
-            throw err;
-          }
-          if (assetRes.rows[0].claim_status === 'CLAIMED_FOR_DELETION' || assetRes.rows[0].claim_status === 'DELETED') {
-            const err = new Error(`Cannot commit product: Image asset '${img.publicId}' has already been claimed for deletion`);
-            (err as any).statusCode = 400;
-            throw err;
+
+          if (assetRes.rows.length > 0) {
+            const asset = assetRes.rows[0];
+            if (asset.claim_status === 'CLAIMED_FOR_DELETION' || asset.claim_status === 'DELETED') {
+              const err = new Error(`Cannot commit product: Image asset '${img.publicId}' has already been claimed for deletion`);
+              (err as any).statusCode = 400;
+              throw err;
+            }
+            const belongsToCurrentSession = Boolean(data.stagingSessionId && asset.session_id === data.stagingSessionId);
+            const belongsToSameAdmin = asset.admin_id === actor.id;
+            if (!belongsToCurrentSession && !belongsToSameAdmin) {
+              const err = new Error(`Security violation: Image asset '${img.publicId}' does not belong to this staging session`);
+              (err as any).statusCode = 400;
+              throw err;
+            }
+            extraSessionIdsToCommit.add(asset.session_id);
           }
         }
       }
@@ -1512,6 +1523,15 @@ export async function adminUpdateProduct(
             ]
           );
         }
+      }
+
+      if (extraSessionIdsToCommit.size > 0) {
+        await client.query(
+          `UPDATE product_staging_sessions
+           SET status = 'COMMITTED', updated_at = CURRENT_TIMESTAMP
+           WHERE id = ANY($1::uuid[]);`,
+          [Array.from(extraSessionIdsToCommit)]
+        );
       }
     }
 

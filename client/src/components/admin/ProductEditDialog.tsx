@@ -351,28 +351,51 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
   }, []);
 
   // -------------------------------------------------------------
-  // Staging Session Lifecycle
+  // Load Product Data
   // -------------------------------------------------------------
   useEffect(() => {
     if (!isOpen || !productId) return;
-
     loadProductData(productId);
+  }, [isOpen, productId, loadProductData]);
 
-    let sessionTimer: any;
+  // -------------------------------------------------------------
+  // Staging Session Lifecycle (strictly once per dialog open)
+  // -------------------------------------------------------------
+  useEffect(() => {
+    if (!isOpen || !productId) {
+      if (stagingSessionIdRef.current) {
+        adminAbandonStagingSession(stagingSessionIdRef.current).catch((err) => {
+          console.warn('[Edit Staging] Abandon session warning:', err);
+        });
+        stagingSessionIdRef.current = null;
+        setStagingSessionId(null);
+      }
+      return;
+    }
+
+    let isEffectActive = true;
+    let sessionTimer: ReturnType<typeof setInterval> | null = null;
+
     adminCreateStagingSession()
       .then(({ sessionId }) => {
+        if (!isEffectActive) {
+          adminAbandonStagingSession(sessionId).catch(() => {});
+          return;
+        }
         setStagingSessionId(sessionId);
         stagingSessionIdRef.current = sessionId;
         setStagingSessionError(null);
 
         // Heartbeat every 5 minutes (300,000 ms)
         sessionTimer = setInterval(() => {
-          adminHeartbeatStagingSession(sessionId).catch((err) => {
+          if (!stagingSessionIdRef.current) return;
+          adminHeartbeatStagingSession(stagingSessionIdRef.current).catch((err) => {
             console.warn('[Edit Staging] Heartbeat failed:', err);
           });
         }, 300000);
       })
       .catch((err) => {
+        if (!isEffectActive) return;
         console.warn('[Edit Staging] Failed to initialize staging session:', err);
         setStagingSessionError(
           'Notice: Image staging session protection is inactive. You may still edit product metadata.'
@@ -380,6 +403,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
       });
 
     return () => {
+      isEffectActive = false;
       if (sessionTimer) clearInterval(sessionTimer);
       if (stagingSessionIdRef.current) {
         adminAbandonStagingSession(stagingSessionIdRef.current).catch((err) => {
@@ -388,7 +412,7 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
         stagingSessionIdRef.current = null;
       }
     };
-  }, [isOpen, productId, loadProductData]);
+  }, [isOpen, productId]);
 
   // Calculated Pricing Metrics
   const sellingNum = parseFloat(sellingPrice) || 0;
@@ -965,6 +989,10 @@ export const ProductEditDialog: React.FC<ProductEditDialogProps> = ({
       if (msg.includes('CONCURRENT_MUTATION_CONFLICT') || msg.includes('modified by another')) {
         setErrorMsg(
           'Concurrent Modification Conflict: This product was modified by another administrator. Please close and reload the latest changes.'
+        );
+      } else if (msg.includes('does not belong to this staging session') || msg.includes('Staging session has expired')) {
+        setErrorMsg(
+          'Upload session expired or mismatched. Please remove and re-upload any newly added images, or close and reopen this dialog.'
         );
       } else {
         setErrorMsg(msg || 'Failed to update product');
