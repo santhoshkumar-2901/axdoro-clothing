@@ -4,6 +4,7 @@ import path from 'node:path';
 import {
   normalizeWhatsAppPhone,
   getOrderWhatsAppNotification,
+  getReturnWhatsAppNotification,
 } from './utils/whatsapp.ts';
 
 describe('Admin Order Status WhatsApp Notifications Utility', () => {
@@ -280,6 +281,56 @@ describe('Admin Order Status WhatsApp Notifications Utility', () => {
       expect(content).toContain('disabled={!notification.isEligible}');
       expect(content).toContain('title={notification.tooltip}');
       expect(content).toContain('aria-label={`Notify ${order.customerName} on WhatsApp for order ${order.orderNumber}`}');
+    });
+
+    it('verifies ReturnsManagementView.tsx renders the WhatsApp notification action alongside the return status badge', () => {
+      const returnsViewPath = path.resolve(__dirname, 'components/admin/ReturnsManagementView.tsx');
+      const content = fs.readFileSync(returnsViewPath, 'utf-8');
+
+      expect(content).toContain("import { getReturnWhatsAppNotification } from '../../utils/whatsapp.ts';");
+      expect(content).toContain('MessageSquare');
+      expect(content).toContain("window.open(notification.url, '_blank', 'noopener,noreferrer')");
+      expect(content).toContain('disabled={!notification.isEligible}');
+      expect(content).toContain('title={notification.tooltip}');
+    });
+  });
+
+  describe('Return Status WhatsApp Notifications', () => {
+    const baseReturn = {
+      customerName: 'Dinesh',
+      requestNumber: 'RET-202611-E3D34C',
+      submittedOrderId: 'AXD-20261031-E5BCCD',
+      customerPhone: '9629229950',
+    };
+
+    it('generates eligible WhatsApp links for all 5 return workflow statuses', () => {
+      const statuses = [
+        { status: 'REQUEST_SUBMITTED', expectedSnippet: 'we have received your AXDORO return/exchange request' },
+        { status: 'UNDER_REVIEW', expectedSnippet: 'is currently under review' },
+        { status: 'APPROVED', expectedSnippet: 'has been approved' },
+        { status: 'REJECTED', expectedSnippet: 'unfortunately it could not be approved' },
+        { status: 'COMPLETED', expectedSnippet: 'has been completed' },
+      ];
+
+      for (const { status, expectedSnippet } of statuses) {
+        const res = getReturnWhatsAppNotification({ ...baseReturn, status });
+        expect(res.isEligible).toBe(true);
+        expect(res.message).toContain('Dinesh');
+        expect(res.message).toContain('#RET-202611-E3D34C');
+        expect(res.message).toContain('#AXD-20261031-E5BCCD');
+        expect(res.message).toContain(expectedSnippet);
+        expect(res.url).toBe(`https://wa.me/919629229950?text=${encodeURIComponent(res.message)}`);
+      }
+    });
+
+    it('disables return WhatsApp notification when phone number is invalid', () => {
+      const res = getReturnWhatsAppNotification({
+        ...baseReturn,
+        customerPhone: '123',
+        status: 'APPROVED',
+      });
+      expect(res.isEligible).toBe(false);
+      expect(res.url).toBe('');
     });
   });
 });

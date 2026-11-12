@@ -195,3 +195,76 @@ export function getOrderWhatsAppNotification(order: {
     message,
   };
 }
+
+/**
+ * Generates an AXDORO-branded WhatsApp status notification message and click-to-chat URL for return requests.
+ * Supports all return workflow statuses: REQUEST_SUBMITTED, UNDER_REVIEW, APPROVED, REJECTED, COMPLETED.
+ */
+export function getReturnWhatsAppNotification(ret: {
+  customerName?: string | null;
+  requestNumber?: string | null;
+  submittedOrderId?: string | null;
+  customerPhone?: string | null;
+  status?: string | null;
+}): WhatsAppOrderNotificationResult {
+  const status = (ret.status || '').toUpperCase();
+
+  const supportedStatuses = [
+    'REQUEST_SUBMITTED',
+    'UNDER_REVIEW',
+    'APPROVED',
+    'REJECTED',
+    'COMPLETED',
+  ];
+  if (!supportedStatuses.includes(status)) {
+    return {
+      isEligible: false,
+      url: '',
+      tooltip: `Notifications are not supported for status "${ret.status || 'UNKNOWN'}"`,
+      message: '',
+    };
+  }
+
+  const phoneResult = normalizeWhatsAppPhone(ret.customerPhone);
+  if (!phoneResult.isValid) {
+    return {
+      isEligible: false,
+      url: '',
+      tooltip: phoneResult.error || 'Invalid customer phone number',
+      message: '',
+    };
+  }
+
+  const name = ret.customerName ? ret.customerName.trim() : 'Customer';
+  const reqNum = ret.requestNumber ? ret.requestNumber.trim() : 'N/A';
+  const orderNum = ret.submittedOrderId ? ret.submittedOrderId.trim() : 'N/A';
+
+  let message = '';
+  switch (status) {
+    case 'REQUEST_SUBMITTED':
+      message = `Hi ${name}, we have received your AXDORO return/exchange request #${reqNum} for order #${orderNum}. Our team will review it shortly.`;
+      break;
+    case 'UNDER_REVIEW':
+      message = `Hi ${name}, your AXDORO return/exchange request #${reqNum} for order #${orderNum} is currently under review. We'll update you soon.`;
+      break;
+    case 'APPROVED':
+      message = `Hi ${name}, your AXDORO return/exchange request #${reqNum} for order #${orderNum} has been approved. Please reach out if you have any questions!`;
+      break;
+    case 'REJECTED':
+      message = `Hi ${name}, regarding your AXDORO return/exchange request #${reqNum} for order #${orderNum}: unfortunately it could not be approved. Please reply if you'd like more details.`;
+      break;
+    case 'COMPLETED':
+      message = `Hi ${name}, your AXDORO return/exchange request #${reqNum} for order #${orderNum} has been completed. Thank you for choosing AXDORO!`;
+      break;
+  }
+
+  const encodedMessage = encodeURIComponent(message);
+  const url = `https://wa.me/${phoneResult.normalizedNumber}?text=${encodedMessage}`;
+
+  return {
+    isEligible: true,
+    url,
+    tooltip: `Notify ${name} on WhatsApp (${status.replace(/_/g, ' ')})`,
+    message,
+  };
+}

@@ -14,6 +14,7 @@ import {
   Loader2,
   FileText,
   Camera,
+  MessageSquare,
 } from 'lucide-react';
 import {
   AdminReturnListItem,
@@ -23,6 +24,7 @@ import {
   adminGetReturnMetrics,
   adminGetReturnById,
 } from '../../api/admin.ts';
+import { getReturnWhatsAppNotification } from '../../utils/whatsapp.ts';
 import { Badge } from '../ui/badge.tsx';
 import { Card, CardContent } from '../ui/card.tsx';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table.tsx';
@@ -378,9 +380,41 @@ export const ReturnsManagementView: React.FC<ReturnsManagementViewProps> = ({ on
                     )}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={getStatusBadgeVariant(item.status)}>
-                      {item.status.replace(/_/g, ' ')}
-                    </Badge>
+                    {(() => {
+                      const notification = getReturnWhatsAppNotification({
+                        customerName: item.customerName,
+                        requestNumber: item.requestNumber,
+                        submittedOrderId: item.submittedOrderId,
+                        customerPhone: item.customerPhone,
+                        status: item.status,
+                      });
+                      return (
+                        <div className="flex items-center gap-2">
+                          <Badge variant={getStatusBadgeVariant(item.status)}>
+                            {item.status.replace(/_/g, ' ')}
+                          </Badge>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (notification.isEligible && notification.url) {
+                                window.open(notification.url, '_blank', 'noopener,noreferrer');
+                              }
+                            }}
+                            disabled={!notification.isEligible}
+                            title={notification.tooltip}
+                            aria-label={`Notify ${item.customerName || item.customerPhone} on WhatsApp for return ${item.requestNumber}`}
+                            className={`p-1.5 rounded-lg border transition-all inline-flex items-center justify-center shrink-0 ${
+                              notification.isEligible
+                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 hover:border-emerald-500/60 cursor-pointer shadow-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500'
+                                : 'border-axdoro-border/40 bg-axdoro-surface-muted/30 text-axdoro-text-muted/40 cursor-not-allowed opacity-40'
+                            }`}
+                          >
+                            <MessageSquare className="w-4 h-4" />
+                          </button>
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="text-xs text-axdoro-text-muted whitespace-nowrap">
                     {new Date(item.createdAt).toLocaleDateString()}
